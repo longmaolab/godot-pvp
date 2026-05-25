@@ -571,6 +571,7 @@ func _on_join() -> void:
 ## CREATE flow: pick map/mode on the left card, click this, get dropped
 ## straight into your new room's lobby. Skips the browser entirely.
 func _on_create_room_pressed() -> void:
+	print("[menu] CREATE ROOM clicked, _connect_intent=create")
 	_connect_intent = "create"
 	create_room_btn.disabled = true
 	browse_rooms_btn.disabled = true
@@ -682,6 +683,7 @@ func _on_peer_disconnected_staging(_id: int) -> void:
 func _on_connected_to_host_staging() -> void:
 	if not _is_staging or _is_host:
 		return
+	print("[menu] connected_to_server fired, _connect_intent=", _connect_intent, " — about to send client_hello")
 	staging_status.text = "🔗  Connected — 等房主点 START"
 	# Send the hello handshake so the server replies with server_mode_info
 	# — that's what _on_server_mode_info_for_routing listens for to decide
@@ -747,6 +749,7 @@ const ROOM_BROWSER_SCENE := "res://client/scenes/ui/room_browser.tscn"
 const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
 
 func _on_server_mode_info_for_routing(is_dedicated: bool) -> void:
+	print("[menu] mode_info received: is_dedicated=", is_dedicated, " _is_staging=", _is_staging, " _is_host=", _is_host, " _connect_intent=", _connect_intent)
 	if not _is_staging or _is_host:
 		return  # host doesn't route — host has its own flow; client-only path
 	if not is_dedicated:
