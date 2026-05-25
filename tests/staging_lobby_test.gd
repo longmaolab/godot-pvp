@@ -32,11 +32,11 @@ func _run() -> void:
 	await physics_frame
 	await physics_frame
 
-	# --- Baseline: nothing in staging, panel hidden, entry buttons enabled.
+	# --- Baseline: nothing in staging, panel hidden, entry buttons visible.
 	if menu.staging_panel.visible:
 		failures.append("staging_panel visible before HOST/JOIN clicked")
-	if menu.host_btn.disabled or menu.join_btn.disabled or menu.practice_btn.disabled:
-		failures.append("entry buttons disabled before staging started")
+	if not menu.host_btn.visible or not menu.join_btn.visible or not menu.practice_btn.visible:
+		failures.append("entry buttons hidden before staging started")
 	if menu._is_staging:
 		failures.append("_is_staging true before HOST/JOIN")
 
@@ -52,8 +52,10 @@ func _run() -> void:
 		failures.append("_is_host false after _enter_staging(true)")
 	if menu._peer_count != 1:
 		failures.append("_peer_count = %d after entering staging, expected 1" % menu._peer_count)
-	if not menu.host_btn.disabled:
-		failures.append("HOST entry button still enabled during staging — double-click would re-host")
+	# In the new design HOST/PRACTICE/JOIN aren't disabled — they're
+	# hidden entirely so START is the only primary action visible.
+	if menu.host_btn.visible or menu.practice_btn.visible or menu.join_btn.visible:
+		failures.append("entry buttons (PRACTICE/HOST/JOIN) still visible during staging — should be hidden so START is the only call to action")
 
 	# --- Simulate a peer connecting (host side).
 	menu._on_peer_connected_staging(99999)
@@ -72,8 +74,8 @@ func _run() -> void:
 	await physics_frame
 	if menu.staging_panel.visible:
 		failures.append("staging_panel still visible after cancel")
-	if menu.host_btn.disabled or menu.join_btn.disabled or menu.practice_btn.disabled:
-		failures.append("entry buttons still disabled after cancel")
+	if not menu.host_btn.visible or not menu.join_btn.visible or not menu.practice_btn.visible:
+		failures.append("entry buttons (PRACTICE/HOST/JOIN) still hidden after cancel — should be restored")
 	if menu._is_staging:
 		failures.append("_is_staging still true after cancel")
 

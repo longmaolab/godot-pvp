@@ -63,14 +63,30 @@ var MODES: Array = []
 @onready var summary_map: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMap
 @onready var summary_mode: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMode
 @onready var summary_skin: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummarySkin
-# Staging panel — between JoinButton and Spacer. Hidden until HOST or JOIN
-# is pressed; replaces the immediate "click HOST → in-game" flow with a
-# lobby state where the host waits for joiners + clicks START to launch.
+# Staging panel — sits between SelectionSummary and PracticeButton in the
+# right card. Hidden until HOST or JOIN is pressed; when shown, _enter_staging
+# ALSO hides the PRACTICE + MULTIPLAYER section below so the LOBBY view +
+# START button is the only thing visible in the action area.
 @onready var staging_panel: PanelContainer = $Scroll/Center/Cols/RightCard/V/StagingPanel
 @onready var staging_status: Label = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StagingStatus
 @onready var staging_count: Label = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StagingCount
 @onready var start_btn: Button = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StartButton
 @onready var cancel_btn: Button = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/CancelButton
+# Things to hide when staging is active so START doesn't get buried below
+# a PRACTICE button + a "MULTIPLAYER" section. Collected up front so we
+# can flip them together in _enter_staging / _exit_staging.
+@onready var _menu_state_nodes: Array[Node] = [
+	$Scroll/Center/Cols/RightCard/V/ActionHeader,
+	$Scroll/Center/Cols/RightCard/V/PracticeButton,
+	$Scroll/Center/Cols/RightCard/V/PracticeHint,
+	$Scroll/Center/Cols/RightCard/V/Sep1,
+	$Scroll/Center/Cols/RightCard/V/MPHeader,
+	$Scroll/Center/Cols/RightCard/V/MPHint,
+	$Scroll/Center/Cols/RightCard/V/HostButton,
+	$Scroll/Center/Cols/RightCard/V/JoinAddrLabel,
+	$Scroll/Center/Cols/RightCard/V/JoinAddress,
+	$Scroll/Center/Cols/RightCard/V/JoinButton,
+]
 
 # Staging state. _is_staging=false → normal menu; =true → user already
 # clicked HOST or JOIN and is waiting in the lobby.
@@ -537,9 +553,9 @@ func _on_join() -> void:
 	_enter_staging(false)
 
 
-## Toggle the menu into staging (lobby) mode. The HOST/JOIN/PRACTICE
-## buttons get disabled, the StagingPanel appears with status + count,
-## START shows only on the host side, CANCEL shows for both.
+## Toggle the menu into staging (lobby) mode. Hides the PRACTICE +
+## MULTIPLAYER section entirely so the LOBBY pill + START button stand
+## alone in the action area. START shows only on the host side.
 func _enter_staging(as_host: bool) -> void:
 	_is_staging = true
 	_is_host = as_host
@@ -548,14 +564,15 @@ func _enter_staging(as_host: bool) -> void:
 	start_btn.visible = as_host
 	if as_host:
 		staging_status.text = "🌐  Hosting on :7777 — 等人加入"
-		staging_count.text = "Connected: 1 (you)"
+		staging_count.text = "Connected: 1 (you) — 可以直接 START 单人开"
 	else:
 		staging_status.text = "🔗  Connecting to host..."
 		staging_count.text = "等房主点 START"
-	# Lock the entry buttons so user can't double-host or double-join.
-	practice_btn.disabled = true
-	host_btn.disabled = true
-	join_btn.disabled = true
+	# Hide every "normal menu" node in the right card so START is the only
+	# primary action visible — no more PRACTICE button competing for the
+	# eye, no MULTIPLAYER section the user could mistakenly re-click.
+	for n in _menu_state_nodes:
+		n.visible = false
 
 
 ## Tear down the peer + return to normal menu state. Triggered by
@@ -567,9 +584,9 @@ func _exit_staging() -> void:
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
-	practice_btn.disabled = false
-	host_btn.disabled = false
-	join_btn.disabled = false
+	# Restore the normal menu nodes.
+	for n in _menu_state_nodes:
+		n.visible = true
 
 
 # ── Staging signal handlers ──────────────────────────────────────────────
@@ -577,14 +594,17 @@ func _on_peer_connected_staging(_id: int) -> void:
 	if not _is_staging or not _is_host:
 		return
 	_peer_count += 1
-	staging_count.text = "Connected: %d players (1 host + %d joined)" % [_peer_count, _peer_count - 1]
+	staging_count.text = "Connected: %d 玩家 (1 host + %d joined) — 可以 START 了" % [_peer_count, _peer_count - 1]
 
 
 func _on_peer_disconnected_staging(_id: int) -> void:
 	if not _is_staging or not _is_host:
 		return
 	_peer_count = maxi(1, _peer_count - 1)
-	staging_count.text = "Connected: %d players" % _peer_count
+	if _peer_count <= 1:
+		staging_count.text = "Connected: 1 (you) — 可以直接 START 单人开"
+	else:
+		staging_count.text = "Connected: %d 玩家" % _peer_count
 
 
 func _on_connected_to_host_staging() -> void:
