@@ -84,6 +84,10 @@ if [ -f "$PROJ/tests/run_hitbox_geometry_test.sh" ]; then
     run_serial "hitbox_geometry (per-skin coverage)" \
         "$PROJ/tests/run_hitbox_geometry_test.sh"
 fi
+if [ -f "$PROJ/tests/run_listen_host_weapon_tick_test.sh" ]; then
+    run_serial "listen_host_weapon_tick (host ticks remote cooldown + reload)" \
+        "$PROJ/tests/run_listen_host_weapon_tick_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"
