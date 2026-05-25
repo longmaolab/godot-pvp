@@ -438,7 +438,15 @@ func _on_peer_disconnected_as_host(peer: int) -> void:
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null and net_rpc.has_method(&"forget_peer"):
 		net_rpc.forget_peer(peer)
-	_rpc_despawn.rpc(peer)
+	# Only despawn-broadcast to peers who actually have a /root/Game node
+	# loaded — anyone in main_menu / room_browser / room_lobby just gets a
+	# "Node not found: Game" engine error and 5 lines of stack trace from
+	# trying to route an RPC to a path that doesn't exist on their side.
+	# _ready_peers is the set of peers who sent _rpc_sync_request, which
+	# only happens after game.tscn loads.
+	for ready_peer in _ready_peers:
+		if ready_peer != peer:
+			_rpc_despawn.rpc_id(ready_peer, peer)
 	_despawn(peer)
 
 
