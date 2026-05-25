@@ -413,6 +413,17 @@ func _physics_process(delta: float) -> void:
 		_step_weapon_server(delta)
 	else:
 		_apply_remote_state(delta)
+		# Listen-host server-side view of a remote peer: position comes from the
+		# peer's _net_apply_state, but weapon state (time_until_next_shot,
+		# is_reloading) is set authoritatively on this side by
+		# _on_client_fire_server — and nothing else ticks it. Without this call,
+		# the cooldown clamp from the FIRST fire stays >0 forever and every
+		# subsequent fire RPC from the peer is rejected with "cooldown remaining"
+		# (kid reported "B 打光所有子弹但 A 只掉 25 血"). Same applies to the
+		# auto-reload triggered server-side on empty-mag: reload_remaining never
+		# counts down, the peer is stuck in is_reloading=true forever.
+		if _is_networked() and multiplayer.is_server():
+			_step_weapon_server(delta)
 	# Drive the GLB animation state based on actual horizontal velocity.
 	_play_anim(_select_anim())
 

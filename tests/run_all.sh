@@ -72,6 +72,8 @@ run_one "mp_hit_test (server-authoritative damage)" \
     "$PROJ/tests/run_mp_hit_test.sh"
 run_one "mp_burst_hit_test (listen-host accepts multi-shot burst)" \
     "$PROJ/tests/run_mp_burst_hit_test.sh"
+run_one "listen_host_weapon_tick (host ticks remote cooldown + reload)" \
+    "$PROJ/tests/run_listen_host_weapon_tick_test.sh"
 
 # ── Dedicated server pipeline (DS-M1 → DS-M5) ────────────────────────────
 run_one "server_boot_test  (DS-M1: world + handshake)" \
