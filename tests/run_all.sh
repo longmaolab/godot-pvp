@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Full test suite. Two-tier structure:
 #   - tier 1: unit / single-process tests, serial (fast, ~30s total)
-#   - tier 2: MP integration tests, 4-way parallel via xargs -P (each binds
-#             a distinct port so they don't fight). Without parallelism this
-#             used to take ~5 min; with 4-way it's ~90-120s.
+#   - tier 2: MP integration tests, parallel via xargs -P. Each MP test
+#             binds a distinct port so they don't fight.
 #
-# Tweak the parallel width with PARALLEL=N env var. Default 4.
+# Tweak the parallel width with PARALLEL=N env var. Default 2.
+#   - PARALLEL=1 ≈ 175s (pure serial fallback)
+#   - PARALLEL=2 ≈ 180s, stable on macOS
+#   - PARALLEL=4 ≈ 60s when it works, but on macOS BSD xargs under
+#     resource pressure (4 tests × ~3 Godot procs each = 12+ concurrent
+#     Godot processes) some workers get SIGKILL'd between `bash $cmd`
+#     and the rc write — observable as "produced no rc marker" on 6-8
+#     tests despite their test logs ending in PASS. Bump cautiously and
+#     only on a beefy machine.
+#
 # Exits 0 if every test passed; non-zero if any failed.
 
 set -u
@@ -37,7 +45,7 @@ fi
 # Parent-only setup beyond here. (Workers exited above.)
 # Wipe stale per-test rc markers from a previous run.
 rm -f "$LOG_DIR"/*.rc 2>/dev/null
-PARALLEL="${PARALLEL:-4}"
+PARALLEL="${PARALLEL:-2}"
 START_TS=$(date +%s)
 
 pass_count=0
@@ -87,6 +95,10 @@ fi
 if [ -f "$PROJ/tests/run_listen_host_weapon_tick_test.sh" ]; then
     run_serial "listen_host_weapon_tick (host ticks remote cooldown + reload)" \
         "$PROJ/tests/run_listen_host_weapon_tick_test.sh"
+fi
+if [ -f "$PROJ/tests/run_player_collision_test.sh" ]; then
+    run_serial "player_collision (player↔player blocks, no Jolt Y-explosion)" \
+        "$PROJ/tests/run_player_collision_test.sh"
 fi
 
 echo
