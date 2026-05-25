@@ -1,0 +1,95 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/pause_menu.gd" id="1_pause"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="pause_panel"]
+bg_color = Color(0.04, 0.07, 0.13, 0.94)
+border_color = Color(0.3, 0.7, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+content_margin_left = 32
+content_margin_right = 32
+content_margin_top = 24
+content_margin_bottom = 24
+shadow_color = Color(0, 0, 0, 0.7)
+shadow_size = 16
+
+[sub_resource type="StyleBoxFlat" id="pause_btn_normal"]
+bg_color = Color(0.1, 0.18, 0.3, 1)
+border_color = Color(0.32, 0.72, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 18
+content_margin_right = 18
+content_margin_top = 12
+content_margin_bottom = 12
+
+[node name="PauseMenu" type="CanvasLayer"]
+layer = 80
+visible = false
+process_mode = 3
+script = ExtResource("1_pause")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.55)
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(320, 0)
+theme_override_styles/panel = SubResource("pause_panel")
+
+[node name="V" type="VBoxContainer" parent="Center/Card"]
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.1, 0.45, 0.8, 1)
+theme_override_constants/outline_size = 4
+text = "PAUSED"
+horizontal_alignment = 1
+
+[node name="Sep1" type="HSeparator" parent="Center/Card/V"]
+
+[node name="ResumeBtn" type="Button" parent="Center/Card/V"]
+custom_minimum_size = Vector2(0, 44)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 15
+theme_override_styles/normal = SubResource("pause_btn_normal")
+text = "▶  RESUME · 继续 (Esc)"
+
+[node name="MenuBtn" type="Button" parent="Center/Card/V"]
+custom_minimum_size = Vector2(0, 44)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 15
+theme_override_styles/normal = SubResource("pause_btn_normal")
+text = "🏠  MAIN MENU · 返回主菜单"
+
+[node name="QuitBtn" type="Button" parent="Center/Card/V"]
+custom_minimum_size = Vector2(0, 44)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 15
+theme_override_styles/normal = SubResource("pause_btn_normal")
+text = "⏻  QUIT · 退出游戏"

@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_taser"]
+script = ExtResource("2")
+name = "Discharge"
+description = "AOE electric burst 2.5 m · 70 dmg"
+type = &"aoe"
+cooldown_ms = 11000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 2.5
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"taser"
+display_name = "Taser"
+type_label = "Control"
+slot = &"secondary"
+description = "Control: Taser — 详见原版手感。"
+damage = 35
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 2
+reserve = 16
+fire_interval_ms = 450
+reload_time_ms = 1300
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.004
+bullet_speed = 92
+ads_zoom_fov = 52
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_taser")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

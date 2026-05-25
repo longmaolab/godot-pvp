@@ -1,0 +1,189 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/player_controller.gd" id="1_player"]
+
+[sub_resource type="CapsuleShape3D" id="cap_body"]
+height = 1.8
+radius = 0.35
+
+[sub_resource type="SphereShape3D" id="sph_head"]
+; 0.32: combined with per-skin SKIN_SCALES in player_controller.gd, this
+; covers every Kenney character's head mesh (neck at world Y≈1.65, head
+; center near sphere center Y=1.9) plus a forgiveness margin for kids and
+; long-range aim. Earlier 0.22 / 0.28 values were sized against the
+; procedural box-head only, which was always at the same Y as the sphere —
+; but the GLB skins were rendered 1.85× scale (head at world Y≈3.4–4.9),
+; sitting entirely above the hitbox. See tests/measure_hitbox.gd.
+radius = 0.32
+
+[sub_resource type="CapsuleShape3D" id="cap_torso"]
+; Was height 1.2 radius 0.32, offset +0.1 → covered only y=0.4~1.6 after the
+; player settled (root y=0.9). That left the LEGS (y=0.2~0.9) and the upper
+; TORSO (y=1.6~1.775) completely unhittable, with an additional 0.08m dead
+; zone between body-top and head-bottom. Players reported "完全在人身上还是
+; missed" — the visible model was much bigger than the hitbox. New dims match
+; the CharacterBody3D collision capsule so the hittable volume is the same
+; thing the player physically occupies.
+height = 1.8
+radius = 0.4
+
+[sub_resource type="StandardMaterial3D" id="mat_jumpsuit"]
+albedo_color = Color(0.22, 0.4, 0.7, 1)
+metallic = 0.05
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="mat_helmet"]
+albedo_color = Color(0.18, 0.32, 0.52, 1)
+metallic = 0.45
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="mat_visor"]
+albedo_color = Color(0.4, 0.85, 1.0, 1)
+emission_enabled = true
+emission = Color(0.2, 0.6, 0.9, 1)
+emission_energy_multiplier = 0.8
+metallic = 0.7
+roughness = 0.15
+
+[sub_resource type="StandardMaterial3D" id="mat_gun"]
+albedo_color = Color(0.12, 0.13, 0.16, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="mat_gun_accent"]
+albedo_color = Color(0.65, 0.45, 0.15, 1)
+metallic = 0.6
+roughness = 0.4
+
+[sub_resource type="BoxMesh" id="mesh_torso"]
+size = Vector3(0.55, 0.85, 0.32)
+
+[sub_resource type="BoxMesh" id="mesh_head"]
+size = Vector3(0.36, 0.36, 0.36)
+
+[sub_resource type="BoxMesh" id="mesh_visor"]
+size = Vector3(0.32, 0.1, 0.02)
+
+[sub_resource type="BoxMesh" id="mesh_arm"]
+size = Vector3(0.18, 0.6, 0.18)
+
+[sub_resource type="BoxMesh" id="mesh_leg"]
+size = Vector3(0.22, 0.7, 0.22)
+
+[sub_resource type="BoxMesh" id="mesh_gun_body"]
+size = Vector3(0.08, 0.08, 0.32)
+
+[sub_resource type="CylinderMesh" id="mesh_gun_barrel"]
+top_radius = 0.018
+bottom_radius = 0.018
+height = 0.22
+
+[sub_resource type="BoxMesh" id="mesh_gun_grip"]
+size = Vector3(0.05, 0.1, 0.06)
+
+[node name="Player" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="BodyCollision" type="CollisionShape3D" parent="."]
+shape = SubResource("cap_body")
+
+[node name="Visuals" type="Node3D" parent="."]
+
+[node name="ModelHolder" type="Node3D" parent="Visuals"]
+; CharacterBody3D capsule center sits at root.Y=0.9 after gravity settles
+; (capsule height 1.8 → feet at Y=0). Kenney GLB origin is at the model's
+; feet, so without this offset the rendered character floats 0.9m above the
+; ground. -0.9 puts GLB feet on the floor. Visuals-only — does NOT move the
+; physics collider or hitboxes.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.9, 0)
+
+[node name="Torso" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+mesh = SubResource("mesh_torso")
+surface_material_override/0 = SubResource("mat_jumpsuit")
+
+[node name="ArmL" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.5, 0)
+mesh = SubResource("mesh_arm")
+surface_material_override/0 = SubResource("mat_jumpsuit")
+
+[node name="ArmR" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.5, 0)
+mesh = SubResource("mesh_arm")
+surface_material_override/0 = SubResource("mat_jumpsuit")
+
+[node name="LegL" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.14, -0.35, 0)
+mesh = SubResource("mesh_leg")
+surface_material_override/0 = SubResource("mat_helmet")
+
+[node name="LegR" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.14, -0.35, 0)
+mesh = SubResource("mesh_leg")
+surface_material_override/0 = SubResource("mat_helmet")
+
+[node name="Head" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+
+[node name="HeadVisual" type="MeshInstance3D" parent="Head"]
+mesh = SubResource("mesh_head")
+surface_material_override/0 = SubResource("mat_helmet")
+
+[node name="Visor" type="MeshInstance3D" parent="Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -0.18)
+mesh = SubResource("mesh_visor")
+surface_material_override/0 = SubResource("mat_visor")
+
+[node name="Camera3D" type="Camera3D" parent="Head"]
+current = false
+fov = 75.0
+
+[node name="WeaponVisual" type="Node3D" parent="Head/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, -0.16, -0.36)
+
+[node name="GunBody" type="MeshInstance3D" parent="Head/Camera3D/WeaponVisual"]
+mesh = SubResource("mesh_gun_body")
+surface_material_override/0 = SubResource("mat_gun")
+
+[node name="GunBarrel" type="MeshInstance3D" parent="Head/Camera3D/WeaponVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -0.18)
+mesh = SubResource("mesh_gun_barrel")
+surface_material_override/0 = SubResource("mat_gun")
+
+[node name="GunGrip" type="MeshInstance3D" parent="Head/Camera3D/WeaponVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0.04)
+mesh = SubResource("mesh_gun_grip")
+surface_material_override/0 = SubResource("mat_gun_accent")
+
+[node name="HeadHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+monitorable = true
+
+[node name="HeadShape" type="CollisionShape3D" parent="HeadHitbox"]
+shape = SubResource("sph_head")
+
+[node name="BodyHitbox" type="Area3D" parent="."]
+; Offset 0 (was 0.1) — with the enlarged capsule (1.8 tall, 0.4 wide), this
+; sits exactly on the same volume as BodyCollision, covering feet to neck.
+; Head sphere (radius 0.28 at +1.0) overlaps the upper third of this capsule;
+; intersect_ray returns the first collider along the ray so headshots still
+; register correctly when aiming at the actual head height.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+monitorable = true
+
+[node name="TorsoShape" type="CollisionShape3D" parent="BodyHitbox"]
+shape = SubResource("cap_torso")
+
+[node name="Audio3D" type="AudioStreamPlayer3D" parent="."]
+unit_size = 4.0
+max_distance = 60.0
+
+[node name="AudioLocal" type="AudioStreamPlayer" parent="."]

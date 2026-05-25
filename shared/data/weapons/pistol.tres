@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_pistol"]
+script = ExtResource("2")
+name = "Rapid Fire"
+description = "1 s burst · shoot 8 times fast"
+type = &"buff"
+cooldown_ms = 8000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 55
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"pistol"
+display_name = "Pistol"
+type_label = "Secondary"
+slot = &"secondary"
+description = "标准副武器手枪。12 发，平衡攻防。"
+damage = 20
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 15
+reserve = 45
+fire_interval_ms = 200
+reload_time_ms = 1400
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.005
+bullet_speed = 150
+ads_zoom_fov = 52
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = true
+admin_only = false
+scary_close = false
+ability = SubResource("ability_pistol")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"juggernaut"
+display_name = "Juggernaut — 巨人之战"
+description = "一个玩家变身巨人：3 倍血量 + 重武器。其他玩家联手击败他。击败巨人者成为新巨人。"
+family = &"arcade"
+humans_per_team = 1
+team_count = 2
+default_bots_per_side = 4
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 15
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 50
+credits_per_loss = 20
+credit_cap_per_match = 250

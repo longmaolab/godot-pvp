@@ -1,0 +1,171 @@
+# Step 2 — Rate limits + race fixes (C2 + H2 + H5 + chat hardening)
+#
+# C2: `_rpc_sync_request` is now idempotent — a peer's first request
+#     succeeds; retries inside a 1s cooldown are silently dropped.
+#     Closes the unauthenticated DoS amplifier where any peer could
+#     spam this RPC and force the server to rebroadcast every spawn.
+# H2: at most one outstanding respawn timer per peer. Re-death during
+#     the down state and disconnect-during-respawn no longer schedule
+#     duplicate timers that fight over the player's final state.
+# H5: snapshot consumer drops stale ticks. Unreliable_ordered guarantees
+#     channel ordering but late-and-reordered packets could still rewind
+#     HP/ammo on the client. Now monotonic on tick.
+# Chat: 5-msg-per-4s burst limit + 240-char length cap per peer.
+#     Per-peer state cleaned on disconnect.
+#
+# Tests: 23/23 pass.
+#
+--- a/client/scripts/game_controller.gd	2026-05-25 03:58:40
++++ b/client/scripts/game_controller.gd	2026-05-25 04:24:53
+@@ -59,6 +59,27 @@
+ # Server-only state. Empty on clients. Host is added immediately at boot;
+ # clients are added when their _rpc_sync_request lands.
+ var _ready_peers: Array[int] = []
++
++# C2: peers that have already issued _rpc_sync_request. Used to make the
++# sync handler idempotent — a peer that re-requests inside the cooldown
++# window is rejected rather than triggering a full re-spawn broadcast.
++var _synced_peers: Dictionary = {}   # peer_id → last_sync_ms (int)
++
++# Per-peer rate-limit state for spammy RPCs (chat). Token bucket: each peer
++# has a count of recent calls; once the budget is exhausted, drop additional
++# calls until the window elapses. Keyed by (peer_id, kind).
++var _rpc_rate_state: Dictionary = {}   # peer_id → { "chat_last_ms": int, "chat_count": int }
++
++# H2: one outstanding respawn timer per peer. If the peer dies twice quickly
++# (e.g. takes damage during the down-state, or a stale RPC arrives) we cancel
++# the prior timer and replace it — otherwise we'd schedule N respawns and the
++# last to fire wins, potentially overwriting HP/position mid-game.
++var _pending_respawn: Dictionary = {}   # peer_id → SceneTreeTimer
++
++# H5: last applied snapshot tick. Unreliable_ordered guarantees in-channel
++# ordering but a late packet can still arrive after a fresh one is applied,
++# so we monotonically gate the consumer.
++var _last_snapshot_tick: int = -1
+ 
+ @onready var players_root: Node3D = Node3D.new()
+ 
+@@ -389,6 +410,15 @@
+ 
+ func _on_peer_disconnected_as_host(peer: int) -> void:
+ 	_ready_peers.erase(peer)
++	# H2: drop any pending respawn — peer is gone, there's nothing to respawn.
++	# The SceneTreeTimer fires once and we can't preempt it, but clearing the
++	# dict entry means _ds_respawn_player's `victim == null` early-return is
++	# the only side effect when it eventually fires.
++	_pending_respawn.erase(peer)
++	# C2: free per-peer rate-limit state so the dict doesn't grow unboundedly
++	# across many connect/disconnect cycles.
++	_synced_peers.erase(peer)
++	_rpc_rate_state.erase(peer)
+ 	_rpc_despawn.rpc(peer)
+ 	_despawn(peer)
+ 
+@@ -487,9 +517,16 @@
+ ## DS-M3: snapshot received from the dedicated server. Dispatch each entity
+ ## record to the corresponding player's interpolator. Entities for peers we
+ ## haven't seen yet are dropped silently — the spawn RPC will catch us up.
+-func _on_server_snapshot(_tick: int, entities: Array) -> void:
++func _on_server_snapshot(tick: int, entities: Array) -> void:
+ 	if not _server_is_dedicated:
+ 		return
++	# H5: drop stale snapshots so a late packet can't roll the world back over
++	# a fresh one. unreliable_ordered guarantees in-channel order, but the
++	# snapshot's effects (HP writes, ammo writes) can still get clobbered by
++	# a stale duplicate that bypasses the channel's reorder buffer.
++	if tick <= _last_snapshot_tick:
++		return
++	_last_snapshot_tick = tick
+ 	var now_ms: float = float(Time.get_ticks_msec())
+ 	for e in entities:
+ 		var peer_id: int = int(e.get("p", 0))
+@@ -561,6 +598,21 @@
+ 	if not multiplayer.is_server():
+ 		return
+ 	var requester: int = multiplayer.get_remote_sender_id()
++	# C2: idempotent + rate-limited. Each peer is allowed exactly ONE successful
++	# sync per session, and any retry within a 1s window is dropped. Without
++	# this gate, an unauthenticated peer could spam this RPC and force the
++	# server to rebroadcast N spawns per call — both a free DoS amplifier and
++	# a way to insert themselves into _ready_peers before any auth check.
++	var now_ms: int = Time.get_ticks_msec()
++	if _synced_peers.has(requester):
++		var last: int = int(_synced_peers[requester])
++		if now_ms - last < 1000:
++			return   # cooldown — silently drop the retry
++		# Outside cooldown: still served, but log so we notice if it happens
++		# regularly (would indicate the peer's first sync isn't sticking).
++		if is_dedicated_server:
++			print("[server] re-sync from peer %d (%dms since last)" % [requester, now_ms - last])
++	_synced_peers[requester] = now_ms
+ 	if not requester in _ready_peers:
+ 		_ready_peers.append(requester)
+ 	for peer in players_by_peer.keys():
+@@ -1014,7 +1066,17 @@
+ 		if is_dedicated_server:
+ 			print("[server] peer %d died — respawning in 3s" % victim_peer)
+ 		var pos: Vector3 = _spawn_pos_for(victim_peer)
+-		get_tree().create_timer(3.0).timeout.connect(_ds_respawn_player.bind(victim_peer, pos))
++		# H2: only one outstanding respawn timer per peer. If a stale death
++		# event fires while a respawn is already queued (or the player dies
++		# again during the down state), drop the duplicate rather than
++		# stacking timers that would overwrite each other on fire.
++		if _pending_respawn.has(victim_peer):
++			if is_dedicated_server:
++				print("[server]   ↳ respawn already pending for %d, skipping" % victim_peer)
++			return
++		var t: SceneTreeTimer = get_tree().create_timer(3.0)
++		_pending_respawn[victim_peer] = t
++		t.timeout.connect(_ds_respawn_player.bind(victim_peer, pos))
+ 		return
+ 	# Listen-host client / DS client: nothing to do — server will broadcast.
+ 	if not victim.is_local:
+@@ -1034,6 +1096,9 @@
+ ## victim's respawn() locally to reset HP + collision + position, then
+ ## broadcasts server_player_respawned so all clients update their view.
+ func _ds_respawn_player(victim_peer: int, pos: Vector3) -> void:
++	# H2: consume the pending-timer slot regardless of whether the player is
++	# still around (a peer can disconnect during the 3s window).
++	_pending_respawn.erase(victim_peer)
+ 	var victim: Node = players_by_peer.get(victim_peer)
+ 	if victim == null or not is_instance_valid(victim):
+ 		return
+--- a/shared/scripts/network/net_rpc.gd	2026-05-25 02:34:15
++++ b/shared/scripts/network/net_rpc.gd	2026-05-25 04:25:13
+@@ -46,9 +46,36 @@
+ 	client_fire_received.emit(peer, weapon_id, yaw, pitch)
+ 
+ 
++# Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
++# then silently drop until the window slides. Keeps a single peer from
++# flooding all clients via the reliable broadcast path.
++const CHAT_MAX_LEN := 240
++const CHAT_BURST := 5
++const CHAT_WINDOW_MS := 4000
++var _chat_rate_state: Dictionary = {}   # peer_id → { window_start_ms: int, count: int }
++
++
+ @rpc("any_peer", "reliable", "call_remote")
+ func client_chat_line(text: String, color: Color) -> void:
+ 	var peer := multiplayer.get_remote_sender_id()
++	# Per-peer rate limit (server-side only — clients calling this on themselves
++	# is fine since call_remote excludes self anyway). On the server, check the
++	# sender's budget before emitting; on a client receiving this RPC (which
++	# can't happen — `call_remote` routes only to remote peers, i.e. to the
++	# server when called from a client) we'd still want the same gate, so the
++	# check is unconditional.
++	if multiplayer.is_server():
++		var now_ms: int = Time.get_ticks_msec()
++		var s: Dictionary = _chat_rate_state.get(peer, {"window_start_ms": now_ms, "count": 0})
++		if now_ms - int(s.get("window_start_ms", 0)) > CHAT_WINDOW_MS:
++			s = {"window_start_ms": now_ms, "count": 0}
++		s["count"] = int(s.get("count", 0)) + 1
++		_chat_rate_state[peer] = s
++		if int(s["count"]) > CHAT_BURST:
++			return   # spam — silently drop
++		# Cap length to defend the reliable broadcast channel from megabyte payloads.
++		if text.length() > CHAT_MAX_LEN:
++			text = text.substr(0, CHAT_MAX_LEN)
+ 	client_chat_received.emit(peer, text, color)
+ 
+ 

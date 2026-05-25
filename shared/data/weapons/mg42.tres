@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+
+
+[resource]
+script = ExtResource("1")
+id = &"mg42"
+display_name = "MG-42"
+type_label = "MG"
+slot = &"primary"
+description = "MG: MG-42 — 详见原版手感。"
+damage = 15
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 5000
+reserve = 0
+fire_interval_ms = 50
+reload_time_ms = 99999
+no_reload = true
+auto = true
+pellets = 1
+spread = 0.06
+bullet_speed = 145
+ads_zoom_fov = 55
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+
+bullet_color = Color(1, 0.7, 0.2, 1)

@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_desert_eagle"]
+script = ExtResource("2")
+name = "Hand Cannon"
+description = "Next shot · 195 dmg"
+type = &"powershot"
+cooldown_ms = 10000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"desert_eagle"
+display_name = "Desert Eagle"
+type_label = "Admin · Hand Cannon"
+slot = &"secondary"
+description = "Admin · Hand Cannon: Desert Eagle — 详见原版手感。"
+damage = 65
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 7
+reserve = 28
+fire_interval_ms = 200
+reload_time_ms = 1900
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.003
+bullet_speed = 180
+ads_zoom_fov = 48
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = true
+scary_close = false
+ability = SubResource("ability_desert_eagle")
+
+bullet_color = Color(1, 0.3, 0.5, 1)

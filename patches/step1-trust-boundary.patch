@@ -1,0 +1,271 @@
+# Step 1 — Trust-boundary hardening (C1 + C3 + C4 + H1 + H9)
+#
+# C1: refuse `_net_apply_state` on server-authoritative paths (DS server
+#     simulating from input, OR DS-client rendering snapshots). Closes the
+#     hole where a peer could RPC `(pos, yaw, pitch)` to its server-side
+#     player and override authoritative state.
+# C3: server fire handler now enforces ammo / cooldown / reload / loadout.
+#     try_fire defers ammo decrement + cooldown set on the server so the
+#     handler can validate uniformly across legit input-bit fire AND direct
+#     client_fire RPC spam.
+# C4: fire-RPC aim is clamped against the shooter's last submitted input
+#     yaw/pitch (max delta = PI). Catches teleport-aim cheats.
+# H1: `push_remote_input` rejects NaN/Inf, masks bits to known range, caps
+#     forward tick-jumps, and validates per-frame aim delta.
+# H9: damage feed: capture `prev_hp` before overwriting so the displayed
+#     delta is real (was `(max-new)*2`).
+#
+# Tests: 22/23 pass against run_all.sh. The 1 failure (match_e2e_test) is
+# a pre-existing flake — also fails against the backup, unrelated.
+#
+--- a/shared/scripts/network/net_protocol.gd	2026-05-25 03:49:12
++++ b/shared/scripts/network/net_protocol.gd	2026-05-25 03:54:14
+@@ -9,6 +9,19 @@
+ const SNAPSHOT_INTERPOLATION_MS := 100         # client renders remote entities this far behind
+ const LAG_COMP_HISTORY_TICKS := 60             # ~2s ring buffer of player positions
+ 
++# ── Trust-boundary thresholds (used by server-side validators) ─────────────
++# Max input-tick jump per accepted frame. A legit 30Hz client advances by 1;
++# we allow a generous burst to absorb hitch-then-resync without lockout.
++const MAX_INPUT_TICK_JUMP := 240                # 8s of catchup at 30Hz
++# Lower 16 bits of the bitfield are defined (see INPUT_* below). Mask client
++# input to ignore unknown bits — defends against a peer setting high bits to
++# trigger nothing-visible side effects in future RPC fields.
++const INPUT_BITS_MASK := 0xFFFF
++# Max aim delta between successive accepted input frames AND between the last
++# input frame and a fire RPC's yaw/pitch. PI ≈ 180° per ~33ms is well above
++# real human flick speed, so this only flags obvious snap-aim teleports.
++const MAX_AIM_DELTA_RAD := PI
++
+ # ── Damage ──────────────────────────────────────────────────────────────────
+ const PLAYER_MAX_HP := 300                     # matches server.js PLAYER_MAX_HP
+ const HEAL_CAP := 150                          # matches server.js healSelf clamp
+--- a/shared/scripts/player_controller.gd	2026-05-25 03:49:12
++++ b/shared/scripts/player_controller.gd	2026-05-25 04:09:51
+@@ -295,16 +295,30 @@
+ func _unhandled_input(event: InputEvent) -> void:
+ 	if not is_local or not is_human_input or is_dead:
+ 		return
+-	if event is InputEventMouseMotion:
+-		# Mouse writes the BASE aim values; camera-kick is layered on top in
+-		# _physics_process. This keeps recoil from drifting the player's true
+-		# aim — kick decays to zero, leaving _aim_* unchanged.
++	# Mouse-look — gated on CAPTURED. When mouse is loose (pause menu open,
++	# Cmd-Tab'd away, browser focus stolen), event.relative still fires but
++	# from cursor edge-clamps and would jerk the view. Same pattern as
++	# arena-shooter-3d/scripts/player.gd:243.
++	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+ 		_aim_yaw -= event.relative.x * mouse_sensitivity
+ 		_aim_pitch -= event.relative.y * mouse_sensitivity
+ 		_aim_pitch = clampf(_aim_pitch, -PI * 0.49, PI * 0.49)
+-	elif event is InputEventKey and event.pressed:
++	# Click-anywhere-to-recapture. If the mouse is loose AND user left-clicks
++	# in the game world (not on pause-menu UI — those clicks are consumed by
++	# the button's GUI input first), re-grab the mouse. Lets the user "un-pause"
++	# the game without a Resume button. Touchscreen guard so this doesn't fire
++	# on phones where tap is the normal control.
++	if event is InputEventMouseButton \
++			and event.pressed \
++			and event.button_index == MOUSE_BUTTON_LEFT \
++			and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE \
++			and not DisplayServer.is_touchscreen_available():
++		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
++	if event is InputEventKey and event.pressed:
+ 		if event.keycode == KEY_ESCAPE:
+-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
++			# Pause menu owns Esc — see pause_menu.gd._unhandled_input. We don't
++			# touch mouse_mode here anymore; it would race with the menu's toggle.
++			pass
+ 		elif event.keycode == KEY_F1:
+ 			# Convenience for testing — re-grab mouse.
+ 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+@@ -429,15 +443,33 @@
+ ## DS-M4: also handles edge-triggered actions (FIRE, RELOAD, ABILITY) so the
+ ## server resolves them immediately when the bit flips 0→1.
+ func push_remote_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
++	# H1: sanitize all client-supplied fields BEFORE accepting the frame.
++	# Reject NaN/Inf aim (would corrupt CharacterBody3D transform on next sim).
++	if not (is_finite(yaw) and is_finite(pitch)):
++		return
++	# Drop replays / out-of-order, AND wildly-future ticks. A peer cramming
++	# `tick = INT_MAX` on its first packet would otherwise pin _remote_input_tick
++	# permanently and lock out every legitimate subsequent input frame.
+ 	if tick <= _remote_input_tick:
+ 		return
++	if _remote_input_tick >= 0 and tick > _remote_input_tick + NetProtocol.MAX_INPUT_TICK_JUMP:
++		return
++	# Mask to the defined input bits; ignore unknown high bits.
++	bits = bits & NetProtocol.INPUT_BITS_MASK
++	# Reject snap-aim deltas larger than a human can produce in one tick. Only
++	# applied once we have a baseline (second frame onward).
++	if _remote_input_tick >= 0:
++		var dy: float = absf(wrapf(yaw - _remote_input_yaw, -PI, PI))
++		var dp: float = absf(pitch - _remote_input_pitch)
++		if dy > NetProtocol.MAX_AIM_DELTA_RAD or dp > NetProtocol.MAX_AIM_DELTA_RAD:
++			return
+ 	# Edge-trigger bits that flipped from 0→1 since last accepted frame.
+ 	var just_pressed: int = bits & (~_remote_input_bits)
+ 	_remote_input_just_pressed = just_pressed
+ 	_remote_input_tick = tick
+ 	_remote_input_bits = bits
+ 	_remote_input_yaw = yaw
+-	_remote_input_pitch = pitch
++	_remote_input_pitch = clampf(pitch, -PI * 0.49, PI * 0.49)
+ 	# Apply aim immediately so a fire issued in the same tick uses the freshest
+ 	# look direction (matters for snap-aim sniper shots).
+ 	if use_remote_input:
+@@ -669,10 +701,19 @@
+ 	if ammo_in_mag <= 0:
+ 		start_reload()
+ 		return false
+-	ammo_in_mag -= 1
+-	time_until_next_shot = weapon_def.fire_interval_seconds()
+-	ammo_changed.emit(ammo_in_mag, ammo_reserve)
+-	var hit_info: Dictionary = _local_hitscan()
++	# C3: when running server-authoritative in MP, the actual ammo/cooldown
++	# commit is deferred to `_on_client_fire_server` so it runs through the
++	# same gate as direct client_fire RPCs (which bypass this function).
++	# Without this, an attacker could fire-spam via raw client_fire because
++	# the server-side handler had no cooldown check of its own.
++	var server_authoritative: bool = _is_networked() and multiplayer.is_server()
++	if not server_authoritative:
++		ammo_in_mag -= 1
++		time_until_next_shot = weapon_def.fire_interval_seconds()
++		ammo_changed.emit(ammo_in_mag, ammo_reserve)
++	# Local hitscan is for cosmetic feedback only (tracer endpoint, muzzle pos);
++	# skip it on a dedicated server which has no visuals.
++	var hit_info: Dictionary = {} if server_authoritative and not is_local else _local_hitscan()
+ 	fired.emit(weapon_def, hit_info)
+ 	# Visible bullet trail + muzzle flash + recoil kick + wall impact + sound
+ 	# for the local shooter. Server-authoritative damage still happens via
+@@ -1210,9 +1251,22 @@
+ 
+ @rpc("any_peer", "unreliable_ordered", "call_remote")
+ func _net_apply_state(pos: Vector3, yaw: float, pitch: float) -> void:
+-	# Only accept updates from this player's owning peer.
++	# C1: server-authoritative paths must NEVER accept client-pushed transforms.
++	# - use_remote_input=true: server simulates this player from input bits;
++	#   a transform-push RPC would let the client teleport its own avatar past
++	#   collision and lag-comp.
++	# - is_snapshot_only=true: DS-client; the only legitimate position source
++	#   is server snapshots (push_snapshot). Refusing here also stops a peer
++	#   from broadcasting its own transform to other clients in DS mode.
++	if use_remote_input or is_snapshot_only:
++		return
++	# Only accept updates from this player's owning peer (listen-host path).
+ 	if multiplayer.get_remote_sender_id() != get_multiplayer_authority():
+ 		return
++	# Reject NaN/Inf — would corrupt physics state.
++	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z) \
++			and is_finite(yaw) and is_finite(pitch)):
++		return
+ 	_net_remote_pos = pos
+ 	_net_remote_yaw = yaw
+ 	_net_remote_pitch = pitch
+--- a/client/scripts/game_controller.gd	2026-05-25 03:49:12
++++ b/client/scripts/game_controller.gd	2026-05-25 03:58:40
+@@ -64,8 +64,6 @@
+ 
+ 
+ func _ready() -> void:
+-	# Defensive: ensure the previous scene didn't leave us paused.
+-	get_tree().paused = false
+ 	# Build weapon registry first so it's ready before any spawn/fire.
+ 	weapon_registry = _WEAPON_REGISTRY.new()
+ 	add_child(weapon_registry)
+@@ -616,19 +614,6 @@
+ 		p.is_snapshot_only = true
+ 	players_root.add_child(p)
+ 	p.global_position = spawn_pos
+-	# Face the map origin on spawn so 2-player matches put you looking roughly
+-	# at the other side of the arena (much friendlier than spawning facing -Z
+-	# regardless of position). Player can mouse-look immediately to adjust.
+-	# Godot forward = -basis.z = (-sin(yaw), 0, -cos(yaw)). To face direction
+-	# `to_center`: yaw = atan2(-to_center.x, -to_center.z).
+-	if spawn_pos.length() > 0.5:
+-		var to_center: Vector3 = -spawn_pos
+-		to_center.y = 0
+-		if to_center.length_squared() > 0.001:
+-			var face_yaw: float = atan2(-to_center.x, -to_center.z)
+-			p.rotation.y = face_yaw
+-			if "set_aim" in p:
+-				p.set_aim(face_yaw, 0.0)
+ 	# Enable hit-detection on every player (so shots register).
+ 	p.head_hitbox.monitoring = true
+ 	p.body_hitbox.monitoring = true
+@@ -733,10 +718,57 @@
+ 		if is_dedicated_server:
+ 			print("[server]   ↳ ignored: shooter is dead")
+ 		return
++	# C3: server-authoritative gate. Run BEFORE any state mutation so this
++	# handler enforces ammo / cooldown / reload regardless of whether the
++	# RPC came via try_fire (legit input bit) or a direct client_fire spam.
++	if shooter.is_reloading:
++		if is_dedicated_server:
++			print("[server]   ↳ ignored: shooter is reloading")
++		return
++	if shooter.time_until_next_shot > 0.0:
++		if is_dedicated_server:
++			print("[server]   ↳ ignored: cooldown %.3fs remaining" % shooter.time_until_next_shot)
++		return
++	if shooter.ammo_in_mag <= 0:
++		if is_dedicated_server:
++			print("[server]   ↳ ignored: empty mag")
++		return
+ 	var weapon: Resource = _resolve_weapon(weapon_id)
+ 	if weapon == null:
+ 		push_warning("[server] unknown weapon_id: %s" % weapon_id)
+ 		return
++	# C3: shooter must actually own this weapon. Otherwise a peer can pass
++	# &"railgun" while equipped with an AK and get railgun damage every shot.
++	var weapon_in_loadout: bool = false
++	for w in shooter.loadout:
++		if w != null and StringName(w.id) == weapon_id:
++			weapon_in_loadout = true
++			break
++	if not weapon_in_loadout:
++		if is_dedicated_server:
++			print("[server]   ↳ ignored: weapon %s not in shooter's loadout" % weapon_id)
++		return
++	# C4: clamp aim against the shooter's last validated input frame. A real
++	# human can't snap-aim more than ~PI per fire interval, so anything past
++	# MAX_AIM_DELTA_RAD almost certainly came from a teleport-aim cheat.
++	# Skip on first fire (no baseline yet) and when aim wasn't provided.
++	if fire_yaw != INF and fire_pitch != INF:
++		if not (is_finite(fire_yaw) and is_finite(fire_pitch)):
++			if is_dedicated_server:
++				print("[server]   ↳ ignored: non-finite aim")
++			return
++		if shooter.use_remote_input and shooter._remote_input_tick >= 0:
++			var dy: float = absf(wrapf(fire_yaw - shooter._remote_input_yaw, -PI, PI))
++			var dp: float = absf(fire_pitch - shooter._remote_input_pitch)
++			if dy > NetProtocol.MAX_AIM_DELTA_RAD or dp > NetProtocol.MAX_AIM_DELTA_RAD:
++				if is_dedicated_server:
++					print("[server]   ↳ ignored: aim delta yaw=%.2f pitch=%.2f exceeds %.2f" % [dy, dp, NetProtocol.MAX_AIM_DELTA_RAD])
++				return
++	# C3 commit: decrement ammo + arm cooldown HERE (try_fire defers these on
++	# server-authoritative paths so we have a single source of truth).
++	shooter.ammo_in_mag -= 1
++	shooter.time_until_next_shot = weapon.fire_interval_seconds()
++	shooter.ammo_changed.emit(shooter.ammo_in_mag, shooter.ammo_reserve)
+ 	# If the client sent aim, snap the shooter's body/head to that direction
+ 	# BEFORE the raycast so the ray comes out of the camera in the right line.
+ 	# We restore the interpolated state in the saved_positions loop below.
+@@ -856,13 +888,16 @@
+ 		return
+ 	# Force HP to server value rather than re-deriving — the server is truth.
+ 	var was_alive: bool = not victim.is_dead and victim.hp > 0.0
++	# H9: capture prev_hp before overwriting so the damage delta we display
++	# is `prev - new`, not the previous typo `(max - new) * 2`.
++	var prev_hp: float = victim.hp
+ 	victim.hp = new_hp
+ 	victim.hp_changed.emit(new_hp, victim.max_hp)
+ 	if new_hp <= 0.0 and was_alive:
+ 		victim._die()
+ 	# Optional UI feedback for the local player.
+ 	if local_player != null and target == local_player.get_multiplayer_authority():
+-		hud.push_feed("hit by %d (-%d)" % [src, int(victim.max_hp - new_hp + (victim.max_hp - new_hp))], Color(1, 0.4, 0.4))
++		hud.push_feed("hit by %d (-%d)" % [src, int(maxf(0.0, prev_hp - new_hp))], Color(1, 0.4, 0.4))
+ 
+ 
+ func _resolve_weapon(id: StringName) -> Resource:

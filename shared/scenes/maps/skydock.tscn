@@ -1,0 +1,202 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
+[ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
+[ext_resource type="Script" path="res://shared/scripts/world/low_grav_zone.gd" id="3_lowgrav"]
+
+[sub_resource type="BoxShape3D" id="box_lowgrav"]
+size = Vector3(14, 12, 14)
+
+[sub_resource type="StandardMaterial3D" id="mat_steel"]
+albedo_color = Color(0.32, 0.36, 0.42, 1)
+metallic = 0.4
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="mat_platform"]
+albedo_color = Color(0.45, 0.48, 0.55, 1)
+metallic = 0.3
+roughness = 0.4
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat_s"]
+sky_horizon_color = Color(0.32, 0.45, 0.6, 1)
+ground_horizon_color = Color(0.18, 0.2, 0.25, 1)
+
+[sub_resource type="Sky" id="sky_s"]
+sky_material = SubResource("sky_mat_s")
+
+[sub_resource type="Environment" id="env_s"]
+background_mode = 2
+sky = SubResource("sky_s")
+ambient_light_source = 3
+ambient_light_color = Color(0.65, 0.74, 0.85, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 2
+
+[node name="SkydockMap" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_s")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 20, 0)
+shadow_enabled = true
+light_energy = 1.1
+light_color = Color(0.9, 0.95, 1, 1)
+
+[node name="LowerDeck" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(60, 1, 60)
+material = SubResource("mat_steel")
+
+[node name="MiddlePlatformNorth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, -18)
+use_collision = true
+collision_layer = 1
+size = Vector3(20, 0.6, 14)
+material = SubResource("mat_platform")
+
+[node name="MiddlePlatformSouth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
+use_collision = true
+collision_layer = 1
+size = Vector3(20, 0.6, 14)
+material = SubResource("mat_platform")
+
+[node name="UpperPlatform" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(12, 0.6, 12)
+material = SubResource("mat_platform")
+
+[node name="RampN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.949, 0.316, 0, -0.316, 0.949, 0, 2, -10)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 0.4, 8)
+material = SubResource("mat_platform")
+
+[node name="RampS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.949, -0.316, 0, 0.316, 0.949, 0, 2, 10)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 0.4, 8)
+material = SubResource("mat_platform")
+
+[node name="RampMid" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.949, 0.316, 0, -0.316, 0.949, 5, 6, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(3, 0.4, 6)
+material = SubResource("mat_platform")
+
+[node name="WallN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -30)
+use_collision = true
+collision_layer = 1
+size = Vector3(60, 6, 1)
+material = SubResource("mat_steel")
+
+[node name="WallS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 30)
+use_collision = true
+collision_layer = 1
+size = Vector3(60, 6, 1)
+material = SubResource("mat_steel")
+
+[node name="WallE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 3, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 60)
+material = SubResource("mat_steel")
+
+[node name="WallW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 3, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 60)
+material = SubResource("mat_steel")
+
+[node name="FuelTank1" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 1.5, -10)
+use_collision = true
+collision_layer = 1
+radius = 1.5
+height = 3.0
+material = SubResource("mat_steel")
+
+[node name="FuelTank2" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 1.5, 10)
+use_collision = true
+collision_layer = 1
+radius = 1.5
+height = 3.0
+material = SubResource("mat_steel")
+
+[node name="SpawnPoints" type="Node3D" parent="."]
+
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 1, -22)
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 1, 22)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 1, -22)
+
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 1, 22)
+
+[node name="Spawn4_Upper" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9, 0)
+
+[node name="DummySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -15)
+
+[node name="JumpPadN" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, -25)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2
+
+[node name="JumpPadS" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 25)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2
+
+[node name="AmmoUpper" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9, 0)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="HealthMidN" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, -18)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="HealthMidS" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 18)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="LowGravUpper" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 14, 0)
+script = ExtResource("3_lowgrav")
+collision_layer = 0
+collision_mask = 2
+gravity_mult = 0.35
+
+[node name="LowGravShape" type="CollisionShape3D" parent="LowGravUpper"]
+shape = SubResource("box_lowgrav")

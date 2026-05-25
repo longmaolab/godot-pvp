@@ -1,0 +1,607 @@
+[gd_scene load_steps=30 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/main_menu.gd" id="1_script"]
+[ext_resource type="Theme" path="res://assets/themes/pvp_theme.tres" id="2_theme"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="3_font"]
+
+[sub_resource type="Gradient" id="bg_grad"]
+offsets = PackedFloat32Array(0, 0.45, 1)
+colors = PackedColorArray(0.025, 0.04, 0.085, 1, 0.05, 0.08, 0.16, 1, 0.08, 0.13, 0.22, 1)
+
+[sub_resource type="GradientTexture2D" id="bg_tex"]
+gradient = SubResource("bg_grad")
+fill_from = Vector2(0.5, 0)
+fill_to = Vector2(0.5, 1)
+width = 64
+height = 512
+
+[sub_resource type="Gradient" id="glow_grad_cyan"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(0.2, 0.85, 1.0, 0.55, 0.2, 0.85, 1.0, 0)
+
+[sub_resource type="GradientTexture2D" id="glow_tex_cyan"]
+gradient = SubResource("glow_grad_cyan")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="Gradient" id="glow_grad_warm"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(1.0, 0.45, 0.55, 0.45, 1.0, 0.45, 0.55, 0)
+
+[sub_resource type="GradientTexture2D" id="glow_tex_warm"]
+gradient = SubResource("glow_grad_warm")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="panel_glass"]
+bg_color = Color(0.04, 0.07, 0.14, 0.93)
+border_color = Color(0.28, 0.7, 0.95, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+content_margin_left = 28
+content_margin_right = 28
+content_margin_top = 24
+content_margin_bottom = 24
+shadow_color = Color(0, 0, 0, 0.55)
+shadow_size = 18
+
+[sub_resource type="StyleBoxFlat" id="panel_glass_warm"]
+bg_color = Color(0.06, 0.06, 0.12, 0.92)
+border_color = Color(1, 0.7, 0.3, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+content_margin_left = 28
+content_margin_right = 28
+content_margin_top = 24
+content_margin_bottom = 24
+shadow_color = Color(0, 0, 0, 0.55)
+shadow_size = 18
+
+[sub_resource type="StyleBoxFlat" id="btn_primary_normal"]
+bg_color = Color(0.16, 0.78, 0.46, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 20
+content_margin_right = 20
+content_margin_top = 14
+content_margin_bottom = 14
+shadow_color = Color(0.1, 0.5, 0.28, 0.6)
+shadow_size = 8
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="btn_primary_hover"]
+bg_color = Color(0.26, 0.92, 0.58, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 20
+content_margin_right = 20
+content_margin_top = 14
+content_margin_bottom = 14
+shadow_color = Color(0.18, 0.62, 0.34, 0.7)
+shadow_size = 12
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="btn_primary_pressed"]
+bg_color = Color(0.12, 0.58, 0.34, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 20
+content_margin_right = 20
+content_margin_top = 14
+content_margin_bottom = 14
+
+[sub_resource type="StyleBoxFlat" id="btn_secondary_normal"]
+bg_color = Color(0.1, 0.18, 0.3, 1)
+border_color = Color(0.32, 0.72, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 16
+content_margin_right = 16
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="btn_secondary_hover"]
+bg_color = Color(0.16, 0.28, 0.46, 1)
+border_color = Color(0.5, 0.88, 1, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 16
+content_margin_right = 16
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="btn_secondary_pressed"]
+bg_color = Color(0.06, 0.12, 0.22, 1)
+border_color = Color(0.32, 0.72, 0.95, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 16
+content_margin_right = 16
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="lineedit_style"]
+bg_color = Color(0.04, 0.08, 0.16, 1)
+border_color = Color(0.32, 0.72, 0.95, 0.55)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 14
+content_margin_right = 14
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="picker_normal"]
+bg_color = Color(0.06, 0.1, 0.18, 1)
+border_color = Color(0.28, 0.6, 0.85, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 14
+content_margin_right = 14
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="picker_hover"]
+bg_color = Color(0.1, 0.18, 0.3, 1)
+border_color = Color(0.5, 0.85, 1, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 14
+content_margin_right = 14
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="info_pill"]
+bg_color = Color(0.06, 0.12, 0.22, 1)
+border_color = Color(1, 0.75, 0.3, 0.7)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 12
+content_margin_right = 12
+content_margin_top = 6
+content_margin_bottom = 6
+
+[sub_resource type="StyleBoxFlat" id="loadout_chip"]
+bg_color = Color(0.08, 0.14, 0.24, 1)
+border_color = Color(0.4, 0.8, 1, 0.7)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+content_margin_left = 10
+content_margin_right = 10
+content_margin_top = 6
+content_margin_bottom = 6
+
+[sub_resource type="StyleBoxFlat" id="separator_style"]
+content_margin_top = 6
+content_margin_bottom = 6
+
+[node name="MainMenu" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.02, 0.03, 0.07, 1)
+
+[node name="BgGradient" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = SubResource("bg_tex")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="GlowTopLeft" type="TextureRect" parent="."]
+anchors_preset = 0
+offset_left = -180.0
+offset_top = -120.0
+offset_right = 520.0
+offset_bottom = 580.0
+mouse_filter = 2
+texture = SubResource("glow_tex_cyan")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 1, 1, 0.7)
+
+[node name="GlowBottomRight" type="TextureRect" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -620.0
+offset_top = -620.0
+offset_right = 100.0
+offset_bottom = 100.0
+mouse_filter = 2
+texture = SubResource("glow_tex_warm")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 0.85, 0.55, 0.55)
+
+[node name="GridOverlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.4, 0.7, 0.95, 0.025)
+
+[node name="Scroll" type="ScrollContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="Center" type="CenterContainer" parent="Scroll"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 980)
+
+[node name="Cols" type="HBoxContainer" parent="Scroll/Center"]
+theme_override_constants/separation = 36
+
+[node name="LeftCard" type="PanelContainer" parent="Scroll/Center/Cols"]
+custom_minimum_size = Vector2(620, 0)
+theme_override_styles/panel = SubResource("panel_glass")
+
+[node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/LeftCard"]
+theme_override_constants/separation = 18
+
+[node name="Title" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 68
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_colors/font_outline_color = Color(0.0, 0.45, 0.8, 1)
+theme_override_constants/outline_size = 6
+text = "GODOT  PVP"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.78, 0.35, 1)
+text = "★  SERVER-AUTHORITATIVE ARENA SHOOTER  ★"
+horizontal_alignment = 1
+
+[node name="Sep1" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
+
+[node name="IdentityHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "▸  你是谁 / IDENTITY"
+
+[node name="NameRow" type="HBoxContainer" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_constants/separation = 14
+
+[node name="NameLabel" type="Label" parent="Scroll/Center/Cols/LeftCard/V/NameRow"]
+text = "名字"
+custom_minimum_size = Vector2(70, 0)
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 1)
+
+[node name="NameInput" type="LineEdit" parent="Scroll/Center/Cols/LeftCard/V/NameRow"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(300, 52)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+max_length = 16
+placeholder_text = "Player"
+
+[node name="SkinRow" type="HBoxContainer" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_constants/separation = 14
+
+[node name="SkinLabel" type="Label" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
+text = "皮肤"
+custom_minimum_size = Vector2(70, 0)
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 1)
+
+[node name="SkinPrev" type="Button" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
+custom_minimum_size = Vector2(60, 52)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+text = "◀"
+
+[node name="SkinName" type="Label" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
+size_flags_horizontal = 3
+horizontal_alignment = 1
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "Character A"
+
+[node name="SkinNext" type="Button" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
+custom_minimum_size = Vector2(60, 52)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+text = "▶"
+
+[node name="Sep1b" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
+
+[node name="MapHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "▸  地图 / MAP"
+
+[node name="MapPicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 60)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+theme_override_styles/pressed = SubResource("picker_hover")
+theme_override_styles/focus = SubResource("picker_hover")
+
+[node name="MapDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 64)
+text = ""
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+
+[node name="Sep2" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
+
+[node name="ModeHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "▸  模式 / MODE"
+
+[node name="ModePicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 60)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+theme_override_styles/pressed = SubResource("picker_hover")
+theme_override_styles/focus = SubResource("picker_hover")
+
+[node name="ModeDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 84)
+text = ""
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+
+[node name="Sep3" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
+
+[node name="WeaponsButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 60)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "📖   武器图鉴   /   WEAPON CATALOG"
+
+[node name="ShopButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 60)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "🛒   商店  /  SHOP"
+
+[node name="RightCard" type="PanelContainer" parent="Scroll/Center/Cols"]
+custom_minimum_size = Vector2(560, 0)
+theme_override_styles/panel = SubResource("panel_glass_warm")
+
+[node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/RightCard"]
+theme_override_constants/separation = 18
+
+[node name="StatsRow" type="HBoxContainer" parent="Scroll/Center/Cols/RightCard/V"]
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="StatWeapons" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
+theme_override_styles/panel = SubResource("info_pill")
+
+[node name="StatWeaponsLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatWeapons"]
+text = "▣  -- 武器"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+
+[node name="StatModes" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
+theme_override_styles/panel = SubResource("info_pill")
+
+[node name="StatModesLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatModes"]
+text = "◇  -- 模式"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+
+[node name="StatMaps" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
+theme_override_styles/panel = SubResource("info_pill")
+
+[node name="StatMapsLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatMaps"]
+text = "◈  -- 地图"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+
+[node name="ActionHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
+text = "▸  开始游戏 / PLAY"
+
+[node name="PracticeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 96)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
+theme_override_constants/outline_size = 3
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+text = "▶   PRACTICE"
+
+[node name="PracticeHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+text = "单机模式 · 对战 AI bot + 假人 · 死后自动重生"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.65, 0.78, 0.92, 1)
+
+[node name="Sep1" type="HSeparator" parent="Scroll/Center/Cols/RightCard/V"]
+
+[node name="MPHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "▸  联机 / MULTIPLAYER"
+
+[node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 68)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "🌐   HOST   ·   开服 :7777"
+
+[node name="JoinAddrLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+text = "服务器地址 / SERVER ADDRESS"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.9)
+
+[node name="JoinAddress" type="LineEdit" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 54)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_colors/font_placeholder_color = Color(0.5, 0.65, 0.82, 1)
+theme_override_colors/caret_color = Color(0.4, 0.85, 1, 1)
+theme_override_styles/normal = SubResource("lineedit_style")
+theme_override_styles/focus = SubResource("lineedit_style")
+placeholder_text = "ws://127.0.0.1:7777"
+
+[node name="JoinButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 68)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "🔗   JOIN   ·   连接服务器"
+
+[node name="Spacer" type="Control" parent="Scroll/Center/Cols/RightCard/V"]
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 8)
+
+[node name="StatusLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.55, 0.78, 0.92, 1)
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="VersionLabel" type="Label" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -200
+offset_top = -36
+offset_right = -16
+offset_bottom = -8
+text = "v0.3  ·  godot 4.6"
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.45, 0.6, 0.78, 0.6)
+mouse_filter = 2
+
+[node name="WeaponsDialog" type="AcceptDialog" parent="."]
+title = "武器图鉴 / WEAPON CATALOG"
+size = Vector2i(760, 600)
+theme = ExtResource("2_theme")
+ok_button_text = "关闭"
+
+[node name="Scroll" type="ScrollContainer" parent="WeaponsDialog"]
+custom_minimum_size = Vector2(720, 520)
+anchors_preset = 15
+
+[node name="V" type="VBoxContainer" parent="WeaponsDialog/Scroll"]
+custom_minimum_size = Vector2(700, 0)
+theme_override_constants/separation = 8

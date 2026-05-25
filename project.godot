@@ -1,0 +1,39 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Godot PVP"
+config/description="Full-parity Godot 4.6 port of VideoGameTips/pvp-game with server-authoritative netcode."
+run/main_scene="res://client/scenes/main_menu.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[autoload]
+
+NetProtocol="*res://shared/scripts/network/net_protocol.gd"
+NetRpc="*res://shared/scripts/network/net_rpc.gd"
+InputSetup="*res://client/scripts/input/input_setup.gd"
+HeadlessMain="*res://server/headless_main.gd"
+ProcAudio="*res://client/scripts/audio/proc_audio.gd"
+StatsStore="*res://client/scripts/persistence/stats_store.gd"
+Settings="*res://client/scripts/persistence/settings.gd"
+ServerDiscovery="*res://client/scripts/persistence/server_discovery.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[physics]
+
+3d/physics_engine="JoltPhysics3D"
+3d/default_gravity=28.0

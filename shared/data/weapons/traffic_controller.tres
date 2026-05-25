@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_traffic_controller"]
+script = ExtResource("2")
+name = "Gridlock"
+description = "AOE red sign · 4 m · freeze 2 s"
+type = &"aoe"
+cooldown_ms = 13000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 4
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"traffic_controller"
+display_name = "Traffic Controller"
+type_label = "Signal Painter"
+slot = &"primary"
+description = "Signal Painter: Traffic Controller — 详见原版手感。"
+damage = 4
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 18
+reserve = 54
+fire_interval_ms = 200
+reload_time_ms = 2000
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.005
+bullet_speed = 130
+ads_zoom_fov = 50
+price_credits = 120
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_traffic_controller")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

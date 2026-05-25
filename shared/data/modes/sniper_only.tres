@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"sniper_only"
+display_name = "Sniper Only — 全员狙击"
+description = "所有人只能用狙击枪 + 副武器。考验远距离瞄准、走位预判。常用于 Trenches / Battlefield 大地图。"
+family = &"arcade"
+humans_per_team = 1
+team_count = 2
+default_bots_per_side = 4
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 10
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 50
+credits_per_loss = 20
+credit_cap_per_match = 250

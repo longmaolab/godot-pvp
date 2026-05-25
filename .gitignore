@@ -1,0 +1,13 @@
+.godot/
+.import/
+.DS_Store
+*.translation
+export.cfg
+export_credentials.cfg
+*.tmp
+*.log
+exports/
+
+# Internal working state — not for public repo
+.agent/
+fix-local-camera-current.patch

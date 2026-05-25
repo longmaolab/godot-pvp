@@ -1,0 +1,159 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
+[ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
+[ext_resource type="Script" path="res://shared/scripts/world/damage_zone.gd" id="3_damage"]
+
+[sub_resource type="BoxShape3D" id="box_dmg_pit"]
+size = Vector3(5, 1, 5)
+
+[sub_resource type="StandardMaterial3D" id="mat_lava"]
+albedo_color = Color(1, 0.4, 0.15, 1)
+emission_enabled = true
+emission = Color(1, 0.5, 0.2, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="mat_floor"]
+albedo_color = Color(0.4, 0.42, 0.45, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_wall"]
+albedo_color = Color(0.25, 0.27, 0.3, 1)
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_horizon_color = Color(0.55, 0.69, 0.81, 1)
+ground_horizon_color = Color(0.55, 0.69, 0.81, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env_blank"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.74, 0.78, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 2
+
+[node name="BlankMap" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_blank")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 20, 0)
+shadow_enabled = true
+light_energy = 1.2
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(60, 1, 60)
+material = SubResource("mat_floor")
+
+[node name="WallNorth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -30)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(60, 4, 1)
+material = SubResource("mat_wall")
+
+[node name="WallSouth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 30)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(60, 4, 1)
+material = SubResource("mat_wall")
+
+[node name="WallEast" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 2, 0)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(1, 4, 60)
+material = SubResource("mat_wall")
+
+[node name="WallWest" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 2, 0)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(1, 4, 60)
+material = SubResource("mat_wall")
+
+[node name="ObstacleA" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1.5, -6)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2, 3, 2)
+material = SubResource("mat_wall")
+
+[node name="ObstacleB" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, 5)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(4, 2, 1)
+material = SubResource("mat_wall")
+
+[node name="SpawnPoints" type="Node3D" parent="."]
+
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 10)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1, -10)
+
+[node name="DummySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10)
+
+[node name="JumpPad1" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0.1, 0)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2
+
+[node name="JumpPad2" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0.1, 0)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2
+
+[node name="HealthKit1" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 16)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="AmmoCrate1" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -16)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="DamagePit" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0.5, 22)
+script = ExtResource("3_damage")
+collision_layer = 0
+collision_mask = 2
+damage_per_tick = 8.0
+tick_interval_sec = 0.25
+
+[node name="DamagePitShape" type="CollisionShape3D" parent="DamagePit"]
+shape = SubResource("box_dmg_pit")
+
+[node name="DamagePitVisual" type="CSGBox3D" parent="DamagePit"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.3, 0)
+use_collision = false
+size = Vector3(5, 0.1, 5)
+material = SubResource("mat_lava")

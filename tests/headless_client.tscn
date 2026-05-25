@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/headless_client.gd" id="1_client_test"]
+
+[node name="HeadlessClient" type="Node"]
+script = ExtResource("1_client_test")

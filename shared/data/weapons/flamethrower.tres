@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_flamethrower"]
+script = ExtResource("2")
+name = "Propane Burst"
+description = "Blast 22 concentrated flames directly forward"
+type = &"multishot"
+cooldown_ms = 12000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = true
+
+[resource]
+script = ExtResource("1")
+id = &"flamethrower"
+display_name = "Flamethrower"
+type_label = "Area"
+slot = &"primary"
+description = "近距离喷火器。多发火舌，伤害随燃烧累积，AI 见你拿出来会撤退。"
+damage = 6
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 80
+reserve = 160
+fire_interval_ms = 35
+reload_time_ms = 3200
+no_reload = false
+auto = true
+pellets = 4
+spread = 0.16
+bullet_speed = 48
+ads_zoom_fov = 60
+price_credits = 120
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = true
+ability = SubResource("ability_flamethrower")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

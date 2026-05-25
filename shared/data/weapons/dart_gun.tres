@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_dart_gun"]
+script = ExtResource("2")
+name = "Toxin Dart"
+description = "Next dart · poison DOT 80 dmg over 4 s"
+type = &"powershot"
+cooldown_ms = 12000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"dart_gun"
+display_name = "Dart Gun"
+type_label = "Secondary"
+slot = &"secondary"
+description = "Secondary: Dart Gun — 详见原版手感。"
+damage = 25
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 6
+reserve = 18
+fire_interval_ms = 350
+reload_time_ms = 1600
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.004
+bullet_speed = 92
+ads_zoom_fov = 50
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_dart_gun")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

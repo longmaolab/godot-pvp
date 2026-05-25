@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_minigun"]
+script = ExtResource("2")
+name = "Spin-Up"
+description = "4s · fire rate ×2 · barrels spin faster"
+type = &"buff"
+cooldown_ms = 16000
+duration_ms = 4000
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"minigun"
+display_name = "Minigun"
+type_label = "Heavy"
+slot = &"primary"
+description = "重型加特林，弹匣海量，转动后倾泻，移动慢。"
+damage = 9
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 180
+reserve = 360
+fire_interval_ms = 32
+reload_time_ms = 4200
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.026
+bullet_speed = 144
+ads_zoom_fov = 55
+price_credits = 120
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_minigun")
+
+bullet_color = Color(0.9, 0.4, 0.3, 1)

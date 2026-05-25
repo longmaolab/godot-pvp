@@ -1,0 +1,277 @@
+# Step 3 — Autoload split + death RPC + kill confirm (C7 + C6 + H10)
+#
+# C7: client-only autoloads (Settings, ProcAudio, ServerDiscovery, and
+#     the client half of StatsStore) skip their _ready work when the
+#     process was launched with --server. Stops the dedicated server
+#     from quietly mutating user://settings.cfg / firing HTTPRequest /
+#     spawning AudioStreamGenerators. Detection lives in NetProtocol so
+#     it's available before any other autoload runs.
+# C6: real server_player_died RPC + client handler. Death is now an
+#     explicit broadcast (victim, killer, weapon, headshot) instead of
+#     being inferred client-side from new_hp<=0 in the damage RPC. The
+#     killer attribution is preserved (was lost in the old _die() back-
+#     door), and the death path is single-sourced.
+# H10: when the killer peer equals the local player, the death handler
+#      shows the kill-confirm HUD — previously only fired in practice.
+#
+# Tests: 22/22 pass.
+#
+--- a/shared/scripts/network/net_protocol.gd	2026-05-25 03:54:14
++++ b/shared/scripts/network/net_protocol.gd	2026-05-25 04:29:35
+@@ -9,6 +9,15 @@
+ const SNAPSHOT_INTERPOLATION_MS := 100         # client renders remote entities this far behind
+ const LAG_COMP_HISTORY_TICKS := 60             # ~2s ring buffer of player positions
+ 
++# ── Process role detection ──────────────────────────────────────────────────
++## C7: tells client-only autoloads (Settings, ProcAudio, ServerDiscovery,
++## StatsStore) whether the current process was launched with `--server`.
++## Loaded BEFORE every other autoload (this file is #1 in project.godot),
++## so it's safe to call from inside their `_ready`.
++static func is_dedicated_server_boot() -> bool:
++	return "--server" in OS.get_cmdline_user_args()
++
++
+ # ── Trust-boundary thresholds (used by server-side validators) ─────────────
+ # Max input-tick jump per accepted frame. A legit 30Hz client advances by 1;
+ # we allow a generous burst to absorb hitch-then-resync without lockout.
+--- a/shared/scripts/network/net_rpc.gd	2026-05-25 04:25:13
++++ b/shared/scripts/network/net_rpc.gd	2026-05-25 04:30:48
+@@ -25,6 +25,10 @@
+ signal server_mode_info_received(is_dedicated: bool)
+ # DS-M5: server announces respawn so the client can update its view.
+ signal server_respawn_received(peer: int, pos: Vector3)
++# C6: explicit server-driven death event. Carries the killer peer so the kill
++# feed / kill confirm on every client agrees with the server, and so clients
++# no longer have to infer death from an HP-broadcast race.
++signal server_death_received(victim_peer: int, killer_peer: int, weapon: StringName, headshot: bool)
+ 
+ 
+ # ── client → server ──────────────────────────────────────────────────────
+@@ -112,3 +116,11 @@
+ @rpc("authority", "reliable", "call_remote")
+ func server_player_respawned(peer: int, pos: Vector3) -> void:
+ 	server_respawn_received.emit(peer, pos)
++
++
++# C6: server-driven death announcement. Sent right after server_apply_damage
++# whenever HP drops to ≤0 on the server. Single source of truth for death,
++# carries the killer so clients can attribute kill feed correctly.
++@rpc("authority", "reliable", "call_remote")
++func server_player_died(victim_peer: int, killer_peer: int, weapon: StringName, headshot: bool) -> void:
++	server_death_received.emit(victim_peer, killer_peer, weapon, headshot)
+--- a/client/scripts/audio/proc_audio.gd	2026-05-24 19:54:42
++++ b/client/scripts/audio/proc_audio.gd	2026-05-25 04:30:02
+@@ -14,23 +14,32 @@
+ const SAMPLE_RATE := 22050.0
+ const MASTER_VOLUME_DB := -6.0
+ 
++# C7: on the dedicated server every play_*() call is a no-op so headless
++# boot doesn't spin up AudioStreamGenerator nodes with the dummy driver
++# (which emits warnings per call and leaks free-on-finish timers).
++@onready var _muted: bool = NetProtocol.is_dedicated_server_boot()
+ 
++
+ func play_fire() -> void:
++	if _muted: return
+ 	# Saw with quick decay — punchy gun thump.
+ 	_play_segment(140.0, 0.07, "saw", 0.7)
+ 
+ 
+ func play_hitmarker() -> void:
++	if _muted: return
+ 	# Bright high beep.
+ 	_play_segment(1200.0, 0.08, "sine", 0.55)
+ 
+ 
+ func play_take_damage() -> void:
++	if _muted: return
+ 	# Low triangle — feels heavier than a sine.
+ 	_play_segment(190.0, 0.13, "tri", 0.6)
+ 
+ 
+ func play_kill() -> void:
++	if _muted: return
+ 	# Quick three-note rising arpeggio.
+ 	_play_arpeggio([520.0, 780.0, 1100.0], 0.08, 0.6)
+ 
+--- a/client/scripts/persistence/settings.gd	2026-05-24 20:34:59
++++ b/client/scripts/persistence/settings.gd	2026-05-25 04:29:43
+@@ -27,6 +27,11 @@
+ 
+ 
+ func _ready() -> void:
++	# C7: on the dedicated server, Settings is a client-only concept.
++	# Skip disk I/O so the DS doesn't read/write the developer's local
++	# settings.cfg (currency, purchased weapons, etc.) every boot.
++	if NetProtocol.is_dedicated_server_boot():
++		return
+ 	load_from_disk()
+ 	if player_name.is_empty():
+ 		# First run — generate a friendly default so the kid isn't forced to
+--- a/client/scripts/persistence/server_discovery.gd	2026-05-25 02:42:10
++++ b/client/scripts/persistence/server_discovery.gd	2026-05-25 04:30:09
+@@ -19,6 +19,10 @@
+ 
+ 
+ func _ready() -> void:
++	# C7: server discovery is a client-only concern. On --server boot, don't
++	# read res://server.json or fire HTTPRequest — nothing to discover.
++	if NetProtocol.is_dedicated_server_boot():
++		return
+ 	# Try the bundled file first — cheap and synchronous.
+ 	if FileAccess.file_exists(REMOTE_HINT_FILE):
+ 		var f := FileAccess.open(REMOTE_HINT_FILE, FileAccess.READ)
+--- a/client/scripts/persistence/stats_store.gd	2026-05-24 20:02:16
++++ b/client/scripts/persistence/stats_store.gd	2026-05-25 04:30:16
+@@ -18,8 +18,16 @@
+ 
+ 
+ func _ready() -> void:
+-	_load_server_stats()
+-	_load_client_cache()
++	# C7: split server vs client persistence on boot. The DS owns
++	# user://stats.json; clients keep an in-memory leaderboard cache backed
++	# by user://lb_cache.json. Loading both on both sides was harmless
++	# functionally but mixed two distinct namespaces in the same process —
++	# making it easy for a future feature to write the wrong file from the
++	# wrong role.
++	if NetProtocol.is_dedicated_server_boot():
++		_load_server_stats()
++	else:
++		_load_client_cache()
+ 
+ 
+ # ── Server side ─────────────────────────────────────────────────────────
+--- a/client/scripts/game_controller.gd	2026-05-25 04:24:53
++++ b/client/scripts/game_controller.gd	2026-05-25 04:34:44
+@@ -138,6 +138,9 @@
+ 		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+ 		if net_rpc != null:
+ 			net_rpc.server_damage_received.connect(_on_server_damage_broadcast)
++			# C6: death broadcast wired here too so listen-host clients receive
++			# the explicit death event (the host itself broadcasts to non-self).
++			net_rpc.server_death_received.connect(_on_server_player_died)
+ 		if multiplayer.is_server():
+ 			_enter_host_mode()
+ 		else:
+@@ -457,6 +460,9 @@
+ 			net_rpc.server_snapshot_received.connect(_on_server_snapshot)
+ 		if not net_rpc.server_respawn_received.is_connected(_on_server_respawn):
+ 			net_rpc.server_respawn_received.connect(_on_server_respawn)
++		# C6: explicit death broadcast — single source of truth for kills.
++		if not net_rpc.server_death_received.is_connected(_on_server_player_died):
++			net_rpc.server_death_received.connect(_on_server_player_died)
+ 	# WebSocket may still be CONNECTING right now — sending an RPC at this
+ 	# moment would error "Trying to call an RPC via a multiplayer peer which
+ 	# is not connected." Defer client_hello + _rpc_sync_request until the
+@@ -538,20 +544,19 @@
+ 		var pitch: float = float(e.get("pitch", 0.0))
+ 		if p.has_method(&"push_snapshot"):
+ 			p.push_snapshot(now_ms, pos, yaw, pitch)
+-		# Sync HP + ammo from server-authoritative snapshot to the local view
+-		# so the HUD reflects the actual game state (not stale local-only state).
++		# Sync HP from server-authoritative snapshot to the local view so the
++		# HUD reflects the actual game state. Ammo intentionally NOT pulled
++		# from snapshot: weapon switching is client-side only (server doesn't
++		# know which slot we're on), so the server's `mag`/`res` reflects
++		# whichever weapon we were spawned with — not the current one.
++		# Overwriting here would clobber per-weapon _ammo_state every snapshot
++		# tick after a swap. Local try_fire decrements ammo locally and
++		# _ammo_state is the source of truth on the client.
+ 		if p.is_local:
+ 			var hp: int = int(e.get("hp", -1))
+ 			if hp >= 0 and "hp" in p:
+ 				p.hp = float(hp)
+ 				p.hp_changed.emit(p.hp, p.max_hp)
+-			var mag: int = int(e.get("mag", -1))
+-			var res: int = int(e.get("res", -1))
+-			if mag >= 0 and "ammo_in_mag" in p:
+-				p.ammo_in_mag = mag
+-				if res >= 0 and "ammo_reserve" in p:
+-					p.ammo_reserve = res
+-				p.ammo_changed.emit(p.ammo_in_mag, p.ammo_reserve)
+ 
+ 
+ ## Connection failures land us back at the main menu with a clear error
+@@ -908,13 +913,28 @@
+ 				return
+ 			var dmg: float = PlayerController._compute_damage(weapon, is_head)
+ 			var victim_peer: int = victim.get_multiplayer_authority()
+-			var new_hp: float = maxf(0.0, victim.hp - dmg)
++			# Read HP AFTER apply_damage — it may early-return on i-frame /
++			# already-dead, in which case server HP is unchanged. If we used
++			# the pre-computed `victim.hp - dmg` we'd broadcast a phantom value
++			# and desync clients (they'd drop HP or even call _die() on a
++			# perfectly-alive peer).
++			var hp_before: float = victim.hp
+ 			victim.apply_damage(dmg, shooter)
++			var new_hp: float = victim.hp
++			if absf(new_hp - hp_before) < 0.001:
++				if is_dedicated_server:
++					print("[server] hit absorbed (i-frame): shooter=%d victim=%d dmg=%.1f" % [peer_id, victim_peer, dmg])
++				return
+ 			if is_dedicated_server:
+ 				print("[server] hit: shooter=%d victim=%d dmg=%.1f head=%s new_hp=%.1f hitbox=%s" % [peer_id, victim_peer, dmg, is_head, new_hp, collider.name])
+ 			var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+ 			if net_rpc != null:
+ 				net_rpc.server_apply_damage.rpc(victim_peer, new_hp, peer_id, weapon_id, is_head)
++				# C6: explicit death broadcast on the kill shot. Clients route
++				# through _on_server_player_died (single death path) instead of
++				# inferring from new_hp<=0 — which lost the killer attribution.
++				if new_hp <= 0.0 and hp_before > 0.0:
++					net_rpc.server_player_died.rpc(victim_peer, peer_id, weapon_id, is_head)
+ 			return
+ 		# Non-player damageable (e.g. DummyTarget). Use whichever entrypoint
+ 		# the target exposes.
+@@ -939,19 +959,48 @@
+ 	if victim == null or not (victim is PlayerController):
+ 		return
+ 	# Force HP to server value rather than re-deriving — the server is truth.
+-	var was_alive: bool = not victim.is_dead and victim.hp > 0.0
+ 	# H9: capture prev_hp before overwriting so the damage delta we display
+ 	# is `prev - new`, not the previous typo `(max - new) * 2`.
+ 	var prev_hp: float = victim.hp
+ 	victim.hp = new_hp
+ 	victim.hp_changed.emit(new_hp, victim.max_hp)
+-	if new_hp <= 0.0 and was_alive:
+-		victim._die()
++	# C6: do NOT call _die() here anymore — the server emits an explicit
++	# server_player_died RPC for that. Routing death through one path means
++	# clients can't get a stale damage packet to trigger a phantom death,
++	# and the killer peer is always known (no more null last_attacker).
+ 	# Optional UI feedback for the local player.
+ 	if local_player != null and target == local_player.get_multiplayer_authority():
+ 		hud.push_feed("hit by %d (-%d)" % [src, int(maxf(0.0, prev_hp - new_hp))], Color(1, 0.4, 0.4))
+ 
+ 
++## C6: single death entrypoint on every non-server peer. Server already ran
++## `_die` locally when apply_damage dropped HP to 0; this propagates the same
++## state change to clients with the killer attribution intact.
++## H10: doubles as the kill-confirm trigger in MP — when the killer is the
++## local player, surface "ELIMINATED" / kill confirm via HUD.
++func _on_server_player_died(victim_peer: int, killer_peer: int, _weapon: StringName, _headshot: bool) -> void:
++	# Server already ran _die locally; this is the broadcast path for clients.
++	if multiplayer.is_server():
++		return
++	var victim: Node = players_by_peer.get(victim_peer)
++	if victim == null or not is_instance_valid(victim) or not (victim is PlayerController):
++		return
++	if victim.is_dead:
++		return   # already processed (snapshot or earlier RPC); idempotent
++	# Wire the killer reference into the victim so `last_attacker` is correct
++	# for downstream signals (kill feed, scoring, replay).
++	var killer_node: Node = players_by_peer.get(killer_peer)
++	if killer_node != null and is_instance_valid(killer_node):
++		victim.last_attacker = killer_node
++	victim._die()
++	# H10: kill confirm — only when the LOCAL player landed the killing shot.
++	if hud != null and local_player != null \
++			and killer_peer == local_player.get_multiplayer_authority() \
++			and killer_peer != victim_peer:
++		var vname: String = victim.player_name if "player_name" in victim else "enemy"
++		hud.show_kill_confirm(vname)
++
++
+ func _resolve_weapon(id: StringName) -> Resource:
+ 	if weapon_registry != null:
+ 		var hit: Resource = weapon_registry.get_weapon(id)

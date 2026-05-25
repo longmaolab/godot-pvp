@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/ak30.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/revolver.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/burst.tres" id="4"]
+[ext_resource type="Resource" path="res://shared/data/weapons/mp40.tres" id="5"]
+
+[resource]
+script = ExtResource("1")
+id = &"starter_pro"
+display_name = "Starter Pro"
+description = "新手进阶包 — 4 把入门主力，60% 折扣，省 240💰。"
+price_credits = 360
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5")])
+theme_color = Color(0.4, 0.85, 1, 1)

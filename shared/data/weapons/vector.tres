@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_vector"]
+script = ExtResource("2")
+name = "Overdrive"
+description = "2s · fire rate ×5"
+type = &"buff"
+cooldown_ms = 13000
+duration_ms = 2000
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"vector"
+display_name = "Vector SMG"
+type_label = "SMG"
+slot = &"primary"
+description = "Vector 冲锋枪，超高射速。"
+damage = 12
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 32
+reserve = 160
+fire_interval_ms = 45
+reload_time_ms = 1500
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.017
+bullet_speed = 128
+ads_zoom_fov = 50
+price_credits = 144
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_vector")
+
+bullet_color = Color(0.6, 0.85, 0.4, 1)

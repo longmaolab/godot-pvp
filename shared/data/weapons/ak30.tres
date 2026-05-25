@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_ak30"]
+script = ExtResource("2")
+name = "Armor Pierce"
+description = "4s · +50% dmg · ignores distance"
+type = &"buff"
+cooldown_ms = 10000
+duration_ms = 4000
+damage_mult = 1.5
+spread_mult = 0.5
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"ak30"
+display_name = "AK30"
+type_label = "AR+"
+slot = &"primary"
+description = "AR+ 升级版自动步枪，45 发大弹匣 + 装甲穿透技能：4 秒内 +50% 伤害无视距离衰减。中距离持续输出王者。"
+damage = 22
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 45
+reserve = 135
+fire_interval_ms = 140
+reload_time_ms = 2000
+no_reload = false
+auto = true
+pellets = 1
+spread = 0
+bullet_speed = 124
+ads_zoom_fov = 45
+price_credits = 264
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_ak30")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

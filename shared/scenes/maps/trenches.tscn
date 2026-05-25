@@ -1,0 +1,191 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="1_pickup"]
+[ext_resource type="Script" path="res://shared/scripts/world/damage_zone.gd" id="2_damage"]
+
+[sub_resource type="BoxShape3D" id="box_noman_dmg"]
+size = Vector3(100, 1, 8)
+
+[sub_resource type="StandardMaterial3D" id="mat_dirt"]
+albedo_color = Color(0.3, 0.25, 0.18, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_trench"]
+albedo_color = Color(0.18, 0.15, 0.1, 1)
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat_t"]
+sky_horizon_color = Color(0.5, 0.48, 0.42, 1)
+ground_horizon_color = Color(0.3, 0.27, 0.22, 1)
+
+[sub_resource type="Sky" id="sky_t"]
+sky_material = SubResource("sky_mat_t")
+
+[sub_resource type="Environment" id="env_t"]
+background_mode = 2
+sky = SubResource("sky_t")
+ambient_light_source = 3
+ambient_light_color = Color(0.72, 0.68, 0.6, 1)
+ambient_light_energy = 0.4
+fog_enabled = true
+fog_density = 0.015
+fog_light_color = Color(0.65, 0.6, 0.5, 1)
+tonemap_mode = 2
+
+[node name="TrenchesMap" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_t")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 20, 0)
+shadow_enabled = true
+light_energy = 0.7
+light_color = Color(0.95, 0.88, 0.75, 1)
+
+[node name="GroundN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -20)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 1, 30)
+material = SubResource("mat_dirt")
+
+[node name="GroundS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 20)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 1, 30)
+material = SubResource("mat_dirt")
+
+[node name="NoMansLand" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.5, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 1, 10)
+material = SubResource("mat_trench")
+
+[node name="TrenchN_Front" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -5.5)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 3, 1)
+material = SubResource("mat_trench")
+
+[node name="TrenchS_Front" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 5.5)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 3, 1)
+material = SubResource("mat_trench")
+
+[node name="Gap1" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 1.0, -5.5)
+use_collision = true
+collision_layer = 1
+operation = 2  # CSGShape3D.OPERATION_SUBTRACTION
+size = Vector3(3, 3, 1.5)
+
+[node name="Gap2" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 1.0, -5.5)
+use_collision = true
+collision_layer = 1
+operation = 2  # CSGShape3D.OPERATION_SUBTRACTION
+size = Vector3(3, 3, 1.5)
+
+[node name="Gap3" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 1.0, 5.5)
+use_collision = true
+collision_layer = 1
+operation = 2  # CSGShape3D.OPERATION_SUBTRACTION
+size = Vector3(3, 3, 1.5)
+
+[node name="Gap4" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 1.0, 5.5)
+use_collision = true
+collision_layer = 1
+operation = 2  # CSGShape3D.OPERATION_SUBTRACTION
+size = Vector3(3, 3, 1.5)
+
+[node name="WallE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 2.5, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 5, 60)
+material = SubResource("mat_trench")
+
+[node name="WallW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 2.5, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 5, 60)
+material = SubResource("mat_trench")
+
+[node name="WallN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -35)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 5, 1)
+material = SubResource("mat_trench")
+
+[node name="WallS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 35)
+use_collision = true
+collision_layer = 1
+size = Vector3(120, 5, 1)
+material = SubResource("mat_trench")
+
+[node name="SpawnPoints" type="Node3D" parent="."]
+
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -45, 1, -25)
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 1, 25)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -45, 1, 25)
+
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 1, -25)
+
+[node name="DummySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -15)
+
+[node name="HealthNorth" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, -25)
+script = ExtResource("1_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="HealthSouth" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 25)
+script = ExtResource("1_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="AmmoEast" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 1.0, 0)
+script = ExtResource("1_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="AmmoWest" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -45, 1.0, 0)
+script = ExtResource("1_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="NoMansLandDmg" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
+script = ExtResource("2_damage")
+collision_layer = 0
+collision_mask = 2
+damage_per_tick = 4.0
+tick_interval_sec = 0.4
+
+[node name="NoMansLandShape" type="CollisionShape3D" parent="NoMansLandDmg"]
+shape = SubResource("box_noman_dmg")

@@ -1,0 +1,430 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/hud.gd" id="1_hud"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="bar_bg"]
+bg_color = Color(0.03, 0.05, 0.1, 0.85)
+border_color = Color(0.32, 0.7, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="bar_fill_hp"]
+bg_color = Color(0.16, 0.85, 0.4, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="panel_hp"]
+bg_color = Color(0.04, 0.07, 0.13, 0.85)
+border_color = Color(0.32, 0.7, 0.95, 0.55)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 14
+content_margin_right = 14
+content_margin_top = 10
+content_margin_bottom = 10
+shadow_color = Color(0, 0, 0, 0.5)
+shadow_size = 8
+
+[sub_resource type="StyleBoxFlat" id="panel_ammo"]
+bg_color = Color(0.04, 0.07, 0.13, 0.85)
+border_color = Color(1, 0.78, 0.32, 0.65)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 18
+content_margin_right = 18
+content_margin_top = 12
+content_margin_bottom = 12
+shadow_color = Color(0, 0, 0, 0.5)
+shadow_size = 8
+
+[sub_resource type="StyleBoxFlat" id="panel_feed"]
+bg_color = Color(0.04, 0.07, 0.13, 0.75)
+border_color = Color(0.32, 0.7, 0.95, 0.4)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 12
+content_margin_right = 12
+content_margin_top = 8
+content_margin_bottom = 8
+
+[sub_resource type="StyleBoxFlat" id="crosshair_pip"]
+bg_color = Color(0.5, 0.95, 0.5, 0.95)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="Gradient" id="dmg_vignette_grad"]
+offsets = PackedFloat32Array(0, 0.7, 1)
+colors = PackedColorArray(1, 0, 0, 0, 1, 0.1, 0.1, 0, 1, 0, 0, 0.45)
+
+[sub_resource type="GradientTexture2D" id="dmg_vignette_tex"]
+gradient = SubResource("dmg_vignette_grad")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="HitFlashFull" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(1, 1, 1, 0)
+visible = false
+mouse_filter = 2
+
+[node name="DamageVignette" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = SubResource("dmg_vignette_tex")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 1, 1, 0)
+
+[node name="Crosshair" type="Control" parent="."]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -12
+offset_top = -12
+offset_right = 12
+offset_bottom = 12
+mouse_filter = 2
+
+[node name="PipTop" type="PanelContainer" parent="Crosshair"]
+anchor_left = 0.5
+anchor_top = 0
+anchor_right = 0.5
+anchor_bottom = 0
+offset_left = -1.5
+offset_top = -10
+offset_right = 1.5
+offset_bottom = -3
+theme_override_styles/panel = SubResource("crosshair_pip")
+mouse_filter = 2
+
+[node name="PipBottom" type="PanelContainer" parent="Crosshair"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -1.5
+offset_top = 3
+offset_right = 1.5
+offset_bottom = 10
+theme_override_styles/panel = SubResource("crosshair_pip")
+mouse_filter = 2
+
+[node name="PipLeft" type="PanelContainer" parent="Crosshair"]
+anchor_left = 0
+anchor_top = 0.5
+anchor_right = 0
+anchor_bottom = 0.5
+offset_left = -10
+offset_top = -1.5
+offset_right = -3
+offset_bottom = 1.5
+theme_override_styles/panel = SubResource("crosshair_pip")
+mouse_filter = 2
+
+[node name="PipRight" type="PanelContainer" parent="Crosshair"]
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = 3
+offset_top = -1.5
+offset_right = 10
+offset_bottom = 1.5
+theme_override_styles/panel = SubResource("crosshair_pip")
+mouse_filter = 2
+
+[node name="PipCenter" type="PanelContainer" parent="Crosshair"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -1
+offset_top = -1
+offset_right = 1
+offset_bottom = 1
+theme_override_styles/panel = SubResource("crosshair_pip")
+mouse_filter = 2
+
+[node name="HitMarker" type="Control" parent="Crosshair"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -18
+offset_top = -18
+offset_right = 18
+offset_bottom = 18
+modulate = Color(1, 1, 1, 0)
+mouse_filter = 2
+
+[node name="MarkTL" type="Label" parent="Crosshair/HitMarker"]
+offset_left = 0
+offset_top = 0
+offset_right = 10
+offset_bottom = 14
+text = "╲"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="MarkTR" type="Label" parent="Crosshair/HitMarker"]
+offset_left = 26
+offset_top = 0
+offset_right = 36
+offset_bottom = 14
+text = "╱"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="MarkBL" type="Label" parent="Crosshair/HitMarker"]
+offset_left = 0
+offset_top = 22
+offset_right = 10
+offset_bottom = 36
+text = "╱"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="MarkBR" type="Label" parent="Crosshair/HitMarker"]
+offset_left = 26
+offset_top = 22
+offset_right = 36
+offset_bottom = 36
+text = "╲"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="TopLeft" type="PanelContainer" parent="."]
+anchor_left = 0
+anchor_top = 0
+offset_left = 16
+offset_top = 16
+offset_right = 280
+offset_bottom = 80
+theme_override_styles/panel = SubResource("panel_hp")
+
+[node name="HpV" type="VBoxContainer" parent="TopLeft"]
+theme_override_constants/separation = 4
+
+[node name="HpRow" type="HBoxContainer" parent="TopLeft/HpV"]
+theme_override_constants/separation = 8
+
+[node name="HpIcon" type="Label" parent="TopLeft/HpV/HpRow"]
+text = "❤"
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1, 0.3, 0.4, 1)
+
+[node name="HpLabel" type="Label" parent="TopLeft/HpV/HpRow"]
+theme_override_fonts/font = ExtResource("2_font")
+text = "HP 300 / 300"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.95, 0.98, 1, 1)
+
+[node name="HpBar" type="ProgressBar" parent="TopLeft/HpV"]
+custom_minimum_size = Vector2(240, 10)
+max_value = 300.0
+value = 300.0
+show_percentage = false
+theme_override_styles/background = SubResource("bar_bg")
+theme_override_styles/fill = SubResource("bar_fill_hp")
+
+[node name="BottomRight" type="PanelContainer" parent="."]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260
+offset_top = -110
+offset_right = -16
+offset_bottom = -16
+theme_override_styles/panel = SubResource("panel_ammo")
+
+[node name="AmmoV" type="VBoxContainer" parent="BottomRight"]
+theme_override_constants/separation = 0
+alignment = 2
+
+[node name="WeaponName" type="Label" parent="BottomRight/AmmoV"]
+theme_override_fonts/font = ExtResource("2_font")
+text = ""
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+horizontal_alignment = 2
+
+[node name="AmmoLabel" type="Label" parent="BottomRight/AmmoV"]
+theme_override_fonts/font = ExtResource("2_font")
+text = "30 / 90"
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_colors/font_outline_color = Color(0.05, 0.15, 0.3, 1)
+theme_override_constants/outline_size = 2
+horizontal_alignment = 2
+
+[node name="BottomLeft" type="Control" parent="."]
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 16
+offset_top = -260
+offset_right = 380
+offset_bottom = -16
+
+[node name="Feed" type="VBoxContainer" parent="BottomLeft"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+alignment = 2
+theme_override_constants/separation = 4
+
+[node name="TopCenter" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 0
+anchor_right = 0.5
+anchor_bottom = 0
+offset_left = -200
+offset_top = 16
+offset_right = 200
+offset_bottom = 80
+alignment = 1
+
+[node name="RoundTimer" type="Label" parent="TopCenter"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.9, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0.2, 0.1, 0.0, 1)
+theme_override_constants/outline_size = 3
+text = ""
+horizontal_alignment = 1
+
+[node name="ModeBadge" type="Label" parent="TopCenter"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.6, 0.85, 1, 0.85)
+text = ""
+horizontal_alignment = 1
+
+[node name="KillConfirm" type="Label" parent="."]
+anchor_left = 0.5
+anchor_top = 0.35
+anchor_right = 0.5
+anchor_bottom = 0.35
+offset_left = -200
+offset_top = -60
+offset_right = 200
+offset_bottom = 60
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 72
+theme_override_colors/font_color = Color(1, 0.95, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0.6, 0.05, 0.05, 1)
+theme_override_constants/outline_size = 8
+text = "KILL"
+horizontal_alignment = 1
+vertical_alignment = 1
+modulate = Color(1, 1, 1, 0)
+mouse_filter = 2
+pivot_offset = Vector2(200, 60)
+
+[node name="HitFlash" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(1, 1, 1, 0)
+visible = false
+mouse_filter = 2
+
+[node name="AbilityIndicator" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -90
+offset_top = -110
+offset_right = 90
+offset_bottom = -16
+mouse_filter = 2
+
+[node name="AbilityLabel" type="Label" parent="AbilityIndicator"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "Q · ABILITY"
+horizontal_alignment = 1
+
+[node name="AbilityBar" type="ProgressBar" parent="AbilityIndicator"]
+custom_minimum_size = Vector2(180, 14)
+max_value = 1.0
+value = 1.0
+show_percentage = false
+
+[node name="CreditsPill" type="Label" parent="."]
+anchor_left = 1.0
+anchor_top = 0
+anchor_right = 1.0
+offset_left = -160
+offset_top = 16
+offset_right = -16
+offset_bottom = 46
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0.25, 0.15, 0.05, 1)
+theme_override_constants/outline_size = 2
+text = "💰 0"
+horizontal_alignment = 2
+mouse_filter = 2
+
+[node name="ResumePrompt" type="PanelContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 0.66
+anchor_right = 0.5
+anchor_bottom = 0.66
+offset_left = -160
+offset_top = -28
+offset_right = 160
+offset_bottom = 28
+visible = false
+mouse_filter = 2
+
+[node name="ResumePromptLabel" type="Label" parent="ResumePrompt"]
+text = "🖱  Click to resume"
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.9, 0.95, 1, 1)
+horizontal_alignment = 1

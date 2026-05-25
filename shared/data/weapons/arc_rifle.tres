@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_arc_rifle"]
+script = ExtResource("2")
+name = "Overload"
+description = "Massive chain lightning · all enemies in 12 m"
+type = &"aoe"
+cooldown_ms = 16000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 12
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"arc_rifle"
+display_name = "Arc Rifle"
+type_label = "Lightning"
+slot = &"primary"
+description = "电弧步枪，命中连锁电击。"
+damage = 22
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 20
+reserve = 80
+fire_interval_ms = 220
+reload_time_ms = 2400
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.005
+bullet_speed = 200
+ads_zoom_fov = 48
+price_credits = 264
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_arc_rifle")
+
+bullet_color = Color(0.5, 0.85, 1, 1)

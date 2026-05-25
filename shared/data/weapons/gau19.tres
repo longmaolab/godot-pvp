@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_gau19"]
+script = ExtResource("2")
+name = "Sustained Fire"
+description = "8 s · double fire rate"
+type = &"buff"
+cooldown_ms = 18000
+duration_ms = 8000
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"gau19"
+display_name = "GAU-19 Heavy"
+type_label = "Admin · Mounted MG"
+slot = &"primary"
+description = "Admin · Mounted MG: GAU-19 Heavy — 详见原版手感。"
+damage = 50
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 500
+reserve = 1000
+fire_interval_ms = 18
+reload_time_ms = 4000
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.01
+bullet_speed = 180
+ads_zoom_fov = 50
+price_credits = 0
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = true
+scary_close = false
+ability = SubResource("ability_gau19")
+
+bullet_color = Color(1, 0.3, 0.5, 1)

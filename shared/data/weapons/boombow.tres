@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_boombow"]
+script = ExtResource("2")
+name = "Power Draw"
+description = "Next arrow · 190 dmg"
+type = &"powershot"
+cooldown_ms = 17000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"boombow"
+display_name = "Boombow"
+type_label = "Explosive Bow"
+slot = &"primary"
+description = "爆炸弓，箭簇爆炸，头爆秒杀。"
+damage = 95
+headshot_multiplier = 2.0
+instakill_headshot = true
+magazine = 1
+reserve = 14
+fire_interval_ms = 750
+reload_time_ms = 1400
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.004
+bullet_speed = 68
+ads_zoom_fov = 42
+price_credits = 1140
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_boombow")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

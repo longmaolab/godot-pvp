@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"speedrun"
+display_name = "Speedrun — 1 vs 20"
+description = "1 个真人对抗 20 个 bot。能撑多久？能杀多少？纯抗压测试。建议用 Railgun + Crossbow。"
+family = &"arcade"
+humans_per_team = 1
+team_count = 2
+default_bots_per_side = 19
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 20
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 50
+credits_per_loss = 20
+credit_cap_per_match = 250

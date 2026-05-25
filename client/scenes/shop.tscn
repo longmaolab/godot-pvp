@@ -1,0 +1,239 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/shop.gd" id="1_shop"]
+[ext_resource type="Theme" path="res://assets/themes/pvp_theme.tres" id="2_theme"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="3_font"]
+
+[sub_resource type="StyleBoxFlat" id="card"]
+bg_color = Color(0.04, 0.07, 0.13, 0.93)
+border_color = Color(0.3, 0.7, 0.95, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_left = 16
+corner_radius_bottom_right = 16
+content_margin_left = 14
+content_margin_right = 14
+content_margin_top = 10
+content_margin_bottom = 10
+
+[sub_resource type="StyleBoxFlat" id="dial_bg"]
+bg_color = Color(0.05, 0.08, 0.13, 1)
+border_color = Color(1, 0.78, 0.32, 0.7)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+corner_radius_top_left = 160
+corner_radius_top_right = 160
+corner_radius_bottom_left = 160
+corner_radius_bottom_right = 160
+
+[node name="ShopScreen" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("2_theme")
+script = ExtResource("1_shop")
+
+[node name="Bg" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.03, 0.05, 0.09, 1)
+mouse_filter = 2
+
+[node name="V" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/separation = 0
+
+[node name="Header" type="PanelContainer" parent="V"]
+theme_override_styles/panel = SubResource("card")
+
+[node name="H" type="HBoxContainer" parent="V/Header"]
+theme_override_constants/separation = 18
+
+[node name="BackButton" type="Button" parent="V/Header/H"]
+custom_minimum_size = Vector2(120, 38)
+theme_override_fonts/font = ExtResource("3_font")
+text = "◀  返回菜单"
+
+[node name="Title" type="Label" parent="V/Header/H"]
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "🛒  SHOP"
+horizontal_alignment = 1
+
+[node name="Credits" type="Label" parent="V/Header/H"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "💰 0"
+
+[node name="Fragments" type="Label" parent="V/Header/H"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "🧩 0"
+
+[node name="Tabs" type="TabContainer" parent="V"]
+size_flags_vertical = 3
+current_tab = 0
+
+[node name="Weapons" type="MarginContainer" parent="V/Tabs"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Scroll" type="ScrollContainer" parent="V/Tabs/Weapons"]
+
+[node name="V" type="VBoxContainer" parent="V/Tabs/Weapons/Scroll"]
+theme_override_constants/separation = 4
+
+[node name="Chests" type="MarginContainer" parent="V/Tabs"]
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="V" type="VBoxContainer" parent="V/Tabs/Chests"]
+theme_override_constants/separation = 16
+
+[node name="Intro" type="Label" parent="V/Tabs/Chests/V"]
+text = "购买宝箱，开箱获得碎片 / 信用点 / 稀有武器掉落。"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.7, 0.85, 1, 1)
+
+[node name="CommonRow" type="PanelContainer" parent="V/Tabs/Chests/V"]
+theme_override_styles/panel = SubResource("card")
+
+[node name="H" type="HBoxContainer" parent="V/Tabs/Chests/V/CommonRow"]
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="V/Tabs/Chests/V/CommonRow/H"]
+text = "📦  COMMON CHEST   ·   120💰"
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+
+[node name="Count" type="Label" parent="V/Tabs/Chests/V/CommonRow/H"]
+text = "你有 0 个"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.7, 0.85, 1, 1)
+
+[node name="Buy" type="Button" parent="V/Tabs/Chests/V/CommonRow/H"]
+text = "购买 · 💰120"
+
+[node name="BuyOpen" type="Button" parent="V/Tabs/Chests/V/CommonRow/H"]
+text = "✨ 开启"
+
+[node name="RareRow" type="PanelContainer" parent="V/Tabs/Chests/V"]
+theme_override_styles/panel = SubResource("card")
+
+[node name="H" type="HBoxContainer" parent="V/Tabs/Chests/V/RareRow"]
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="V/Tabs/Chests/V/RareRow/H"]
+text = "🎁  RARE CHEST   ·   400💰   (5% drop)"
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.6, 0.85, 1)
+
+[node name="Count" type="Label" parent="V/Tabs/Chests/V/RareRow/H"]
+text = "你有 0 个"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.7, 0.85, 1, 1)
+
+[node name="Buy" type="Button" parent="V/Tabs/Chests/V/RareRow/H"]
+text = "购买 · 💰400"
+
+[node name="BuyOpen" type="Button" parent="V/Tabs/Chests/V/RareRow/H"]
+text = "✨ 开启"
+
+[node name="Wheel" type="MarginContainer" parent="V/Tabs"]
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="V" type="VBoxContainer" parent="V/Tabs/Wheel"]
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="Intro" type="Label" parent="V/Tabs/Wheel/V"]
+text = "每日免费转盘，0.3% 抽中稀有武器！"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.7, 0.85, 1, 1)
+
+[node name="DialHolder" type="CenterContainer" parent="V/Tabs/Wheel/V"]
+custom_minimum_size = Vector2(0, 240)
+
+[node name="Dial" type="PanelContainer" parent="V/Tabs/Wheel/V/DialHolder"]
+custom_minimum_size = Vector2(220, 220)
+theme_override_styles/panel = SubResource("dial_bg")
+pivot_offset = Vector2(110, 110)
+
+[node name="DialIcon" type="Label" parent="V/Tabs/Wheel/V/DialHolder/Dial"]
+text = "🎰"
+theme_override_font_sizes/font_size = 80
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SpinButton" type="Button" parent="V/Tabs/Wheel/V"]
+custom_minimum_size = Vector2(220, 48)
+text = "🎲  SPIN"
+size_flags_horizontal = 4
+
+[node name="Hint" type="Label" parent="V/Tabs/Wheel/V"]
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 0.85)
+
+[node name="Result" type="RichTextLabel" parent="V/Tabs/Wheel/V"]
+custom_minimum_size = Vector2(0, 60)
+bbcode_enabled = true
+fit_content = true
+text = ""
+
+[node name="Upgrades" type="MarginContainer" parent="V/Tabs"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Scroll" type="ScrollContainer" parent="V/Tabs/Upgrades"]
+
+[node name="V" type="VBoxContainer" parent="V/Tabs/Upgrades/Scroll"]
+theme_override_constants/separation = 4
+
+[node name="Bundles" type="MarginContainer" parent="V/Tabs"]
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Scroll" type="ScrollContainer" parent="V/Tabs/Bundles"]
+
+[node name="V" type="VBoxContainer" parent="V/Tabs/Bundles/Scroll"]
+theme_override_constants/separation = 10
+
+[node name="RevealDialog" type="AcceptDialog" parent="."]
+title = "✨  REWARD"
+size = Vector2i(520, 320)
+ok_button_text = "继续"
+
+[node name="Text" type="RichTextLabel" parent="RevealDialog"]
+custom_minimum_size = Vector2(480, 240)
+anchors_preset = 15
+bbcode_enabled = true
+fit_content = true
+text = ""

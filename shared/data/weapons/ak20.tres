@@ -1,0 +1,49 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_focus_fire"]
+script = ExtResource("2")
+name = "Focus Fire"
+description = "3s · laser-accurate · +40% dmg"
+type = &"buff"
+cooldown_ms = 8000
+duration_ms = 3000
+damage_mult = 1.4
+spread_mult = 0.0
+speed_mult = 1.0
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0.0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"ak20"
+display_name = "AK20"
+type_label = "AR"
+slot = &"primary"
+description = "中距离自动步枪，30 发弹匣，稳定上手。Focus Fire 技能：3 秒激光级精准 + 伤害提升 40%。新手友好，火力持续。"
+damage = 25.0
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 30
+reserve = 90
+fire_interval_ms = 150
+reload_time_ms = 2000
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.0
+bullet_speed = 120.0
+ads_zoom_fov = 45.0
+price_credits = 0
+fragment_unlock_cost = 100
+free_starter = true
+admin_only = false
+scary_close = false
+ability = SubResource("ability_focus_fire")
+bullet_color = Color(1, 0.7, 0.2, 1)

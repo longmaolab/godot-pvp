@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/srx.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/lever.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/m1_garand.tres" id="4"]
+[ext_resource type="Resource" path="res://shared/data/weapons/crossbow.tres" id="5"]
+
+[resource]
+script = ExtResource("1")
+id = &"sniper"
+display_name = "Sniper Pack"
+description = "全狙击套装 — SR-X 头爆秒杀 + 杠杆步枪 + M1 Garand 战斗步枪 + 弩。远距离专精。"
+price_credits = 1800
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5")])
+theme_color = Color(0.4, 0.85, 1, 1)

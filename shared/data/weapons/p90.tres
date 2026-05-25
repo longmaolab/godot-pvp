@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_p90"]
+script = ExtResource("2")
+name = "Hyperspin"
+description = "3s · fire rate ×4"
+type = &"buff"
+cooldown_ms = 15000
+duration_ms = 3000
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"p90"
+display_name = "P90"
+type_label = "SMG+"
+slot = &"primary"
+description = "高阶 SMG，50 发弹匣 + 0.05 散布，火力倾泻。技能稳定弹道 + 暴击。"
+damage = 5
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 50
+reserve = 150
+fire_interval_ms = 20
+reload_time_ms = 1400
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.015
+bullet_speed = 140
+ads_zoom_fov = 50
+price_credits = 120
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_p90")
+
+bullet_color = Color(0.6, 0.85, 0.4, 1)

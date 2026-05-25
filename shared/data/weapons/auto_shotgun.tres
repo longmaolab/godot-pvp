@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_auto_shotgun"]
+script = ExtResource("2")
+name = "Tight Choke"
+description = "3s · spread ×0.3 · +20% dmg"
+type = &"buff"
+cooldown_ms = 11000
+duration_ms = 3000
+damage_mult = 1.2
+spread_mult = 0.3
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"auto_shotgun"
+display_name = "Auto Shotgun"
+type_label = "Shotgun"
+slot = &"primary"
+description = "全自动霰弹枪，火力恐怖。"
+damage = 12
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 12
+reserve = 48
+fire_interval_ms = 260
+reload_time_ms = 2600
+no_reload = false
+auto = true
+pellets = 7
+spread = 0.095
+bullet_speed = 108
+ads_zoom_fov = 58
+price_credits = 144
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = true
+ability = SubResource("ability_auto_shotgun")
+
+bullet_color = Color(1, 0.85, 0.3, 1)

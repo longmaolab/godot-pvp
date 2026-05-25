@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_auto_revolver"]
+script = ExtResource("2")
+name = "Deadeye"
+description = "3 s · strong aim assist"
+type = &"buff"
+cooldown_ms = 11000
+duration_ms = 3000
+damage_mult = 1
+spread_mult = 0.1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"auto_revolver"
+display_name = "Auto Revolver"
+type_label = "Secondary"
+slot = &"secondary"
+description = "Secondary: Auto Revolver — 详见原版手感。"
+damage = 42
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 6
+reserve = 24
+fire_interval_ms = 120
+reload_time_ms = 2000
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.002
+bullet_speed = 175
+ads_zoom_fov = 50
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_auto_revolver")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

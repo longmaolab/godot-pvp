@@ -1,0 +1,52 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/dummy_target.gd" id="1_dummy"]
+
+[sub_resource type="SphereShape3D" id="sph_head_d"]
+radius = 0.25
+
+[sub_resource type="CapsuleShape3D" id="cap_body_d"]
+height = 1.2
+radius = 0.32
+
+[sub_resource type="StandardMaterial3D" id="mat_red"]
+albedo_color = Color(0.85, 0.2, 0.2, 1)
+
+[sub_resource type="CapsuleMesh" id="mesh_body_d"]
+height = 1.6
+radius = 0.32
+
+[sub_resource type="SphereMesh" id="mesh_head_d"]
+radius = 0.25
+height = 0.5
+
+[node name="DummyTarget" type="Node3D"]
+script = ExtResource("1_dummy")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="MeshBody" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+mesh = SubResource("mesh_body_d")
+surface_material_override/0 = SubResource("mat_red")
+
+[node name="MeshHead" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+mesh = SubResource("mesh_head_d")
+surface_material_override/0 = SubResource("mat_red")
+
+[node name="HeadHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+collision_layer = 4
+collision_mask = 0
+
+[node name="HeadShape" type="CollisionShape3D" parent="HeadHitbox"]
+shape = SubResource("sph_head_d")
+
+[node name="BodyHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+collision_layer = 4
+collision_mask = 0
+
+[node name="BodyShape" type="CollisionShape3D" parent="BodyHitbox"]
+shape = SubResource("cap_body_d")

@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_mp40"]
+script = ExtResource("2")
+name = "Piercing Round"
+description = "Entire magazine fires at 3× bullet speed"
+type = &"buff"
+cooldown_ms = 7000
+duration_ms = 99999
+damage_mult = 1
+spread_mult = 1
+speed_mult = 3
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"mp40"
+display_name = "MP-40"
+type_label = "SMG"
+slot = &"primary"
+description = "经典 SMG，40 发弹匣，开火极快（80ms 间隔）。Piercing Round 技能让全弹匣以 3× 速度倾泻。"
+damage = 15
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 40
+reserve = 120
+fire_interval_ms = 80
+reload_time_ms = 1600
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.01
+bullet_speed = 116
+ads_zoom_fov = 50
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = true
+admin_only = false
+scary_close = false
+ability = SubResource("ability_mp40")
+
+bullet_color = Color(0.6, 0.85, 0.4, 1)

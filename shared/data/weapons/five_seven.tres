@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_five_seven"]
+script = ExtResource("2")
+name = "AP Burst"
+description = "3 s · all shots pierce defenses"
+type = &"buff"
+cooldown_ms = 12000
+duration_ms = 3000
+damage_mult = 1.3
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"five_seven"
+display_name = "Five-seveN"
+type_label = "Admin · Armor Piercer"
+slot = &"secondary"
+description = "Admin · Armor Piercer: Five-seveN — 详见原版手感。"
+damage = 40
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 20
+reserve = 60
+fire_interval_ms = 130
+reload_time_ms = 1400
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.003
+bullet_speed = 200
+ads_zoom_fov = 50
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = true
+scary_close = false
+ability = SubResource("ability_five_seven")
+
+bullet_color = Color(1, 0.3, 0.5, 1)

@@ -1,0 +1,49 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_light_speed"]
+script = ExtResource("2")
+name = "Light Speed"
+description = "Next bullet at 10× speed"
+type = &"powershot"
+cooldown_ms = 16000
+duration_ms = 0
+damage_mult = 1.0
+spread_mult = 0.0
+speed_mult = 10.0
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0.0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"srx"
+display_name = "SR-X"
+type_label = "Sniper"
+slot = &"primary"
+description = "重型狙击枪，95 伤害身躯一发重伤。★头爆秒杀任何敌人★。15° 高倍镜锁定远距离目标。Light Speed 技能：下一发以 10× 弹速射出，几乎瞬移到位。"
+damage = 95.0
+headshot_multiplier = 2.0
+instakill_headshot = true
+magazine = 5
+reserve = 20
+fire_interval_ms = 1200
+reload_time_ms = 3000
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.0
+bullet_speed = 200.0
+ads_zoom_fov = 15.0
+price_credits = 1100
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_light_speed")
+bullet_color = Color(0.4, 0.85, 1, 1)

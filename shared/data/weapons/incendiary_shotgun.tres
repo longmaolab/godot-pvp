@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_incendiary_shotgun"]
+script = ExtResource("2")
+name = "Dragon Breath"
+description = "Cone of fire · pellets ignite enemies"
+type = &"fanfire_all"
+cooldown_ms = 12000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 100
+radius = 0
+disables_ads = true
+
+[resource]
+script = ExtResource("1")
+id = &"incendiary_shotgun"
+display_name = "Incendiary Shotgun"
+type_label = "Fire Shotgun"
+slot = &"primary"
+description = "Fire Shotgun: Incendiary Shotgun — 详见原版手感。"
+damage = 14
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 8
+reserve = 32
+fire_interval_ms = 780
+reload_time_ms = 2500
+no_reload = false
+auto = false
+pellets = 8
+spread = 0.075
+bullet_speed = 105
+ads_zoom_fov = 56
+price_credits = 168
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = true
+ability = SubResource("ability_incendiary_shotgun")
+
+bullet_color = Color(1, 0.85, 0.3, 1)

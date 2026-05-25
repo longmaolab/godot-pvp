@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/headless_weapon_switch.gd" id="1_ws"]
+
+[node name="HeadlessWeaponSwitch" type="Node"]
+script = ExtResource("1_ws")

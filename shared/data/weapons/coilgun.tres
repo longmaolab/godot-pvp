@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_coilgun"]
+script = ExtResource("2")
+name = "Overcharge"
+description = "Piercing 220 dmg shot"
+type = &"powershot"
+cooldown_ms = 17000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"coilgun"
+display_name = "Coilgun"
+type_label = "Electromagnetic Rifle"
+slot = &"primary"
+description = "Electromagnetic Rifle: Coilgun — 详见原版手感。"
+damage = 92
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 5
+reserve = 20
+fire_interval_ms = 900
+reload_time_ms = 2800
+no_reload = false
+auto = false
+pellets = 1
+spread = 0
+bullet_speed = 320
+ads_zoom_fov = 30
+price_credits = 1104
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_coilgun")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

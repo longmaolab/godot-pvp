@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/scripts/match_modes/oitc_rule.gd" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"oitc"
+display_name = "OITC — 一发入魂"
+description = "One in the Chamber：每人只有 1 发子弹，命中击杀对方补 1 发。极致紧张的精准对决。"
+family = &"arcade"
+humans_per_team = 1
+team_count = 2
+default_bots_per_side = 4
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 10
+lives_per_player = -1
+credits_per_kill = 10
+credits_per_win = 80
+credits_per_loss = 25
+credit_cap_per_match = 250
+rule_script = ExtResource("2")

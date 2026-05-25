@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_flechette"]
+script = ExtResource("2")
+name = "Needle Storm"
+description = "Fire 12 flechettes instantly"
+type = &"buff"
+cooldown_ms = 9000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 22
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"flechette"
+display_name = "Flechette Rifle"
+type_label = "Precision AR"
+slot = &"primary"
+description = "Precision AR: Flechette Rifle — 详见原版手感。"
+damage = 16
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 40
+reserve = 120
+fire_interval_ms = 70
+reload_time_ms = 2000
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.003
+bullet_speed = 175
+ads_zoom_fov = 44
+price_credits = 192
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_flechette")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_burst"]
+script = ExtResource("2")
+name = "Triple Burst"
+description = "Fire 3 rapid bursts instantly"
+type = &"buff"
+cooldown_ms = 9000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 40
+radius = 0
+disables_ads = true
+
+[resource]
+script = ExtResource("1")
+id = &"burst"
+display_name = "Burst Rifle"
+type_label = "Burst AR"
+slot = &"primary"
+description = "三连发突击步枪，节奏感强。"
+damage = 21
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 36
+reserve = 108
+fire_interval_ms = 95
+reload_time_ms = 1900
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.006
+bullet_speed = 136
+ads_zoom_fov = 43
+price_credits = 252
+fragment_unlock_cost = 100
+free_starter = true
+admin_only = false
+scary_close = false
+ability = SubResource("ability_burst")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

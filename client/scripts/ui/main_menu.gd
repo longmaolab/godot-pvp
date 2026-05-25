@@ -1,0 +1,486 @@
+extends Control
+class_name MainMenu
+
+const GAME_SCENE := preload("res://client/scenes/game.tscn")
+# Runtime-loaded (not preload) to avoid a circular dependency with shop.tscn,
+# which preloads main_menu.tscn for its back button.
+const SHOP_SCENE_PATH := "res://client/scenes/shop.tscn"
+
+const MAPS := [
+	{
+		"name": "Blank — 空旷方形",
+		"path": "res://shared/scenes/maps/blank.tscn",
+		"desc": "60×60 米的开阔场地，两个矮障碍。适合熟悉操作、纯走位练习。无地形优势，纯枪法。",
+	},
+	{
+		"name": "Battlefield — 平原工事",
+		"path": "res://shared/scenes/maps/battlefield.tscn",
+		"desc": "100×100 大地图，散落木箱、长墙、矮掩体。中远距离对枪 + 卡点对枪都好用。AR 和狙击都适合。",
+	},
+	{
+		"name": "KOTH — 中央高地",
+		"path": "res://shared/scenes/maps/koth.tscn",
+		"desc": "80×80 场地，正中三层圆形小山是制高点。四个角落有小掩体。占山为王，视野压制。",
+	},
+	{
+		"name": "Trenches — WW1 战壕",
+		"path": "res://shared/scenes/maps/trenches.tscn",
+		"desc": "南北双线战壕，中间无人区下沉。带战争雾化，限制远距离。突破或防守的攻防博弈。",
+	},
+	{
+		"name": "Skydock — 立体平台",
+		"path": "res://shared/scenes/maps/skydock.tscn",
+		"desc": "三层垂直结构：底层 + 南北中层平台 + 顶层指挥台。斜坡互联。垂直作战、上下夹击。",
+	},
+]
+
+const MODES_DIR := "res://shared/data/modes/"
+
+# Built at _ready() by scanning MODES_DIR — same data-driven pattern as the
+# weapon registry. Practice (no mode_def) is always first.
+var MODES: Array = []
+
+@onready var map_picker: OptionButton = $Scroll/Center/Cols/LeftCard/V/MapPicker
+@onready var mode_picker: OptionButton = $Scroll/Center/Cols/LeftCard/V/ModePicker
+@onready var map_desc: Label = $Scroll/Center/Cols/LeftCard/V/MapDescription
+@onready var mode_desc: Label = $Scroll/Center/Cols/LeftCard/V/ModeDescription
+@onready var weapons_btn: Button = $Scroll/Center/Cols/LeftCard/V/WeaponsButton
+@onready var shop_btn: Button = $Scroll/Center/Cols/LeftCard/V/ShopButton
+@onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
+@onready var host_btn: Button = $Scroll/Center/Cols/RightCard/V/HostButton
+@onready var join_btn: Button = $Scroll/Center/Cols/RightCard/V/JoinButton
+@onready var join_address: LineEdit = $Scroll/Center/Cols/RightCard/V/JoinAddress
+@onready var status_label: Label = $Scroll/Center/Cols/RightCard/V/StatusLabel
+@onready var stat_weapons: Label = $Scroll/Center/Cols/RightCard/V/StatsRow/StatWeapons/StatWeaponsLabel
+@onready var stat_modes: Label = $Scroll/Center/Cols/RightCard/V/StatsRow/StatModes/StatModesLabel
+@onready var stat_maps: Label = $Scroll/Center/Cols/RightCard/V/StatsRow/StatMaps/StatMapsLabel
+@onready var weapons_dialog: AcceptDialog = $WeaponsDialog
+@onready var weapons_list: VBoxContainer = $WeaponsDialog/Scroll/V
+@onready var name_input: LineEdit = $Scroll/Center/Cols/LeftCard/V/NameRow/NameInput
+@onready var skin_name_label: Label = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinName
+@onready var skin_prev_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinPrev
+@onready var skin_next_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinNext
+
+
+func _ready() -> void:
+	_build_modes_from_disk()
+	practice_btn.pressed.connect(_on_practice)
+	host_btn.pressed.connect(_on_host)
+	join_btn.pressed.connect(_on_join)
+	weapons_btn.pressed.connect(_on_show_weapons)
+	shop_btn.pressed.connect(_on_open_shop)
+	# Identity row — wire name + skin to the Settings autoload.
+	skin_prev_btn.pressed.connect(_skin_step.bind(-1))
+	skin_next_btn.pressed.connect(_skin_step.bind(1))
+	name_input.text_changed.connect(_on_name_changed)
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		name_input.text = s.player_name
+		_refresh_skin_label()
+	# Pre-fill the Join address with whatever ServerDiscovery resolved.
+	if has_node(^"/root/ServerDiscovery"):
+		var sd: Node = get_node(^"/root/ServerDiscovery")
+		join_address.placeholder_text = sd.url
+		sd.resolved.connect(func(u: String):
+			if join_address.text.is_empty():
+				join_address.placeholder_text = u)
+	if map_picker != null:
+		for m in MAPS:
+			map_picker.add_item(m.name)
+		map_picker.item_selected.connect(_on_map_changed)
+	if mode_picker != null:
+		for m in MODES:
+			mode_picker.add_item(m.name)
+		mode_picker.item_selected.connect(_on_mode_changed)
+	_on_map_changed(0)
+	_on_mode_changed(0)
+	_populate_weapons_dialog()
+	var weapon_count: int = _count_weapons_on_disk()
+	# Stat pills along the top of the right card.
+	stat_weapons.text = "▣  %d 武器" % weapon_count
+	stat_modes.text = "◇  %d 模式" % MODES.size()
+	stat_maps.text = "◈  %d 地图" % MAPS.size()
+	status_label.text = "M3 vertical slice · server-authoritative · 9 test suites green"
+
+
+func _build_modes_from_disk() -> void:
+	MODES = [{"name": "Practice — 单人 vs bot", "path": "", "desc": "单机模式。一个会移动还击的红色 AI bot + 一个站着不动的假人。学操作和试武器最合适。死了 3 秒后自动重生。"}]
+	var dir := DirAccess.open(MODES_DIR)
+	if dir == null:
+		return
+	var entries: Array = []
+	dir.list_dir_begin()
+	while true:
+		var fname: String = dir.get_next()
+		if fname == "":
+			break
+		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
+			continue
+		var res: Resource = load(MODES_DIR + fname)
+		if res == null:
+			continue
+		entries.append({
+			"name": res.display_name if "display_name" in res and not res.display_name.is_empty() else fname,
+			"path": MODES_DIR + fname,
+			"desc": res.description if "description" in res else "",
+		})
+	dir.list_dir_end()
+	# Sort by display name so the picker order is stable.
+	entries.sort_custom(func(a, b): return a.name < b.name)
+	MODES.append_array(entries)
+
+
+func _skin_step(direction: int) -> void:
+	if not has_node(^"/root/Settings"):
+		return
+	var s: Node = get_node(^"/root/Settings")
+	var new_idx: int = (s.skin_index + direction + 18) % 18
+	s.set_skin(new_idx)
+	_refresh_skin_label()
+
+
+func _refresh_skin_label() -> void:
+	if not has_node(^"/root/Settings"):
+		return
+	var s: Node = get_node(^"/root/Settings")
+	# A..R letter mapping mirrors PlayerController.SKIN_LETTERS.
+	var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
+	skin_name_label.text = "Character %s   (%d / 18)" % [letter, s.skin_index + 1]
+
+
+func _on_name_changed(new_text: String) -> void:
+	if has_node(^"/root/Settings"):
+		get_node(^"/root/Settings").set_player_name(new_text)
+
+
+func _count_weapons_on_disk() -> int:
+	var dir := DirAccess.open("res://shared/data/weapons/")
+	if dir == null:
+		return 0
+	var n: int = 0
+	dir.list_dir_begin()
+	while true:
+		var fname: String = dir.get_next()
+		if fname == "":
+			break
+		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
+			continue
+		n += 1
+	dir.list_dir_end()
+	return n
+
+
+func _on_map_changed(idx: int) -> void:
+	idx = clampi(idx, 0, MAPS.size() - 1)
+	map_desc.text = MAPS[idx].desc
+
+
+func _on_mode_changed(idx: int) -> void:
+	idx = clampi(idx, 0, MODES.size() - 1)
+	# Prefer the .tres's own description if available so we have one source of truth.
+	var path: String = MODES[idx].path
+	if path != "" and ResourceLoader.exists(path):
+		var mode_res: Resource = load(path)
+		if mode_res != null and "description" in mode_res and not mode_res.description.is_empty():
+			mode_desc.text = mode_res.description
+			return
+	mode_desc.text = MODES[idx].desc
+
+
+func _on_show_weapons() -> void:
+	weapons_dialog.popup_centered(Vector2i(640, 480))
+
+
+func _on_open_shop() -> void:
+	var s: PackedScene = load(SHOP_SCENE_PATH)
+	if s != null:
+		get_tree().change_scene_to_packed(s)
+
+
+func _populate_weapons_dialog() -> void:
+	# Wipe any prior children (re-runs after first time should refresh content).
+	for child in weapons_list.get_children():
+		child.queue_free()
+	# Scan all weapon .tres on disk; same source as in-game registry.
+	var dir := DirAccess.open("res://shared/data/weapons/")
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var fname: String = dir.get_next()
+		if fname == "":
+			break
+		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
+			continue
+		var wpn: Resource = load("res://shared/data/weapons/" + fname)
+		if wpn == null:
+			continue
+		_append_weapon_row(wpn)
+	dir.list_dir_end()
+
+
+func _append_weapon_row(wpn: Resource) -> void:
+	# ── Card container with cyan border + rounded corners ────────────────────
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(680, 0)
+	card.add_theme_stylebox_override(&"panel", _weapon_card_style(wpn))
+
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override(&"margin_left", 18)
+	pad.add_theme_constant_override(&"margin_right", 18)
+	pad.add_theme_constant_override(&"margin_top", 14)
+	pad.add_theme_constant_override(&"margin_bottom", 14)
+	card.add_child(pad)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override(&"separation", 8)
+	pad.add_child(col)
+
+	# Header row: name + type + badges.
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override(&"separation", 12)
+	col.add_child(header)
+
+	var name_lbl := Label.new()
+	name_lbl.text = wpn.display_name
+	name_lbl.add_theme_font_size_override(&"font_size", 22)
+	name_lbl.add_theme_color_override(&"font_color", Color(1, 0.88, 0.42))
+	header.add_child(name_lbl)
+
+	var type_lbl := Label.new()
+	type_lbl.text = "·  " + wpn.type_label
+	type_lbl.add_theme_font_size_override(&"font_size", 14)
+	type_lbl.add_theme_color_override(&"font_color", Color(0.55, 0.82, 1, 0.85))
+	header.add_child(type_lbl)
+
+	var header_spacer := Control.new()
+	header_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(header_spacer)
+
+	if wpn.instakill_headshot:
+		header.add_child(_make_badge("☠ 头爆秒杀", Color(1, 0.4, 0.4)))
+	if wpn.scary_close:
+		header.add_child(_make_badge("⚠ 近战凶器", Color(1, 0.7, 0.3)))
+	if wpn.free_starter:
+		header.add_child(_make_badge("FREE", Color(0.5, 1, 0.6)))
+	if wpn.admin_only:
+		header.add_child(_make_badge("ADMIN", Color(1, 0.4, 0.7)))
+
+	# Stat bars row (one per stat, 4 stats).
+	var stats := GridContainer.new()
+	stats.columns = 2
+	stats.add_theme_constant_override(&"h_separation", 16)
+	stats.add_theme_constant_override(&"v_separation", 4)
+	col.add_child(stats)
+
+	stats.add_child(_make_stat_bar("DMG",     int(wpn.damage),       0, 150, Color(1, 0.4, 0.35)))
+	stats.add_child(_make_stat_bar("MAG",     wpn.magazine,           1, 60,  Color(0.5, 0.85, 1)))
+	# Lower fire_interval is FASTER → invert for visual "fire rate" bar.
+	var rof_inv: int = clampi(int(round(1500.0 - wpn.fire_interval_ms)), 0, 1500)
+	stats.add_child(_make_stat_bar("ROF",     rof_inv,                0, 1500, Color(1, 0.85, 0.4)))
+	var bspeed: int = 999 if wpn.is_hitscan() else int(wpn.bullet_speed)
+	stats.add_child(_make_stat_bar("SPEED",   bspeed,                 60, 300, Color(0.6, 1, 0.7)))
+
+	# Ability callout.
+	if wpn.ability != null and not String(wpn.ability.name).is_empty():
+		var ability_box := PanelContainer.new()
+		var abox := StyleBoxFlat.new()
+		abox.bg_color = Color(0.05, 0.1, 0.18, 0.7)
+		abox.border_color = Color(0.5, 0.85, 1, 0.5)
+		abox.border_width_left = 3
+		abox.corner_radius_top_left = 4
+		abox.corner_radius_top_right = 4
+		abox.corner_radius_bottom_left = 4
+		abox.corner_radius_bottom_right = 4
+		abox.content_margin_left = 10
+		abox.content_margin_right = 10
+		abox.content_margin_top = 6
+		abox.content_margin_bottom = 6
+		ability_box.add_theme_stylebox_override(&"panel", abox)
+		var avbox := VBoxContainer.new()
+		avbox.add_theme_constant_override(&"separation", 2)
+		ability_box.add_child(avbox)
+		var ah := Label.new()
+		ah.text = "⚡ %s" % wpn.ability.name
+		ah.add_theme_color_override(&"font_color", Color(0.55, 0.95, 1))
+		ah.add_theme_font_size_override(&"font_size", 13)
+		avbox.add_child(ah)
+		if not String(wpn.ability.description).is_empty():
+			var ad := Label.new()
+			ad.text = wpn.ability.description
+			ad.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			ad.custom_minimum_size = Vector2(620, 0)
+			ad.add_theme_font_size_override(&"font_size", 12)
+			ad.add_theme_color_override(&"font_color", Color(0.85, 0.92, 1))
+			avbox.add_child(ad)
+		col.add_child(ability_box)
+
+	# Description.
+	if "description" in wpn and not wpn.description.is_empty():
+		var desc := Label.new()
+		desc.text = wpn.description
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.custom_minimum_size = Vector2(640, 0)
+		desc.add_theme_font_size_override(&"font_size", 12)
+		desc.add_theme_color_override(&"font_color", Color(0.78, 0.85, 0.95))
+		col.add_child(desc)
+
+	weapons_list.add_child(card)
+
+
+func _make_badge(text: String, color: Color) -> PanelContainer:
+	var pc := PanelContainer.new()
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(color.r * 0.25, color.g * 0.25, color.b * 0.25, 0.85)
+	s.border_color = color
+	s.border_width_left = 1
+	s.border_width_right = 1
+	s.border_width_top = 1
+	s.border_width_bottom = 1
+	s.corner_radius_top_left = 4
+	s.corner_radius_top_right = 4
+	s.corner_radius_bottom_left = 4
+	s.corner_radius_bottom_right = 4
+	s.content_margin_left = 8
+	s.content_margin_right = 8
+	s.content_margin_top = 2
+	s.content_margin_bottom = 2
+	pc.add_theme_stylebox_override(&"panel", s)
+	var l := Label.new()
+	l.text = text
+	l.add_theme_color_override(&"font_color", color)
+	l.add_theme_font_size_override(&"font_size", 11)
+	pc.add_child(l)
+	return pc
+
+
+func _make_stat_bar(label: String, value: int, min_v: int, max_v: int, color: Color) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	row.custom_minimum_size = Vector2(310, 0)
+
+	var name_lbl := Label.new()
+	name_lbl.text = label
+	name_lbl.custom_minimum_size = Vector2(48, 0)
+	name_lbl.add_theme_font_size_override(&"font_size", 11)
+	name_lbl.add_theme_color_override(&"font_color", Color(0.55, 0.78, 0.95, 0.85))
+	row.add_child(name_lbl)
+
+	var bar := ProgressBar.new()
+	bar.custom_minimum_size = Vector2(180, 12)
+	bar.min_value = min_v
+	bar.max_value = max_v
+	bar.value = clamp(value, min_v, max_v)
+	bar.show_percentage = false
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.04, 0.07, 0.13, 1)
+	bg.border_color = Color(0.3, 0.55, 0.85, 0.4)
+	bg.border_width_left = 1
+	bg.border_width_right = 1
+	bg.border_width_top = 1
+	bg.border_width_bottom = 1
+	bg.corner_radius_top_left = 4
+	bg.corner_radius_top_right = 4
+	bg.corner_radius_bottom_left = 4
+	bg.corner_radius_bottom_right = 4
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = color
+	fill.corner_radius_top_left = 3
+	fill.corner_radius_top_right = 3
+	fill.corner_radius_bottom_left = 3
+	fill.corner_radius_bottom_right = 3
+	bar.add_theme_stylebox_override(&"background", bg)
+	bar.add_theme_stylebox_override(&"fill", fill)
+	row.add_child(bar)
+
+	var val_lbl := Label.new()
+	val_lbl.text = "%d" % value if value < 999 else "∞"
+	val_lbl.custom_minimum_size = Vector2(40, 0)
+	val_lbl.add_theme_font_size_override(&"font_size", 12)
+	val_lbl.add_theme_color_override(&"font_color", color)
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(val_lbl)
+
+	return row
+
+
+func _weapon_card_style(wpn: Resource) -> StyleBoxFlat:
+	# Highlight admin / instakill weapons with a warmer border so they pop.
+	# wpn is typed as Resource (not WeaponDef) so we need an explicit type
+	# annotation — GDScript can't infer bullet_color from a base Resource.
+	var c: Color = Color(0.5, 0.85, 1, 0.6)
+	if "bullet_color" in wpn:
+		c = wpn.bullet_color
+	c.a = 0.55
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.05, 0.08, 0.15, 0.92)
+	s.border_color = c
+	s.border_width_left = 2
+	s.border_width_top = 2
+	s.border_width_right = 2
+	s.border_width_bottom = 2
+	s.corner_radius_top_left = 10
+	s.corner_radius_top_right = 10
+	s.corner_radius_bottom_left = 10
+	s.corner_radius_bottom_right = 10
+	s.shadow_color = Color(0, 0, 0, 0.4)
+	s.shadow_size = 6
+	return s
+
+
+func _selected_map_path() -> String:
+	if map_picker == null:
+		return MAPS[0].path
+	var idx: int = clampi(map_picker.selected, 0, MAPS.size() - 1)
+	return MAPS[idx].path
+
+
+func _selected_mode_path() -> String:
+	if mode_picker == null:
+		return ""
+	var idx: int = clampi(mode_picker.selected, 0, MODES.size() - 1)
+	return MODES[idx].path
+
+
+func _on_practice() -> void:
+	_launch_game()
+
+
+func _on_host() -> void:
+	var peer := WebSocketMultiplayerPeer.new()
+	var err := peer.create_server(7777)
+	if err != OK:
+		# Most common cause: a dedicated server is already running on 7777.
+		status_label.text = "❌ Host 失败 (err=%s) — 端口 7777 被占用？\n如果跑了 ./scripts/start_server.sh 请用 JOIN 而不是 HOST" % err
+		return
+	multiplayer.multiplayer_peer = peer
+	status_label.text = "✅ Hosting on :7777"
+	_launch_game()
+
+
+func _on_join() -> void:
+	var address: String = join_address.text.strip_edges()
+	if address.is_empty():
+		address = "ws://127.0.0.1:7777"
+	var peer := WebSocketMultiplayerPeer.new()
+	var err := peer.create_client(address)
+	if err != OK:
+		status_label.text = "Join failed: %s" % err
+		return
+	multiplayer.multiplayer_peer = peer
+	status_label.text = "Connecting to %s..." % address
+	_launch_game()
+
+
+func _launch_game() -> void:
+	# Apply map + mode choices to the game scene before swapping into it.
+	var game: Node = GAME_SCENE.instantiate()
+	var map_path: String = _selected_map_path()
+	if ResourceLoader.exists(map_path):
+		game.map_scene = load(map_path)
+	var mode_path: String = _selected_mode_path()
+	if mode_path != "" and ResourceLoader.exists(mode_path):
+		game.mode_def = load(mode_path)
+	get_tree().root.add_child(game)
+	get_tree().current_scene.queue_free()
+	get_tree().current_scene = game

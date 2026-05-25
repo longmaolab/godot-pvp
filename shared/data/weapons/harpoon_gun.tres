@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_harpoon_gun"]
+script = ExtResource("2")
+name = "Chain Pull"
+description = "Drag hit enemy toward you"
+type = &"powershot"
+cooldown_ms = 13000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"harpoon_gun"
+display_name = "Harpoon Gun"
+type_label = "Heavy Projectile"
+slot = &"primary"
+description = "Heavy Projectile: Harpoon Gun — 详见原版手感。"
+damage = 95
+headshot_multiplier = 2.0
+instakill_headshot = true
+magazine = 1
+reserve = 6
+fire_interval_ms = 1100
+reload_time_ms = 2400
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.002
+bullet_speed = 110
+ads_zoom_fov = 40
+price_credits = 1140
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_harpoon_gun")
+
+bullet_color = Color(0.9, 0.4, 0.3, 1)

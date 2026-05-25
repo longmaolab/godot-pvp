@@ -1,0 +1,135 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/bot_brain.gd" id="1_bot"]
+
+[sub_resource type="CapsuleShape3D" id="cap_body_b"]
+height = 1.8
+radius = 0.35
+
+[sub_resource type="SphereShape3D" id="sph_head_b"]
+radius = 0.22
+
+[sub_resource type="CapsuleShape3D" id="cap_torso_b"]
+height = 1.2
+radius = 0.32
+
+[sub_resource type="StandardMaterial3D" id="mat_jumpsuit_b"]
+albedo_color = Color(0.78, 0.22, 0.2, 1)
+metallic = 0.05
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="mat_helmet_b"]
+albedo_color = Color(0.6, 0.18, 0.17, 1)
+metallic = 0.45
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="mat_visor_b"]
+albedo_color = Color(1.0, 0.5, 0.5, 1)
+emission_enabled = true
+emission = Color(1.0, 0.2, 0.2, 1)
+emission_energy_multiplier = 1.2
+metallic = 0.7
+roughness = 0.15
+
+[sub_resource type="StandardMaterial3D" id="mat_gun_b"]
+albedo_color = Color(0.12, 0.13, 0.16, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="mesh_torso_b"]
+size = Vector3(0.55, 0.85, 0.32)
+
+[sub_resource type="BoxMesh" id="mesh_head_b"]
+size = Vector3(0.36, 0.36, 0.36)
+
+[sub_resource type="BoxMesh" id="mesh_visor_b"]
+size = Vector3(0.32, 0.1, 0.02)
+
+[sub_resource type="BoxMesh" id="mesh_arm_b"]
+size = Vector3(0.18, 0.6, 0.18)
+
+[sub_resource type="BoxMesh" id="mesh_leg_b"]
+size = Vector3(0.22, 0.7, 0.22)
+
+[sub_resource type="BoxMesh" id="mesh_gun_b"]
+size = Vector3(0.08, 0.08, 0.4)
+
+[node name="Bot" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_bot")
+
+[node name="BodyCollision" type="CollisionShape3D" parent="."]
+shape = SubResource("cap_body_b")
+
+[node name="Visuals" type="Node3D" parent="."]
+
+[node name="Torso" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+mesh = SubResource("mesh_torso_b")
+surface_material_override/0 = SubResource("mat_jumpsuit_b")
+
+[node name="ArmL" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.5, 0)
+mesh = SubResource("mesh_arm_b")
+surface_material_override/0 = SubResource("mat_jumpsuit_b")
+
+[node name="ArmR" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.5, 0)
+mesh = SubResource("mesh_arm_b")
+surface_material_override/0 = SubResource("mat_jumpsuit_b")
+
+[node name="LegL" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.14, -0.35, 0)
+mesh = SubResource("mesh_leg_b")
+surface_material_override/0 = SubResource("mat_helmet_b")
+
+[node name="LegR" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.14, -0.35, 0)
+mesh = SubResource("mesh_leg_b")
+surface_material_override/0 = SubResource("mat_helmet_b")
+
+[node name="HeldGun" type="MeshInstance3D" parent="Visuals"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.45, -0.25)
+mesh = SubResource("mesh_gun_b")
+surface_material_override/0 = SubResource("mat_gun_b")
+
+[node name="Head" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+
+[node name="HeadVisual" type="MeshInstance3D" parent="Head"]
+mesh = SubResource("mesh_head_b")
+surface_material_override/0 = SubResource("mat_helmet_b")
+
+[node name="Visor" type="MeshInstance3D" parent="Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -0.18)
+mesh = SubResource("mesh_visor_b")
+surface_material_override/0 = SubResource("mat_visor_b")
+
+[node name="Camera3D" type="Camera3D" parent="Head"]
+current = false
+fov = 75.0
+
+[node name="HeadHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = true
+monitorable = true
+
+[node name="HeadShape" type="CollisionShape3D" parent="HeadHitbox"]
+shape = SubResource("sph_head_b")
+
+[node name="BodyHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = true
+monitorable = true
+
+[node name="TorsoShape" type="CollisionShape3D" parent="BodyHitbox"]
+shape = SubResource("cap_torso_b")
+
+[node name="Audio3D" type="AudioStreamPlayer3D" parent="."]
+
+[node name="AudioLocal" type="AudioStreamPlayer" parent="."]

@@ -1,0 +1,64 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/comms_wheel.gd" id="1_comms"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="comms_panel"]
+bg_color = Color(0.04, 0.07, 0.13, 0.92)
+border_color = Color(0.4, 0.85, 1, 0.7)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+content_margin_left = 16
+content_margin_right = 16
+content_margin_top = 14
+content_margin_bottom = 14
+shadow_color = Color(0, 0, 0, 0.6)
+shadow_size = 16
+
+[node name="CommsWheel" type="CanvasLayer"]
+layer = 60
+visible = false
+script = ExtResource("1_comms")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.4)
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(380, 0)
+theme_override_styles/panel = SubResource("comms_panel")
+
+[node name="V" type="VBoxContainer" parent="Center/Card"]
+theme_override_constants/separation = 6
+
+[node name="Header" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "COMMS  /  Z = tactical · X = social"
+horizontal_alignment = 1
+
+[node name="Sep" type="HSeparator" parent="Center/Card/V"]
+
+[node name="Lines" type="VBoxContainer" parent="Center/Card/V"]
+theme_override_constants/separation = 4
+
+[node name="Hint" type="Label" parent="Center/Card/V"]
+text = "1-9 to select · Esc to close"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.5, 0.7, 0.88, 0.7)

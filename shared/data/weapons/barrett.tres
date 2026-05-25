@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_barrett"]
+script = ExtResource("2")
+name = ".50 BMG Overload"
+description = "Next shot · 600 dmg · pierces walls"
+type = &"powershot"
+cooldown_ms = 16000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 0
+speed_mult = 1
+pellets = 1
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"barrett"
+display_name = "Barrett M82"
+type_label = "Admin · Anti-Material"
+slot = &"primary"
+description = "Admin · Anti-Material: Barrett M82 — 详见原版手感。"
+damage = 250
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 5
+reserve = 15
+fire_interval_ms = 1100
+reload_time_ms = 3200
+no_reload = false
+auto = false
+pellets = 1
+spread = 0
+bullet_speed = 320
+ads_zoom_fov = 12
+price_credits = 0
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = true
+scary_close = false
+ability = SubResource("ability_barrett")
+
+bullet_color = Color(1, 0.3, 0.5, 1)

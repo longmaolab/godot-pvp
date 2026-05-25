@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_glassmaker"]
+script = ExtResource("2")
+name = "Crystal Rain"
+description = "Fire 6 glass blobs · sharp field everywhere"
+type = &"multishot"
+cooldown_ms = 13000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = true
+
+[resource]
+script = ExtResource("1")
+id = &"glassmaker"
+display_name = "Glassmaker"
+type_label = "Caustic Projectile"
+slot = &"primary"
+description = "Caustic Projectile: Glassmaker — 详见原版手感。"
+damage = 28
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 10
+reserve = 40
+fire_interval_ms = 320
+reload_time_ms = 2200
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.005
+bullet_speed = 95
+ads_zoom_fov = 48
+price_credits = 336
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_glassmaker")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

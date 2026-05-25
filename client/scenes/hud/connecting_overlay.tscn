@@ -1,0 +1,75 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/connecting_overlay.gd" id="1_conn"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="conn_panel"]
+bg_color = Color(0.04, 0.07, 0.13, 0.95)
+border_color = Color(0.4, 0.85, 1, 0.7)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+content_margin_left = 36
+content_margin_right = 36
+content_margin_top = 22
+content_margin_bottom = 22
+shadow_color = Color(0, 0, 0, 0.6)
+shadow_size = 16
+
+[node name="ConnectingOverlay" type="CanvasLayer"]
+layer = 70
+visible = false
+script = ExtResource("1_conn")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(380, 0)
+theme_override_styles/panel = SubResource("conn_panel")
+
+[node name="V" type="VBoxContainer" parent="Center/Card"]
+theme_override_constants/separation = 10
+
+[node name="Spinner" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 42
+theme_override_colors/font_color = Color(0.5, 0.85, 1, 1)
+text = "◐"
+horizontal_alignment = 1
+
+[node name="Title" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+text = "CONNECTING..."
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 1)
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BackButton" type="Button" parent="Center/Card/V"]
+custom_minimum_size = Vector2(0, 48)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 18
+text = "返回主菜单 / BACK TO MENU"
+visible = false

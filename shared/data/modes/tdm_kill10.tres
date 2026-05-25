@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"tdm_kill10"
+display_name = "TDM — first team to 10"
+description = "团队竞技。两队对抗，先到 10 击杀的队伍获胜，无回合，无时间限制。需要团队配合和阵型。每个击杀 +5 信用点，获胜额外 +50。"
+family = &"race"
+humans_per_team = 5
+team_count = 2
+default_bots_per_side = 0
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 10
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 50
+credits_per_loss = 20
+credit_cap_per_match = 250

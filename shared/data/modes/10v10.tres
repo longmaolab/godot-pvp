@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"10v10"
+display_name = "10v10 — race to 50"
+description = "大型 10 人队对抗。先到 50 击杀获胜。地图大，分散与集结的拉锯战。"
+family = &"race"
+humans_per_team = 10
+team_count = 2
+default_bots_per_side = 0
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 50
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 50
+credits_per_loss = 20
+credit_cap_per_match = 250

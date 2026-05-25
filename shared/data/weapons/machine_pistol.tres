@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_machine_pistol"]
+script = ExtResource("2")
+name = "Akimbo"
+description = "Dual-wield · 2 shots per trigger for 4 s"
+type = &"buff"
+cooldown_ms = 8000
+duration_ms = 4000
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 0
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"machine_pistol"
+display_name = "Machine Pistol"
+type_label = "Secondary"
+slot = &"secondary"
+description = "全自动微型冲锋枪副武器，火力压制。"
+damage = 14
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 24
+reserve = 96
+fire_interval_ms = 70
+reload_time_ms = 1500
+no_reload = false
+auto = true
+pellets = 1
+spread = 0.013
+bullet_speed = 130
+ads_zoom_fov = 50
+price_credits = 180
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_machine_pistol")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

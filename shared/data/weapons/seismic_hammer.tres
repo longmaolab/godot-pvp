@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/data/weapons/_ability_def.gd" id="2"]
+
+[sub_resource type="Resource" id="ability_seismic_hammer"]
+script = ExtResource("2")
+name = "Earthbreaker"
+description = "Massive ground slam · 8 m · launch all"
+type = &"aoe"
+cooldown_ms = 16000
+duration_ms = 0
+damage_mult = 1
+spread_mult = 1
+speed_mult = 1
+pellets = 0
+grid_w = 0
+grid_h = 0
+delay_ms = 0
+radius = 8
+disables_ads = false
+
+[resource]
+script = ExtResource("1")
+id = &"seismic_hammer"
+display_name = "Seismic Hammer"
+type_label = "Ground Shockwave"
+slot = &"primary"
+description = "Ground Shockwave: Seismic Hammer — 详见原版手感。"
+damage = 70
+headshot_multiplier = 2.0
+instakill_headshot = false
+magazine = 4
+reserve = 16
+fire_interval_ms = 950
+reload_time_ms = 2600
+no_reload = false
+auto = false
+pellets = 1
+spread = 0.003
+bullet_speed = 65
+ads_zoom_fov = 46
+price_credits = 840
+fragment_unlock_cost = 100
+free_starter = false
+admin_only = false
+scary_close = false
+ability = SubResource("ability_seismic_hammer")
+
+bullet_color = Color(1, 0.7, 0.2, 1)

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"3v3"
+display_name = "3v3 — best of 3"
+description = "三人小队三局两胜。空间感和角色定位（突击 / 火力 / 狙击）的小型团队战。"
+family = &"elim"
+humans_per_team = 3
+team_count = 2
+default_bots_per_side = 0
+rounds_to_win = 2
+round_seconds = 60
+kill_goal = 0
+lives_per_player = 1
+credits_per_kill = 10
+credits_per_win = 80
+credits_per_loss = 20
+credit_cap_per_match = 250

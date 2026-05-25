@@ -1,0 +1,192 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/match_end.gd" id="1_me"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="Gradient" id="me_glow_grad"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(0.25, 0.95, 0.55, 0.6, 0.25, 0.95, 0.55, 0)
+
+[sub_resource type="GradientTexture2D" id="me_glow"]
+gradient = SubResource("me_glow_grad")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="me_panel"]
+bg_color = Color(0.04, 0.07, 0.13, 0.93)
+border_color = Color(0.3, 0.7, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
+content_margin_left = 32
+content_margin_right = 32
+content_margin_top = 26
+content_margin_bottom = 26
+shadow_color = Color(0, 0, 0, 0.75)
+shadow_size = 24
+
+[sub_resource type="StyleBoxFlat" id="me_btn_normal"]
+bg_color = Color(0.18, 0.45, 0.85, 1)
+border_color = Color(0.5, 0.85, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 20
+content_margin_right = 20
+content_margin_top = 12
+content_margin_bottom = 12
+
+[sub_resource type="StyleBoxFlat" id="me_btn_hover"]
+bg_color = Color(0.28, 0.6, 1, 1)
+border_color = Color(0.7, 0.95, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 20
+content_margin_right = 20
+content_margin_top = 12
+content_margin_bottom = 12
+
+[sub_resource type="StyleBoxFlat" id="me_row_self"]
+bg_color = Color(0.15, 0.35, 0.55, 0.6)
+border_color = Color(0.4, 0.85, 1, 0.85)
+border_width_left = 3
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+content_margin_left = 12
+content_margin_right = 12
+content_margin_top = 6
+content_margin_bottom = 6
+
+[sub_resource type="StyleBoxFlat" id="me_row_other"]
+bg_color = Color(0.06, 0.12, 0.2, 0.5)
+border_color = Color(0.3, 0.55, 0.8, 0.5)
+border_width_left = 2
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+content_margin_left = 12
+content_margin_right = 12
+content_margin_top = 6
+content_margin_bottom = 6
+
+[node name="MatchEnd" type="CanvasLayer"]
+layer = 90
+script = ExtResource("1_me")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+mouse_filter = 2
+
+[node name="GlowL" type="TextureRect" parent="."]
+anchors_preset = 0
+offset_left = -120
+offset_top = -120
+offset_right = 560
+offset_bottom = 560
+texture = SubResource("me_glow")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(0.4, 1, 0.7, 0.6)
+mouse_filter = 2
+
+[node name="GlowR" type="TextureRect" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -560
+offset_top = -560
+offset_right = 120
+offset_bottom = 120
+texture = SubResource("me_glow")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(1, 0.6, 0.5, 0.45)
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(540, 0)
+theme_override_styles/panel = SubResource("me_panel")
+
+[node name="V" type="VBoxContainer" parent="Center/Card"]
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.1, 0.5, 0.2, 1)
+theme_override_constants/outline_size = 6
+text = "VICTORY"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+text = "★  MATCH COMPLETE  ★"
+horizontal_alignment = 1
+
+[node name="Sep1" type="HSeparator" parent="Center/Card/V"]
+
+[node name="ScoreboardHeader" type="Label" parent="Center/Card/V"]
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+text = "▸  SCOREBOARD"
+
+[node name="ScoreboardList" type="VBoxContainer" parent="Center/Card/V"]
+theme_override_constants/separation = 4
+
+[node name="Sep2" type="HSeparator" parent="Center/Card/V"]
+
+[node name="ButtonsRow" type="HBoxContainer" parent="Center/Card/V"]
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="ReturnButton" type="Button" parent="Center/Card/V/ButtonsRow"]
+custom_minimum_size = Vector2(180, 52)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("me_btn_normal")
+theme_override_styles/hover = SubResource("me_btn_hover")
+text = "🏠  返回主菜单"
+
+[node name="PlayAgainButton" type="Button" parent="Center/Card/V/ButtonsRow"]
+custom_minimum_size = Vector2(180, 52)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("me_btn_normal")
+theme_override_styles/hover = SubResource("me_btn_hover")
+text = "🔁  再来一局"
