@@ -617,6 +617,21 @@ func _on_connected_to_host_staging() -> void:
 	if not _is_staging or _is_host:
 		return
 	staging_status.text = "🔗  Connected — 等房主点 START"
+	# Send the hello handshake so the server replies with server_mode_info
+	# — that's what _on_server_mode_info_for_routing listens for to decide
+	# between staying on this staging panel (listen-host) and jumping into
+	# room_browser (dedicated server). Without this we sit here forever
+	# waiting for an event the server has no reason to emit. game_controller
+	# later sends its own hello after the scene transition — the server's
+	# handler is idempotent (just re-emits welcome + mode_info).
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		var name_str: String = "Player"
+		if has_node(^"/root/Settings"):
+			var s: Node = get_node(^"/root/Settings")
+			if "player_name" in s and not String(s.player_name).is_empty():
+				name_str = s.player_name
+		net_rpc.client_hello.rpc_id(1, name_str)
 
 
 func _on_connection_failed_staging() -> void:
