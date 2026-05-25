@@ -1,0 +1,128 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://client/scripts/ui/room_lobby.gd" id="1_script"]
+[ext_resource type="Theme" path="res://assets/themes/pvp_theme.tres" id="2_theme"]
+
+[sub_resource type="StyleBoxFlat" id="panel_glass"]
+bg_color = Color(0.04, 0.07, 0.14, 0.93)
+border_color = Color(0.28, 0.7, 0.95, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+content_margin_left = 28
+content_margin_right = 28
+content_margin_top = 22
+content_margin_bottom = 22
+shadow_color = Color(0, 0, 0, 0.55)
+shadow_size = 16
+
+[sub_resource type="StyleBoxFlat" id="btn_primary"]
+bg_color = Color(0.16, 0.78, 0.46, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 24
+content_margin_right = 24
+content_margin_top = 14
+content_margin_bottom = 14
+shadow_color = Color(0.1, 0.5, 0.28, 0.6)
+shadow_size = 8
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="btn_secondary"]
+bg_color = Color(0.1, 0.18, 0.3, 1)
+border_color = Color(0.32, 0.72, 0.95, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16
+content_margin_right = 16
+content_margin_top = 10
+content_margin_bottom = 10
+
+[node name="RoomLobby" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.02, 0.03, 0.07, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(680, 560)
+theme_override_styles/panel = SubResource("panel_glass")
+
+[node name="V" type="VBoxContainer" parent="Center/Panel"]
+theme_override_constants/separation = 16
+
+[node name="RoomIdLabel" type="Label" parent="Center/Panel/V"]
+text = "房间 ----"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+
+[node name="MapLabel" type="Label" parent="Center/Panel/V"]
+text = "📍 ...   🎯 ..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+
+[node name="PlayersHeader" type="Label" parent="Center/Panel/V"]
+text = "▸  玩家 / PLAYERS"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 1)
+
+[node name="PlayerList" type="ItemList" parent="Center/Panel/V"]
+custom_minimum_size = Vector2(0, 220)
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 17
+
+[node name="StatusLabel" type="Label" parent="Center/Panel/V"]
+text = "..."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+autowrap_mode = 3
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/V"]
+alignment = 1
+theme_override_constants/separation = 14
+
+[node name="StartButton" type="Button" parent="Center/Panel/V/Buttons"]
+custom_minimum_size = Vector2(280, 80)
+text = "▶   START MATCH"
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
+theme_override_constants/outline_size = 3
+theme_override_styles/normal = SubResource("btn_primary")
+visible = false
+
+[node name="LeaveButton" type="Button" parent="Center/Panel/V/Buttons"]
+custom_minimum_size = Vector2(160, 50)
+text = "← 离开 / LEAVE"
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("btn_secondary")

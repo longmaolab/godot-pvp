@@ -19,6 +19,16 @@ var rare_chests: int = 0
 var upgrades: Dictionary = {}
 var last_free_spin_iso: String = ""   # ISO date string
 
+# ── Lobby handoff (not persisted to disk; lives only in-memory) ────────────
+# When the user clicks JOIN-to-DS in main_menu and lands on room_browser,
+# main_menu writes the picker selections here so the browser/lobby scenes
+# can read them without needing direct refs to the now-freed menu. Same
+# pattern for the initial room state delivered with server_room_joined —
+# stash here so room_lobby can pick it up after change_scene_to_file.
+var pending_room_map: String = ""
+var pending_room_mode: String = ""
+var pending_room_state: Dictionary = {}
+
 signal credits_changed(new_total: int)
 signal fragments_changed(new_total: int)
 signal purchased_changed()

@@ -120,6 +120,10 @@ if [ -f "$PROJ/tests/run_room_rpc_test.sh" ]; then
     run_serial "room_rpc (NetRpc signals → RoomManager handlers)" \
         "$PROJ/tests/run_room_rpc_test.sh"
 fi
+if [ -f "$PROJ/tests/run_room_scenes_parse_test.sh" ]; then
+    run_serial "room_scenes_parse (room_browser/room_lobby instantiate)" \
+        "$PROJ/tests/run_room_scenes_parse_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"

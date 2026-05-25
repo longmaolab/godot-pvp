@@ -115,11 +115,17 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_host_staging)
 	multiplayer.connection_failed.connect(_on_connection_failed_staging)
 	multiplayer.server_disconnected.connect(_on_server_disconnected_staging)
-	# START broadcast from the host.
+	# START broadcast from the host (listen-host LAN mode).
 	if has_node(^"/root/NetRpc"):
 		var net_rpc: Node = get_node(^"/root/NetRpc")
 		if not net_rpc.server_match_starting_received.is_connected(_on_match_starting):
 			net_rpc.server_match_starting_received.connect(_on_match_starting)
+		# DS-vs-listen-host routing: when we JOIN, the server tells us
+		# which mode it's running via server_mode_info. If it's a DS, we
+		# don't stay on the staging panel — we route into the room
+		# browser instead (multi-room lobby system per Phase 1 plan).
+		if not net_rpc.server_mode_info_received.is_connected(_on_server_mode_info_for_routing):
+			net_rpc.server_mode_info_received.connect(_on_server_mode_info_for_routing)
 	# Identity row — wire name + skin to the Settings autoload.
 	skin_prev_btn.pressed.connect(_skin_step.bind(-1))
 	skin_next_btn.pressed.connect(_skin_step.bind(1))
@@ -646,6 +652,26 @@ func _on_match_starting() -> void:
 	if not _is_staging or _is_host:
 		return  # host already launched in _on_start_match
 	_launch_game()
+
+
+## Decide which way to go after JOIN connects: server tells us if it's a
+## dedicated server. DS → public room model, jump to room_browser.tscn.
+## Listen-host → stay on the current staging panel (LAN flow unchanged).
+const ROOM_BROWSER_SCENE := "res://client/scenes/ui/room_browser.tscn"
+
+func _on_server_mode_info_for_routing(is_dedicated: bool) -> void:
+	if not _is_staging or _is_host:
+		return  # host doesn't route — host has its own flow; client-only path
+	if not is_dedicated:
+		return  # listen-host — fall through to existing _on_match_starting flow
+	# DS: stash menu picks for the browser to consume + change scene.
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		if "pending_room_map" in s:
+			s.pending_room_map = _selected_map_path()
+		if "pending_room_mode" in s:
+			s.pending_room_mode = _selected_mode_path()
+	get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
 
 
 func _on_cancel_staging() -> void:
