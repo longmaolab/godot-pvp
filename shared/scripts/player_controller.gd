@@ -751,6 +751,17 @@ func try_activate_ability() -> bool:
 		return false
 	_ability_cooldown_until = now_s + float(a.cooldown_ms) / 1000.0
 	ability_activated.emit(a)
+	# Mirror the activation to the server so its view of this player has
+	# the same buff/powershot state — fire_resolver reads from the server's
+	# copy when applying damage mults. Skip when we ARE the server (host's
+	# own player is one shared instance) and skip when we're not networked
+	# (practice mode). Idempotent: the cooldown guard above means a redundant
+	# server-side trigger (e.g., DS INPUT_ABILITY edge already fired) is a
+	# no-op the second time.
+	if _is_networked() and not multiplayer.is_server() and is_local:
+		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+		if net_rpc != null:
+			net_rpc.client_use_ability.rpc_id(1)
 	match a.type:
 		&"buff":
 			_buff_def = a

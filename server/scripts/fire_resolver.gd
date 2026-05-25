@@ -224,6 +224,18 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 			if victim.is_dead:
 				return
 			var dmg: float = PlayerController._compute_damage(weapon, is_head)
+			# Apply buff + powershot damage multipliers from the SERVER's view
+			# of the shooter. The mirror is kept in sync via client_use_ability
+			# (listen-host) or the INPUT_ABILITY edge (DS). Skipping these in
+			# MP would mean the kid sees the "Focus Fire active" indicator but
+			# does plain-vanilla damage.
+			var now_s: float = Time.get_ticks_msec() / 1000.0
+			if shooter._buff_def != null and now_s < shooter._buff_active_until:
+				dmg *= shooter._buff_def.damage_mult
+			if shooter._powershot_armed != null:
+				dmg *= shooter._powershot_armed.damage_mult
+				shooter.ability_consumed.emit(shooter._powershot_armed)
+				shooter._powershot_armed = null
 			var victim_peer: int = victim.get_multiplayer_authority()
 			var hp_before: float = victim.hp
 			victim.apply_damage(dmg, shooter)

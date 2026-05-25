@@ -100,6 +100,10 @@ if [ -f "$PROJ/tests/run_player_collision_test.sh" ]; then
     run_serial "player_collision (player↔player blocks, no Jolt Y-explosion)" \
         "$PROJ/tests/run_player_collision_test.sh"
 fi
+if [ -f "$PROJ/tests/run_ability_buff_test.sh" ]; then
+    run_serial "ability_buff (server-side buff state + damage mult)" \
+        "$PROJ/tests/run_ability_buff_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"

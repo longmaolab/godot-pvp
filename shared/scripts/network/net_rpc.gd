@@ -13,6 +13,12 @@ signal client_input_received(peer_id: int, tick: int, bits: int, yaw: float, pit
 ## raycast at the EXACT direction the client was looking, not the interp-delayed
 ## view it has of the shooter's transform.
 signal client_fire_received(peer_id: int, weapon_id: StringName, yaw: float, pitch: float)
+## Listen-host clients send this when they press the ability key, so the
+## server's view of the player can mirror buff/powershot state. DS clients
+## already trigger ability server-side via the INPUT_ABILITY edge in
+## push_remote_input — sending the RPC there too is harmless (the cooldown
+## guard inside try_activate_ability makes the second call a no-op).
+signal client_ability_received(peer_id: int)
 signal client_chat_received(peer_id: int, text: String, color: Color)
 
 # ── client-side signals (fired when an RPC arrives from the server) ──────
@@ -48,6 +54,12 @@ func client_send_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 func client_fire(weapon_id: StringName, yaw: float, pitch: float) -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_fire_received.emit(peer, weapon_id, yaw, pitch)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_use_ability() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_ability_received.emit(peer)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,

@@ -184,6 +184,11 @@ func _enter_dedicated_server_mode() -> void:
 		# Fire path: clients send fire intents via client_fire, server resolves.
 		if not net_rpc.client_fire_received.is_connected(_on_client_fire_server):
 			net_rpc.client_fire_received.connect(_on_client_fire_server)
+		# Ability mirror: listen-host clients also send this so the server's
+		# view picks up buff/powershot state; DS path is double-covered (the
+		# INPUT_ABILITY edge in push_remote_input also triggers it).
+		if not net_rpc.client_ability_received.is_connected(_on_client_ability_server):
+			net_rpc.client_ability_received.connect(_on_client_ability_server)
 		# DS-M2: per-tick input RPCs from clients → routed to the corresponding
 		# server-side PlayerController. The player simulates physics with this
 		# input instead of reading Input.* (which is meaningless on the server).
@@ -355,6 +360,7 @@ func _enter_host_mode() -> void:
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
 		net_rpc.client_fire_received.connect(_on_client_fire_server)
+		net_rpc.client_ability_received.connect(_on_client_ability_server)
 	# Stand up the lag-compensator so the host accumulates position history
 	# starting from match start.
 	var lc_script := load("res://server/scripts/lag_compensator.gd")
@@ -745,6 +751,21 @@ const _FireResolver = preload("res://server/scripts/fire_resolver.gd")
 
 func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float = INF, fire_pitch: float = INF) -> void:
 	_FireResolver.resolve_fire(self, peer_id, weapon_id, fire_yaw, fire_pitch)
+
+
+## Listen-host server: client pressed ability, mirror the activation onto
+## the server's view of their player so fire_resolver picks up the buff /
+## powershot mults when the next fire RPC lands. Idempotent against the
+## DS INPUT_ABILITY input-bit edge that also calls try_activate_ability —
+## the cooldown guard inside try_activate_ability blocks the redundant call.
+func _on_client_ability_server(peer_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var shooter: Node = players_by_peer.get(peer_id)
+	if shooter == null or not is_instance_valid(shooter):
+		return
+	if shooter.has_method(&"try_activate_ability"):
+		shooter.try_activate_ability()
 
 
 
