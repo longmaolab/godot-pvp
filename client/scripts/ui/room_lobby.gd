@@ -83,8 +83,10 @@ func _apply_room_state(state: Dictionary) -> void:
 	var players: Array = state.get("players", [])
 	for peer in players:
 		var tag: String = "👑 " if int(peer) == _host_peer else "👤 "
-		var name: String = "你" if int(peer) == _my_peer else "Player %d" % int(peer)
-		player_list.add_item("%s%s" % [tag, name])
+		# `display_name` not `name` — Node already has a `name` property and
+		# shadowing it spams GDScript::reload warnings.
+		var display_name: String = "你" if int(peer) == _my_peer else "Player %d" % int(peer)
+		player_list.add_item("%s%s" % [tag, display_name])
 
 	# START is host-only. Phase 1 = solo START allowed (1 player is OK).
 	start_btn.visible = _is_host
@@ -138,16 +140,19 @@ func _on_leave_pressed() -> void:
 func _on_start_pressed() -> void:
 	if not _is_host:
 		return
-	# Phase 1 = reuse the existing server_match_starting RPC. M2 work will
-	# replace this with a server-side `client_start_match` that runs
-	# RoomManager.start_match(room_id) + spawns just this room's players.
-	# For now, broadcasts to every connected peer — which is wrong for
-	# multi-room but acceptable as a stub until M2.
-	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
-	if net_rpc != null:
-		net_rpc.server_match_starting.rpc()
-	status_label.text = "▶ 开始对局... (M1 stub — M2 will scope to this room)"
+	# M1 stub: don't actually trigger anything yet. The previous attempt
+	# called server_match_starting.rpc() from the client, which fails — that
+	# RPC is @rpc("authority"), only the server (peer 1) is allowed to
+	# broadcast it. M2 will add a `client_start_match` client→server RPC
+	# that RoomManager translates into the per-room match boot. For now,
+	# just acknowledge the click so the user sees something happened.
+	status_label.text = "▶ START registered — M2 will wire the actual match boot"
 	start_btn.disabled = true
+	# Re-enable after a beat so the user can try again if they want.
+	await get_tree().create_timer(2.0).timeout
+	if is_inside_tree():
+		start_btn.disabled = false
+		status_label.text = "可以 START 了"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
