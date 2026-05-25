@@ -196,13 +196,18 @@ func _enter_dedicated_server_mode() -> void:
 			net_rpc.client_input_received.connect(_on_client_input_ds)
 	# Lobby M2: RoomManager fires match_started when a room's host clicks
 	# START — boot the match world here for that room's players. M3:
-	# match_controller.match_ended (already hooked in _ready) calls back
-	# into RoomManager.end_match below to tear down + return players to
-	# the room lobby.
+	# match_finished + room_destroyed are the cleanup signals — both can
+	# end the active match (the former from match_controller's win
+	# condition, the latter from host disconnect mid-match). Both routes
+	# converge on _tear_down_match_world.
 	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
 	if room_mgr != null:
 		if not room_mgr.match_started.is_connected(_boot_match_for_room):
 			room_mgr.match_started.connect(_boot_match_for_room)
+		if not room_mgr.match_finished.is_connected(_on_match_finished_in_room):
+			room_mgr.match_finished.connect(_on_match_finished_in_room)
+		if not room_mgr.room_destroyed.is_connected(_on_room_destroyed_check_active):
+			room_mgr.room_destroyed.connect(_on_room_destroyed_check_active)
 
 
 ## DS-M1 hello handshake. When a client sends client_hello, reply with
@@ -416,6 +421,16 @@ func _on_peer_disconnected_as_host(peer: int) -> void:
 	# dict entry means _ds_respawn_player's `victim == null` early-return is
 	# the only side effect when it eventually fires.
 	_pending_respawn.erase(peer)
+	# Lobby M2 cleanup: tell RoomManager the peer is gone so room state
+	# doesn't stay stuck (without this, a player who closes the browser
+	# tab mid-match leaves their room in MATCH state forever, blocking
+	# the single-active-match guard for everyone else — exactly the
+	# "start_match for E6Z7 blocked — 5CE4 already in MATCH" bug). If
+	# the leaver was the host, room_destroyed will fire and our handler
+	# tears down the world.
+	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
+	if room_mgr != null and is_dedicated_server:
+		room_mgr.leave_room(peer)
 	# C2 + R4: free per-peer rate-limit state so the dict doesn't grow
 	# unboundedly across connect/disconnect cycles, AND so a recycled
 	# peer-id doesn't inherit the previous occupant's chat quota.
@@ -545,11 +560,18 @@ func _on_server_map_info(map_path: String) -> void:
 
 
 ## M3: match for our room ended on the DS. The payload carries the room's
-## state (now back in LOBBY) so room_lobby can pick it up without a
-## separate round-trip. Stash + transition to room_lobby.tscn.
+## state (back in LOBBY) so room_lobby can pick it up without a separate
+## round-trip. An EMPTY room_state means the room was destroyed mid-match
+## (host disconnected etc) — there's no lobby to go back to, so we route
+## to the browser instead.
 const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
+const ROOM_BROWSER_SCENE_CLIENT := "res://client/scenes/ui/room_browser.tscn"
 
 func _on_server_match_ended(room_state: Dictionary) -> void:
+	if room_state.is_empty():
+		# Room is gone — bounce to browser.
+		get_tree().change_scene_to_file(ROOM_BROWSER_SCENE_CLIENT)
+		return
 	# Hand off the room state via the Settings autoload — the lobby scene
 	# reads `pending_room_state` in its _ready (same channel room_browser
 	# uses on Create/Join). This is the only place this client receives
@@ -1090,12 +1112,18 @@ func _on_round_ended(winner: int, _scores: Dictionary) -> void:
 func _on_match_ended(winner: int, final: Dictionary) -> void:
 	if hud != null:
 		hud.push_feed("MATCH OVER — winner peer %d" % winner, Color(1.0, 0.85, 0.2))
-	# Dedicated server: tear down the active room's match world + tell
-	# RoomManager so it broadcasts server_match_ended to room players.
+	# Dedicated server: kick off the end-of-match flow via RoomManager.
+	# RoomManager.end_match flips state + emits match_finished, which our
+	# _on_match_finished_in_room handler picks up to tear down the world.
+	# That single-source-of-truth split also catches abrupt match-end
+	# (host disconnect → room_destroyed → same teardown).
 	# Listen-host / practice: pop up the themed scoreboard (legacy flow).
 	if is_dedicated_server:
 		print("[server] match ended — winner peer %d" % winner)
-		_tear_down_active_match()
+		if not _active_room_id.is_empty():
+			var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
+			if room_mgr != null:
+				room_mgr.end_match(_active_room_id)
 		return
 	# Pop up the themed end-of-match scoreboard.
 	var screen: Node = MATCH_END_SCENE.instantiate()
@@ -1184,25 +1212,42 @@ func _boot_match_for_room(room) -> void:
 				net_rpc.server_match_starting.rpc_id(peer)
 
 
-## M3: called from _on_match_ended on the DS side. Resets the match
-## state and tells RoomManager to broadcast server_match_ended so the
-## room's clients return to room_lobby.tscn. Phase 1 keeps players
-## spawned + the map loaded — they're "between matches", room can
-## START again with the same setup (or host can change map → leave →
-## create new room, since in-lobby map change is Phase 2).
-func _tear_down_active_match() -> void:
-	var room_id: String = _active_room_id
-	if room_id.is_empty():
+## M3: hooked to RoomManager.match_finished. Fires from either path that
+## ends an active match — match_controller's win-condition signal (via
+## _on_match_ended → RoomManager.end_match → match_finished) OR an abrupt
+## end where the room is being destroyed and we get here via the parallel
+## room_destroyed → _on_room_destroyed_check_active path. Phase 1 keeps
+## players spawned + map loaded between matches; room host can just hit
+## START again.
+func _on_match_finished_in_room(room) -> void:
+	if room.room_id != _active_room_id:
 		return
+	_tear_down_match_world()
+
+
+## Companion to the above for the disconnect / host-leave path: when a
+## room is destroyed and it happened to be our active match, tear down.
+func _on_room_destroyed_check_active(room_id: String, _evicted: Array) -> void:
+	if room_id != _active_room_id:
+		return
+	_tear_down_match_world()
+	# room_destroyed already broadcast server_room_destroyed to the
+	# evicted set; their game scenes need an extra nudge back to the
+	# room_browser (no room exists for them to return to). Reuse the
+	# match_ended path with an empty room_state.
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		var live: Array = multiplayer.get_peers()
+		for peer in _evicted:
+			if peer in live:
+				net_rpc.server_match_ended.rpc_id(peer, {})
+
+
+## Pure local cleanup of the DS's match world. Does NOT call back into
+## RoomManager — both callers above arrived here BECAUSE of RoomManager
+## signals firing, so a callback would cycle.
+func _tear_down_match_world() -> void:
 	_active_room_id = ""
-	# Drop the match_controller so the next boot starts a fresh one with
-	# whichever mode the room now has set.
 	if match_controller != null:
 		match_controller.queue_free()
 		match_controller = null
-	# Tell RoomManager — it broadcasts server_match_ended to room players
-	# (game scene's handler stashes the room state + transitions to
-	# room_lobby.tscn).
-	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
-	if room_mgr != null:
-		room_mgr.end_match(room_id)
