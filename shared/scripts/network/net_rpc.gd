@@ -21,6 +21,14 @@ signal client_fire_received(peer_id: int, weapon_id: StringName, yaw: float, pit
 signal client_ability_received(peer_id: int)
 signal client_chat_received(peer_id: int, text: String, color: Color)
 
+# ── Lobby/room RPCs (Phase 1 — see .agent/lobby_plan.md). All client→server,
+#    handled by RoomManager autoload which gates on is_server() and talks
+#    back through the server→client RPCs below.
+signal client_list_rooms_received(peer_id: int)
+signal client_create_room_received(peer_id: int, map_path: String, mode_def_path: String)
+signal client_join_room_received(peer_id: int, room_id: String)
+signal client_leave_room_received(peer_id: int)
+
 # ── client-side signals (fired when an RPC arrives from the server) ──────
 signal server_welcome_received(your_peer: int, server_tick: int)
 signal server_snapshot_received(tick: int, entities: Array)
@@ -42,6 +50,15 @@ signal server_map_info_received(map_path: String)
 ## are already authoritative via _launch_game → server_map_info during
 ## sync_request, so this RPC carries no payload — it's just "go".
 signal server_match_starting_received()
+
+# ── Lobby/room replies (server → client). RoomManager broadcasts to the
+#    relevant audience (requester only for list, all members for state, evicted
+#    peers for destroyed).
+signal server_room_list_received(rooms: Array)
+signal server_room_joined_received(room_id: String, room_state: Dictionary)
+signal server_room_join_failed_received(reason: String)
+signal server_room_state_received(room_state: Dictionary)
+signal server_room_destroyed_received(room_id: String)
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -73,6 +90,32 @@ func client_fire(weapon_id: StringName, yaw: float, pitch: float) -> void:
 func client_use_ability() -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_ability_received.emit(peer)
+
+
+# ── Lobby/room RPCs (client → server). All are dumb relays — RoomManager
+#    listens on the signals above and does the actual logic.
+@rpc("any_peer", "reliable", "call_remote")
+func client_list_rooms() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_list_rooms_received.emit(peer)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_create_room(map_path: String, mode_def_path: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_create_room_received.emit(peer, map_path, mode_def_path)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_join_room(room_id: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_join_room_received.emit(peer, room_id)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_leave_room() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_leave_room_received.emit(peer)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
@@ -160,6 +203,34 @@ func server_map_info(map_path: String) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_match_starting() -> void:
 	server_match_starting_received.emit()
+
+
+# ── Lobby/room RPCs (server → client). RoomManager calls these via rpc_id
+#    to scope the audience: server_room_list to the requester, server_room_state
+#    to all room members, server_room_destroyed to the evicted set.
+@rpc("authority", "reliable", "call_remote")
+func server_room_list(rooms: Array) -> void:
+	server_room_list_received.emit(rooms)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_room_joined(room_id: String, room_state: Dictionary) -> void:
+	server_room_joined_received.emit(room_id, room_state)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_room_join_failed(reason: String) -> void:
+	server_room_join_failed_received.emit(reason)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_room_state(room_state: Dictionary) -> void:
+	server_room_state_received.emit(room_state)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_room_destroyed(room_id: String) -> void:
+	server_room_destroyed_received.emit(room_id)
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

@@ -116,6 +116,10 @@ if [ -f "$PROJ/tests/run_room_manager_test.sh" ]; then
     run_serial "room_manager (server-side room CRUD)" \
         "$PROJ/tests/run_room_manager_test.sh"
 fi
+if [ -f "$PROJ/tests/run_room_rpc_test.sh" ]; then
+    run_serial "room_rpc (NetRpc signals → RoomManager handlers)" \
+        "$PROJ/tests/run_room_rpc_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"

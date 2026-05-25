@@ -31,13 +31,32 @@ const ID_GEN_MAX_ATTEMPTS := 32   # 32^4 = ~1M IDs, 10 rooms — collision basic
 # room's members so their UIs stay live without polling.
 signal room_state_changed(room: Room)
 # Emitted when a room is fully destroyed (host left / last player gone /
-# explicit close). Triggers eviction RPCs + cleanup of any per-room
-# gameplay state (player nodes, lag-comp history, etc).
-signal room_destroyed(room_id: String)
+# explicit close). Carries the list of peers who were in the room at
+# destruction time so the broadcaster can rpc_id to just them — by the
+# time this signal fires, peer_to_room has already been cleared.
+signal room_destroyed(room_id: String, evicted_peers: Array)
 
 
 var rooms: Dictionary = {}              # room_id (String) → Room
 var peer_to_room: Dictionary = {}       # peer_id (int) → room_id (String)
+
+
+func _ready() -> void:
+	# As an autoload, this _ready fires once per Godot process. Hook the
+	# NetRpc signals so RPCs from clients land on our handlers. Each handler
+	# gates on multiplayer.is_server() so this is harmless on a client-side
+	# autoload instance (which still loads but never receives any of these).
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc == null:
+		push_warning("[RoomManager] NetRpc autoload not loaded — room RPCs will not work. Check project.godot autoload order.")
+		return
+	net_rpc.client_list_rooms_received.connect(_on_client_list_rooms)
+	net_rpc.client_create_room_received.connect(_on_client_create_room)
+	net_rpc.client_join_room_received.connect(_on_client_join_room)
+	net_rpc.client_leave_room_received.connect(_on_client_leave_room)
+	# Propagate room mutations out to room members via authority RPCs.
+	room_state_changed.connect(_broadcast_room_state)
+	room_destroyed.connect(_broadcast_room_destroyed)
 
 
 ## Create a new room owned by `host_peer`. Returns the room_id on success,
@@ -133,19 +152,131 @@ func get_room(room_id: String) -> Room:
 	return rooms.get(room_id, null)
 
 
+# ── RPC handlers ─────────────────────────────────────────────────────────
+# Hooked in _ready, gated by multiplayer.is_server() so they no-op on a
+# client-side autoload instance (every Godot process loads the autoload —
+# only the DS / listen-host should actually process these).
+
+func _on_client_list_rooms(peer_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	if not _peer_is_live(peer_id):
+		return
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	net_rpc.server_room_list.rpc_id(peer_id, list_open_rooms())
+
+
+func _on_client_create_room(peer_id: int, map_path: String, mode_def_path: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var room_id: String = create_room(peer_id, map_path, mode_def_path)
+	if not _peer_is_live(peer_id):
+		return  # CRUD still happened; just don't try to reply to a non-live peer
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	if room_id.is_empty():
+		net_rpc.server_room_join_failed.rpc_id(peer_id, "服务器房间已满 (10 房间上限)")
+		return
+	var room: Room = rooms[room_id]
+	net_rpc.server_room_joined.rpc_id(peer_id, room_id, room.to_dict())
+
+
+func _on_client_join_room(peer_id: int, room_id: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var success: bool = join_room(peer_id, room_id)
+	if not _peer_is_live(peer_id):
+		return  # CRUD still happened; just don't reply
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	if not success:
+		var reason: String = "未知错误"
+		if not rooms.has(room_id):
+			reason = "房间不存在"
+		elif rooms[room_id].is_full():
+			reason = "房间已满"
+		elif rooms[room_id].state != Room.STATE_LOBBY:
+			reason = "对局已开始，无法中途加入"
+		net_rpc.server_room_join_failed.rpc_id(peer_id, reason)
+		return
+	var room: Room = rooms[room_id]
+	net_rpc.server_room_joined.rpc_id(peer_id, room_id, room.to_dict())
+
+
+func _on_client_leave_room(peer_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	# leave_room handles host-vs-non-host + emits room_state_changed or
+	# room_destroyed which we broadcast below.
+	leave_room(peer_id)
+
+
+# Whether `peer_id` is currently connected to us as a server. Used to gate
+# rpc_id calls so unit tests (which emit RPC signals with synthetic peer
+# IDs) don't hit "Attempt to call RPC with unknown peer ID" engine errors.
+# Production calls always pass — a peer's RPC handler only fires after the
+# peer was admitted to the connection.
+func _peer_is_live(peer_id: int) -> bool:
+	if not _is_real_networked_server():
+		return false
+	return peer_id in multiplayer.get_peers()
+
+
+# ── State broadcasters ───────────────────────────────────────────────────
+# Hooked to room_state_changed / room_destroyed inside _ready. Gated on
+# is_server() so client-side autoload instances don't try to call rpc_id
+# on a peer connection they're not the authority for.
+
+func _broadcast_room_state(room: Room) -> void:
+	if not _is_real_networked_server():
+		return
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	var state_dict: Dictionary = room.to_dict()
+	# Filter to peers we actually have a connection to. Without this guard
+	# unit tests (and any in-flight peer churn) trigger "Attempt to call
+	# RPC with unknown peer ID" engine errors.
+	var live: Array = multiplayer.get_peers()
+	for peer in room.players:
+		if peer in live:
+			net_rpc.server_room_state.rpc_id(peer, state_dict)
+
+
+func _broadcast_room_destroyed(room_id: String, evicted_peers: Array) -> void:
+	if not _is_real_networked_server():
+		return
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	var live: Array = multiplayer.get_peers()
+	for peer in evicted_peers:
+		if peer in live:
+			net_rpc.server_room_destroyed.rpc_id(peer, room_id)
+
+
+# Returns true only when there's a real network peer AND we're the server
+# on it. OfflineMultiplayerPeer (Godot's default before create_server /
+# create_client) reports is_server() == true even with no network at all,
+# which is why every broadcaster needs this stricter check before calling
+# rpc_id — otherwise headless tests spam "unknown peer ID" errors.
+func _is_real_networked_server() -> bool:
+	var p: MultiplayerPeer = multiplayer.multiplayer_peer
+	if p == null or p is OfflineMultiplayerPeer:
+		return false
+	return multiplayer.is_server()
+
+
 # ── Internals ─────────────────────────────────────────────────────────────
 
 func _destroy_room(room_id: String) -> void:
 	if not rooms.has(room_id):
 		return
 	var room: Room = rooms[room_id]
+	# Capture the player list BEFORE clearing so listeners (e.g. the RPC
+	# broadcaster) can target the evicted set with rpc_id.
+	var evicted: Array = room.players.duplicate()
 	# Evict any stragglers from peer_to_room (host already removed; this
 	# handles the "host left while joiners were still in lobby" case).
 	for peer in room.players:
 		if peer_to_room.get(peer, "") == room_id:
 			peer_to_room.erase(peer)
 	rooms.erase(room_id)
-	room_destroyed.emit(room_id)
+	room_destroyed.emit(room_id, evicted)
 
 
 func _generate_room_id() -> String:
