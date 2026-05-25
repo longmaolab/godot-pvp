@@ -154,6 +154,13 @@ func push_feed(text: String, color: Color = Color.WHITE) -> void:
 		var old: Node = feed.get_child(0)
 		feed.remove_child(old)
 		old.queue_free()
+	# If we're mid scene-teardown (e.g. match ended → swapping to room_lobby)
+	# the HUD node may have detached from the tree before this push_feed call
+	# arrives. get_tree() returns null in that state and create_timer crashes.
+	# Bail cleanly — the feed line we added above will get freed with the
+	# whole HUD anyway.
+	if not is_inside_tree():
+		return
 	# test.md Bug C: capture instance_id (int) instead of the Node so that if
 	# the feed line is freed early (e.g. scene teardown or FEED_MAX_LINES
 	# pushes it out), Godot doesn't dump
