@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://client/scripts/ui/pause_menu.gd" id="1_pause"]
-[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+[ext_resource type="FontVariation" path="res://assets/fonts/ui_font.tres" id="2_font"]
 
 [sub_resource type="StyleBoxFlat" id="pause_panel"]
 bg_color = Color(0.04, 0.07, 0.13, 0.94)

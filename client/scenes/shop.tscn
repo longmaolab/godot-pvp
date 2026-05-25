@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://client/scripts/ui/shop.gd" id="1_shop"]
 [ext_resource type="Theme" path="res://assets/themes/pvp_theme.tres" id="2_theme"]
-[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="3_font"]
+[ext_resource type="FontVariation" path="res://assets/fonts/ui_font.tres" id="3_font"]
 
 [sub_resource type="StyleBoxFlat" id="card"]
 bg_color = Color(0.04, 0.07, 0.13, 0.93)

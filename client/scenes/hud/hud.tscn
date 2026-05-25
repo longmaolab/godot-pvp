@@ -1,7 +1,7 @@
 [gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://client/scripts/ui/hud.gd" id="1_hud"]
-[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+[ext_resource type="FontVariation" path="res://assets/fonts/ui_font.tres" id="2_font"]
 
 [sub_resource type="StyleBoxFlat" id="bar_bg"]
 bg_color = Color(0.03, 0.05, 0.1, 0.85)

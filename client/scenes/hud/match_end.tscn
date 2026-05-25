@@ -1,7 +1,7 @@
 [gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://client/scripts/ui/match_end.gd" id="1_me"]
-[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="2_font"]
+[ext_resource type="FontVariation" path="res://assets/fonts/ui_font.tres" id="2_font"]
 
 [sub_resource type="Gradient" id="me_glow_grad"]
 offsets = PackedFloat32Array(0, 1)
