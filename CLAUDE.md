@@ -37,3 +37,31 @@ bash tests/run_all.sh
 - DS-M1 ~ M6 主线已完成（服务器世界 / 输入 RPC / 快照广播 / 权威开火 + lag comp / 死亡重生 / 砍范围）
 - Combat juice Round 1 + 2 完成
 - 详见 `.agent/todo.md` 的「已完成」段落
+
+## 生产环境（已上线）
+
+| 项 | 值 |
+|---|---|
+| 公开入口 | https://game.boobank.com/godot-pvp/ |
+| WebSocket | wss://game.boobank.com/godot-pvp/ws |
+| VPS 路径 | `/opt/games/godot-pvp/` |
+| systemd 服务 | `godot-pvp-game.service` |
+| DS 端口 | 7778（arena-shooter 占 7777） |
+| SSH | `ssh root@207.148.98.206` |
+
+**部署流程**：
+
+```bash
+./deploy.sh        # 自动 export web → commit + push → ssh VPS → pull + import + restart
+```
+
+`deploy.sh` 改自 arena-shooter-3d,智能跳过未改动的 export 步骤。
+
+**Caddy 注意**：Caddyfile 写了 `admin off`,改配置后必须用 `systemctl restart caddy`,**`systemctl reload caddy` 永远失败**(走 admin API)。
+
+**只看日志 / 重启服务**：
+
+```bash
+ssh root@207.148.98.206 'journalctl -u godot-pvp-game -f'
+ssh root@207.148.98.206 'systemctl restart godot-pvp-game'
+```
