@@ -591,6 +591,7 @@ func _on_browse_rooms_pressed() -> void:
 ## panel "connecting" state. Called by all 3 paths (JOIN-by-address, CREATE,
 ## BROWSE) so failure handling lives in one spot.
 func _connect_to_server(address: String) -> void:
+	print("[menu] _connect_to_server target=", address, " _connect_intent=", _connect_intent)
 	var peer := WebSocketMultiplayerPeer.new()
 	var err := peer.create_client(address)
 	if err != OK:

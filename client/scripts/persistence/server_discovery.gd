@@ -25,12 +25,18 @@ func _ready() -> void:
 		return
 	# Local-dev guard: when running from the editor (F5 / Play), KEEP the
 	# 127.0.0.1 default even if server.json is checked in. Without this,
-	# pressing CREATE ROOM in the editor connects to the production DS
-	# at game.boobank.com (which usually lags behind local code → RPC
-	# checksum mismatch and infinite "Connected — 等房主点 START"). To
-	# explicitly test against production from the editor, type the wss://
-	# URL into the JOIN BY ADDRESS field manually.
-	if OS.has_feature("editor"):
+	# pressing CREATE ROOM in the editor connects to the production DS at
+	# game.boobank.com (which usually lags behind local code → RPC
+	# checksum mismatch and infinite "Connected — 等房主点 START").
+	#
+	# Use OS.is_debug_build(): true for editor + F5'd runtime + exported
+	# debug builds, false ONLY for exported release builds. (Tried
+	# OS.has_feature("editor") first — that's true ONLY in the editor's
+	# own binary, NOT in the game runtime F5 launches, so it failed to
+	# catch the F5 case.) For exported release builds (production
+	# deploys), server.json is still read normally.
+	if OS.is_debug_build():
+		print("[ServerDiscovery] debug build — using local default ", url)
 		resolved.emit(url)
 		return
 	# Exported native builds + web: try the bundled file first.
