@@ -75,11 +75,7 @@ func _run_client() -> void:
 	if not await _wait_for_peers(2, 5.0):
 		_die("peer count never reached 2")
 		return
-	# Wait out spawn protection before measuring burst damage. Otherwise the
-	# first few accepted shots can be legitimately absorbed by the host's
-	# 2.5s invincibility window and the test becomes about i-frames, not burst
-	# acceptance.
-	await get_tree().create_timer(3.1).timeout
+	await get_tree().create_timer(1.0).timeout
 
 	var my_id: int = multiplayer.get_unique_id()
 	var me: Node = game_node.players_by_peer.get(my_id)

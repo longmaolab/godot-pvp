@@ -318,6 +318,13 @@ func _physics_process(delta: float) -> void:
 	# remote peer from received input RPCs. Mutually exclusive in practice.
 	if is_local:
 		_apply_camera_kick(delta)
+		# Listen-host clients also stream movement input to the host so the host's
+		# mirror of this player runs through CharacterBody3D collision instead of
+		# blindly accepting transform pushes. Keep fire on the existing
+		# client_fire RPC path there; otherwise the host would resolve each shot
+		# twice (once from INPUT_FIRE edge, once from client_fire).
+		if _is_networked() and not multiplayer.is_server():
+			_send_input_to_server(false)
 		_step_movement(delta)
 		_step_weapon(delta)
 		_step_net_send(delta)
@@ -332,17 +339,6 @@ func _physics_process(delta: float) -> void:
 		_step_weapon_server(delta)
 	else:
 		_apply_remote_state(delta)
-		# Listen-host server-side view of a remote peer: position comes from the
-		# peer's _net_apply_state, but weapon state (time_until_next_shot,
-		# is_reloading) is set authoritatively on this side by
-		# _on_client_fire_server — and nothing else ticks it. Without this call,
-		# the cooldown clamp from the FIRST fire stays >0 forever and every
-		# subsequent fire RPC from the peer is rejected with "cooldown remaining"
-		# (kid reported "B 打光所有子弹但 A 只掉 25 血"). Same applies to the
-		# auto-reload triggered server-side on empty-mag: reload_remaining never
-		# counts down, the peer is stuck in is_reloading=true forever.
-		if _is_networked() and multiplayer.is_server():
-			_step_weapon_server(delta)
 	# Drive the GLB animation state based on actual horizontal velocity.
 	if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 
@@ -354,7 +350,7 @@ var _input_tick: int = 0
 var _input_send_accum: float = 0.0
 
 
-func _send_input_to_server() -> void:
+func _send_input_to_server(include_fire_bit: bool = true) -> void:
 	_input_send_accum += get_physics_process_delta_time()
 	if _input_send_accum < NET_SYNC_INTERVAL:
 		return
@@ -366,11 +362,15 @@ func _send_input_to_server() -> void:
 	if Input.is_action_pressed(&"move_right"):   bits |= NetProtocol.INPUT_RIGHT
 	if Input.is_action_pressed(&"jump"):         bits |= NetProtocol.INPUT_JUMP
 	if Input.is_action_pressed(&"sprint"):       bits |= NetProtocol.INPUT_SPRINT
-	if Input.is_action_pressed(&"fire"):         bits |= NetProtocol.INPUT_FIRE
+	if include_fire_bit and Input.is_action_pressed(&"fire"):
+		bits |= NetProtocol.INPUT_FIRE
 	if Input.is_action_pressed(&"reload"):       bits |= NetProtocol.INPUT_RELOAD
 	if Input.is_action_pressed(&"ability"):      bits |= NetProtocol.INPUT_ABILITY
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc == null:
+		return
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
 	_input_tick += 1
 	net_rpc.client_send_input.rpc_id(1, _input_tick, bits, _aim_yaw, _aim_pitch)

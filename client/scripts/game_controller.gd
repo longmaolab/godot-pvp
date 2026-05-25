@@ -361,6 +361,10 @@ func _enter_host_mode() -> void:
 	if net_rpc != null:
 		net_rpc.client_fire_received.connect(_on_client_fire_server)
 		net_rpc.client_ability_received.connect(_on_client_ability_server)
+		# Listen-host movement authority: remote peers now stream input bits to the
+		# host as well, so the host simulates their CharacterBody3D through real
+		# collision instead of accepting raw transform pushes.
+		net_rpc.client_input_received.connect(_on_client_input_ds)
 	# Stand up the lag-compensator so the host accumulates position history
 	# starting from match start.
 	var lc_script := load("res://server/scripts/lag_compensator.gd")
@@ -690,10 +694,11 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3) -> void:
 	p.died.connect(func(killer): _on_any_player_died(captured_peer, killer))
 	p.set_multiplayer_authority(peer_id)
 	p.is_local = (peer_id == local_id)
-	# DS-M2: on a dedicated server, the server owns every player's simulation
-	# but consumes input over the network. Mark these players so they read
-	# from push_remote_input instead of Input.* / _apply_remote_state.
-	if is_dedicated_server and peer_id != local_id:
+	# Server-side mirrors of remote peers (dedicated OR listen-host) must
+	# simulate from input bits on the authority side. Accepting raw transform
+	# pushes lets the remote peer bypass CharacterBody3D collision entirely,
+	# which is exactly the "walk through every wall/player" bug on host.
+	if multiplayer.is_server() and peer_id != local_id:
 		p.use_remote_input = true
 	# DS-M3: on a DS client (we're connected to a dedicated server), no player
 	# is locally authoritative — everyone is rendered from snapshots. The local
