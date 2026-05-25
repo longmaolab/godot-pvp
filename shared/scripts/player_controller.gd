@@ -42,28 +42,15 @@ var ground_friction: float = 30.0
 @export var player_name: String = "Player"
 @export var skin_index: int = 0               # 0..17 — selects character-{a..r}.glb
 
-const SKIN_LETTERS := "abcdefghijklmnopqr"   # 18 Kenney skins
-# Per-skin model scale. Kenney rigs have wildly different native heights
-# (head-attach Y from 1.18 → 1.86 GLB units between skins a..r); a single
-# scale leaves either the tall ones poking miles above the HeadHitbox or the
-# short ones with their head buried inside the BodyHitbox. Each entry =
-# 1.65 / measured native head-origin Y, so every skin's neck lands at world
-# Y≈1.65, head mesh center near sphere center Y=1.9. Measured via
-# tests/measure_hitbox.gd; re-run if Kenney updates the GLBs.
-const SKIN_SCALES: Array = [
-	0.888, 0.898, 0.911, 0.926, 0.926, 0.943, 0.964, 0.989, 1.017,
-	1.017, 1.050, 1.088, 1.132, 1.183, 1.183, 1.243, 1.313, 1.397,
-]
-const SKIN_PATH := "res://assets/models/characters/character-%s.glb"
-
-var _current_skin: int = -1
-var _anim_player: AnimationPlayer = null
-var _current_anim: String = ""
-const _ANIM_LOOPED := ["idle", "walk", "sprint"]
-const _ANIM_IDLE := "idle"
-const _ANIM_WALK := "walk"
-const _ANIM_SPRINT := "sprint"
-const _ANIM_DIE := "die"
+# Skin + animation state extracted to PlayerSkin (Node child added in _ready).
+# Kenney skin table, per-skin Y-scales, AnimationPlayer wiring and play-state
+# all live there. `apply_skin(idx)` below is a thin wrapper for back-compat
+# with tests that call it via `.call("apply_skin", idx)`.
+# Preload (not class_name) so headless tests don't need the editor to have
+# populated the global script class registry first.
+const _PlayerSkinScript = preload("res://shared/scripts/player_skin.gd")
+const PlayerVisuals = preload("res://shared/scripts/player_visuals.gd")
+var _skin: Node = null
 
 # Per-weapon ammo tracking so swap doesn't reset everyone's mag/reserve.
 var _ammo_state: Dictionary = {}              # weapon_id → {in_mag: int, reserve: int}
@@ -153,6 +140,10 @@ var last_attacker: Node = null
 func _ready() -> void:
 	# Tag for group lookups (jump pads, pickups, AI target search).
 	add_to_group(&"player")
+	# Spin up the skin + animation subsystem. apply_skin below delegates here.
+	_skin = _PlayerSkinScript.new()
+	_skin.name = "_PlayerSkin"
+	add_child(_skin)
 	# Equip the chosen character GLB. Replaces the procedural box body with
 	# a Kenney humanoid skin.
 	apply_skin(skin_index)
@@ -201,7 +192,7 @@ func _ready() -> void:
 	# Floating name tag above remote players so the human can SEE the enemy
 	# (and where to aim). Skipped on the local player's own avatar.
 	if not is_local:
-		_create_name_tag()
+		PlayerVisuals.attach_name_tag(self, player_name)
 
 
 func _configure_camera_current() -> void:
@@ -210,21 +201,6 @@ func _configure_camera_current() -> void:
 	camera.current = is_local
 	if is_local:
 		camera.make_current()
-
-
-func _create_name_tag() -> void:
-	var tag := Label3D.new()
-	tag.name = "_NameTag"
-	tag.text = player_name
-	tag.font_size = 48
-	tag.outline_size = 12
-	tag.outline_modulate = Color(0, 0, 0, 1)
-	tag.modulate = Color(1, 0.85, 0.4, 1)
-	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	tag.no_depth_test = true  # render through walls so you can find enemies
-	tag.pixel_size = 0.004
-	tag.position = Vector3(0, 2.4, 0)  # above head
-	add_child(tag)
 
 
 ## The player's own head + visor + body + GLB skin all wrap around the
@@ -245,72 +221,15 @@ func _hide_first_person_obstructions() -> void:
 
 
 # ── Skin (GLB character model) ───────────────────────────────────────────
+## Thin public wrapper around PlayerSkin.apply_skin. Kept on PlayerController
+## so existing test code (`.call("apply_skin", idx)`) and external callers
+## like the menu skin picker keep working without indirection.
 func apply_skin(idx: int) -> void:
-	idx = clampi(idx, 0, SKIN_LETTERS.length() - 1)
-	if idx == _current_skin and _anim_player != null:
+	if _skin == null:
 		return
-	_current_skin = idx
 	var holder: Node3D = get_node_or_null(^"Visuals/ModelHolder") as Node3D
-	if holder == null:
-		return
-	for c in holder.get_children():
-		c.queue_free()
-	var letter: String = SKIN_LETTERS.substr(idx, 1)
-	var path: String = SKIN_PATH % letter
-	var scene: PackedScene = load(path) as PackedScene
-	if scene == null:
-		push_warning("[player] missing skin: %s" % path)
-		return
-	var model: Node3D = scene.instantiate() as Node3D
-	if model == null:
-		return
-	model.scale = Vector3.ONE * SKIN_SCALES[idx]
-	holder.add_child(model)
-	# Hide the procedural body — GLB replaces it.
-	for body_name in ["Torso", "ArmL", "ArmR", "LegL", "LegR"]:
-		var n: Node = get_node_or_null(NodePath("Visuals/" + body_name))
-		if n is MeshInstance3D:
-			(n as MeshInstance3D).visible = false
-	# Wire up the GLB's baked AnimationPlayer.
-	_anim_player = _find_animation_player(model)
-	if _anim_player:
-		for n in _anim_player.get_animation_list():
-			if n in _ANIM_LOOPED:
-				var anim: Animation = _anim_player.get_animation(n)
-				if anim:
-					anim.loop_mode = Animation.LOOP_LINEAR
-		_play_anim(_ANIM_IDLE)
-
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for c in node.get_children():
-		var found: AnimationPlayer = _find_animation_player(c)
-		if found:
-			return found
-	return null
-
-
-func _play_anim(anim: String) -> void:
-	if _anim_player == null or anim == _current_anim:
-		return
-	if not _anim_player.has_animation(anim):
-		return
-	_current_anim = anim
-	var blend: float = 0.0 if anim == _ANIM_DIE else 0.12
-	_anim_player.play(anim, blend)
-
-
-func _select_anim() -> String:
-	if is_dead:
-		return _ANIM_DIE
-	var horiz: float = Vector2(velocity.x, velocity.z).length()
-	if horiz > 7.5:
-		return _ANIM_SPRINT
-	if horiz > 0.4:
-		return _ANIM_WALK
-	return _ANIM_IDLE
+	var visuals: Node3D = get_node_or_null(^"Visuals") as Node3D
+	_skin.apply_skin(idx, holder, visuals)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -392,7 +311,7 @@ func _physics_process(delta: float) -> void:
 			# kick / ammo countdown to happen when they pull the trigger.
 			_step_weapon_visuals_only(delta)
 		_apply_remote_state(delta)
-		_play_anim(_select_anim())
+		if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 		return
 	# Authoritative branch — this controller owns simulation.
 	# is_local = local human / bot. use_remote_input = server simulating a
@@ -425,7 +344,7 @@ func _physics_process(delta: float) -> void:
 		if _is_networked() and multiplayer.is_server():
 			_step_weapon_server(delta)
 	# Drive the GLB animation state based on actual horizontal velocity.
-	_play_anim(_select_anim())
+	if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 
 
 ## DS-M3: client-side input sender. Packs the current Input.* state into a bit
@@ -700,14 +619,14 @@ func _step_weapon_visuals_only(delta: float) -> void:
 	# the server-side raycast is the one that actually applies damage.
 	var hit_info: Dictionary = _local_hitscan()
 	fired.emit(weapon_def, hit_info)
-	_spawn_local_tracer(weapon_def.bullet_color, hit_info)
+	PlayerVisuals.spawn_local_tracer(get_tree(), camera, weapon_def.bullet_color, hit_info)
 	_play_shoot_sound()
-	_spawn_muzzle_flash()
+	PlayerVisuals.spawn_muzzle_flash(weapon_def, camera, get_tree())
 	_apply_recoil_kick()
 	if not hit_info.is_empty():
 		var collider: Node = hit_info.get("collider", null)
 		if collider != null and not collider.has_meta(&"owner_player"):
-			_spawn_wall_impact(hit_info.position, hit_info.normal)
+			PlayerVisuals.spawn_wall_impact(get_tree(), hit_info.position, hit_info.normal)
 
 
 ## DS-M4: minimal weapon tick for server-simulated players. Just decrements
@@ -774,17 +693,17 @@ func try_fire() -> bool:
 	# for the local shooter. Server-authoritative damage still happens via
 	# the network branch below, but these visuals run client-side immediately.
 	if is_local:
-		_spawn_local_tracer(weapon_def.bullet_color, hit_info)
+		PlayerVisuals.spawn_local_tracer(get_tree(), camera, weapon_def.bullet_color, hit_info)
 		_play_shoot_sound()
 		if is_human_input:
 			# Heavy per-shot effects (point light + particles + recoil kick) only
 			# for the actual human shooter. Bots fire too often to afford this.
-			_spawn_muzzle_flash()
+			PlayerVisuals.spawn_muzzle_flash(weapon_def, camera, get_tree())
 			_apply_recoil_kick()
 			if not hit_info.is_empty():
 				var collider: Node = hit_info.get("collider", null)
 				if collider != null and not collider.has_meta(&"owner_player"):
-					_spawn_wall_impact(hit_info.position, hit_info.normal)
+					PlayerVisuals.spawn_wall_impact(get_tree(), hit_info.position, hit_info.normal)
 
 	if _is_networked():
 		# Multiplayer: damage is server-authoritative. We send the fire intent
@@ -992,180 +911,9 @@ func respawn(at: Vector3) -> void:
 
 
 # ── shooting ──────────────────────────────────────────────────────────────
-## Brief bright flash at the muzzle: an OmniLight3D pulse + a small emissive
-## sphere. Both auto-free after ~80ms. Color follows the weapon's bullet_color.
-func _spawn_muzzle_flash() -> void:
-	if weapon_def == null:
-		return
-	var color: Color = weapon_def.bullet_color
-	var flash_pos: Vector3 = camera.global_transform * Vector3(0.18, -0.14, -0.5)
-
-	# Dynamic point light — short and bright, faded by tween.
-	var light := OmniLight3D.new()
-	light.light_color = color
-	light.light_energy = 6.0
-	light.omni_range = 4.5
-	light.omni_attenuation = 1.5
-	get_tree().root.add_child(light)
-	light.global_position = flash_pos
-	var tl: Tween = light.create_tween()
-	tl.tween_property(light, "light_energy", 0.0, 0.08)
-	tl.tween_callback(light.queue_free)
-
-	# Tiny visible spark sphere so even un-lit surroundings show the flash.
-	var spark := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.08
-	sm.height = 0.16
-	spark.mesh = sm
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.emission_enabled = true
-	mat.emission = color
-	mat.emission_energy_multiplier = 8.0
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	spark.material_override = mat
-	get_tree().root.add_child(spark)
-	spark.global_position = flash_pos
-	var ts: Tween = spark.create_tween()
-	ts.tween_property(mat, "emission_energy_multiplier", 0.0, 0.07)
-	ts.tween_callback(spark.queue_free)
-
-
-## A short black scuff + a small burst of glowing particles where a bullet
-## hits the world. Only fires on non-player hits (we have tracer + hitmarker
-## for player hits already).
-func _spawn_wall_impact(world_pos: Vector3, normal: Vector3) -> void:
-	# Scuff mark — flattened sphere lying on the surface.
-	var decal := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.05
-	sm.height = 0.03
-	decal.mesh = sm
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.05, 0.05, 0.05, 0.9)
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	decal.material_override = mat
-	get_tree().root.add_child(decal)
-	decal.global_position = world_pos + normal * 0.01
-	# Orient the flat disk so its Y axis points along the surface normal.
-	if normal.length_squared() > 0.0:
-		var up: Vector3 = normal.normalized()
-		var fwd: Vector3 = up.cross(Vector3.UP)
-		if fwd.length_squared() < 0.001:
-			fwd = up.cross(Vector3.RIGHT)
-		fwd = fwd.normalized()
-		var right: Vector3 = up.cross(fwd).normalized()
-		decal.global_transform.basis = Basis(right, up, fwd)
-	var td: Tween = decal.create_tween()
-	td.tween_interval(1.6)
-	td.tween_property(mat, "albedo_color:a", 0.0, 0.6)
-	td.tween_callback(decal.queue_free)
-
-	# Spark burst — CPUParticles3D one-shot, 5 emissive particles.
-	var sparks := CPUParticles3D.new()
-	sparks.amount = 6
-	sparks.lifetime = 0.45
-	sparks.one_shot = true
-	sparks.explosiveness = 1.0
-	sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_POINT
-	sparks.direction = normal
-	sparks.spread = 60.0
-	sparks.initial_velocity_min = 2.0
-	sparks.initial_velocity_max = 6.0
-	sparks.gravity = Vector3(0, -8.0, 0)
-	sparks.scale_amount_min = 0.04
-	sparks.scale_amount_max = 0.08
-	var smat := StandardMaterial3D.new()
-	smat.albedo_color = Color(1.0, 0.85, 0.4)
-	smat.emission_enabled = true
-	smat.emission = Color(1.0, 0.7, 0.2)
-	smat.emission_energy_multiplier = 5.0
-	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var spark_mesh := SphereMesh.new()
-	spark_mesh.radius = 0.025
-	spark_mesh.height = 0.05
-	sparks.mesh = spark_mesh
-	sparks.material_override = smat
-	get_tree().root.add_child(sparks)
-	sparks.global_position = world_pos
-	# Auto-free after particles finish.
-	var tp: Tween = sparks.create_tween()
-	tp.tween_interval(sparks.lifetime + 0.1)
-	tp.tween_callback(sparks.queue_free)
-
-
-## Traveling-bullet tracer adapted from arena-shooter-3d/scripts/player.gd
-## (line 635). A glowing sphere head flies from muzzle to impact over
-## 0.05-0.25s (distance-scaled) with a thin streak fading behind it. This
-## reads as a real projectile, not the static line v0.3 used to draw.
-func _spawn_local_tracer(color: Color, hit_info: Dictionary) -> void:
-	var muzzle_world: Vector3 = camera.global_transform * Vector3(0.18, -0.16, -0.45)
-	var end_pos: Vector3
-	var hit_player: bool = false
-	if hit_info.is_empty():
-		end_pos = camera.global_position + (-camera.global_transform.basis.z) * 120.0
-	else:
-		end_pos = hit_info.position
-		var c: Node = hit_info.get("collider", null)
-		hit_player = c != null and c.has_meta(&"owner_player")
-	var dist: float = muzzle_world.distance_to(end_pos)
-	if dist < 0.5:
-		return
-	# Capped distance-scaled flight time so a sniper shot has visible travel
-	# but close-range fire still feels snappy.
-	var flight_time: float = clampf(0.05 + dist * 0.0025, 0.05, 0.25)
-	# Hit-player tracers tint slightly red so even peripheral vision tells
-	# the kid "you connected" vs "you missed".
-	var trail_color: Color = Color(1, 0.45, 0.45) if hit_player else color
-
-	# Bullet head — glowing sphere that flies from muzzle to impact.
-	var bullet_head := MeshInstance3D.new()
-	var bullet_mesh := SphereMesh.new()
-	bullet_mesh.radius = 0.08
-	bullet_mesh.height = 0.16
-	bullet_mesh.radial_segments = 8
-	bullet_mesh.rings = 4
-	bullet_head.mesh = bullet_mesh
-	bullet_head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var bullet_mat := StandardMaterial3D.new()
-	bullet_mat.albedo_color = trail_color
-	bullet_mat.emission_enabled = true
-	bullet_mat.emission = trail_color
-	bullet_mat.emission_energy_multiplier = 6.5
-	bullet_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	bullet_head.material_override = bullet_mat
-	get_tree().root.add_child(bullet_head)
-	bullet_head.global_position = muzzle_world
-	var ht: Tween = bullet_head.create_tween()
-	ht.tween_property(bullet_head, "global_position", end_pos, flight_time)
-	ht.tween_callback(bullet_head.queue_free)
-
-	# Thin streak that fades behind the bullet head.
-	var trail := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.04, 0.04, dist)
-	trail.mesh = bm
-	trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var trail_mat := StandardMaterial3D.new()
-	trail_mat.albedo_color = Color(trail_color.r, trail_color.g, trail_color.b, 0.55)
-	trail_mat.emission_enabled = true
-	trail_mat.emission = trail_color
-	trail_mat.emission_energy_multiplier = 3.0
-	trail_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	trail_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	trail.material_override = trail_mat
-	get_tree().root.add_child(trail)
-	trail.global_position = (muzzle_world + end_pos) * 0.5
-	# look_at fails on collinear vectors (shot straight up/down). Skip orient.
-	var dir_to_end: Vector3 = end_pos - trail.global_position
-	if absf(dir_to_end.normalized().dot(Vector3.UP)) < 0.99 and dir_to_end.length() > 0.01:
-		trail.look_at(end_pos, Vector3.UP, true)
-	var tt: Tween = trail.create_tween()
-	tt.tween_property(trail_mat, "albedo_color:a", 0.0, flight_time * 0.8)
-	tt.parallel().tween_property(trail_mat, "emission_energy_multiplier", 0.0, flight_time * 0.8)
-	tt.tween_callback(trail.queue_free)
+# Visual effect spawn helpers (muzzle flash / wall impact / bullet tracer)
+# moved to shared/scripts/player_visuals.gd as PlayerVisuals static methods.
+# Call sites above use PlayerVisuals.spawn_*(get_tree(), camera, ...).
 
 
 ## Performs the hitscan and returns hit info, but does NOT apply damage —
