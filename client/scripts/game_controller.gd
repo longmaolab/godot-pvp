@@ -65,11 +65,6 @@ var _ready_peers: Array[int] = []
 # window is rejected rather than triggering a full re-spawn broadcast.
 var _synced_peers: Dictionary = {}   # peer_id → last_sync_ms (int)
 
-# Per-peer rate-limit state for spammy RPCs (chat). Token bucket: each peer
-# has a count of recent calls; once the budget is exhausted, drop additional
-# calls until the window elapses. Keyed by (peer_id, kind).
-var _rpc_rate_state: Dictionary = {}   # peer_id → { "chat_last_ms": int, "chat_count": int }
-
 # H2: one outstanding respawn timer per peer. If the peer dies twice quickly
 # (e.g. takes damage during the down-state, or a stale RPC arrives) we cancel
 # the prior timer and replace it — otherwise we'd schedule N respawns and the
@@ -259,14 +254,15 @@ func _physics_process(delta: float) -> void:
 			flags |= NetProtocol.ENTITY_FLAG_DEAD
 		if "is_reloading" in p and p.is_reloading:
 			flags |= NetProtocol.ENTITY_FLAG_RELOADING
+		# No mag/res: server doesn't track per-weapon ammo, and pushing its
+		# (stale) ammo down to the client overwrites whatever weapon the
+		# client locally switched to. See _on_server_snapshot for context.
 		entities.append({
 			"p":     peer_id,
 			"pos":   p.global_position,
 			"yaw":   p.rotation.y,
 			"pitch": p.head.rotation.x if "head" in p else 0.0,
 			"hp":    int(p.hp) if "hp" in p else 0,
-			"mag":   int(p.ammo_in_mag) if "ammo_in_mag" in p else 0,
-			"res":   int(p.ammo_reserve) if "ammo_reserve" in p else 0,
 			"flags": flags,
 		})
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
@@ -394,10 +390,13 @@ func _on_peer_disconnected_as_host(peer: int) -> void:
 	# dict entry means _ds_respawn_player's `victim == null` early-return is
 	# the only side effect when it eventually fires.
 	_pending_respawn.erase(peer)
-	# C2: free per-peer rate-limit state so the dict doesn't grow unboundedly
-	# across many connect/disconnect cycles.
+	# C2 + R4: free per-peer rate-limit state so the dict doesn't grow
+	# unboundedly across connect/disconnect cycles, AND so a recycled
+	# peer-id doesn't inherit the previous occupant's chat quota.
 	_synced_peers.erase(peer)
-	_rpc_rate_state.erase(peer)
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null and net_rpc.has_method(&"forget_peer"):
+		net_rpc.forget_peer(peer)
 	_rpc_despawn.rpc(peer)
 	_despawn(peer)
 
@@ -520,20 +519,25 @@ func _on_server_snapshot(tick: int, entities: Array) -> void:
 		var pitch: float = float(e.get("pitch", 0.0))
 		if p.has_method(&"push_snapshot"):
 			p.push_snapshot(now_ms, pos, yaw, pitch)
-		# Sync HP + ammo from server-authoritative snapshot to the local view
-		# so the HUD reflects the actual game state (not stale local-only state).
+		# Sync HP from server-authoritative snapshot to the local view so the
+		# HUD reflects the actual game state.
+		#
+		# NOT ammo: the server doesn't know about client-side weapon switches
+		# (equip_slot() is local-only), so its ammo_in_mag is for whichever
+		# weapon it thinks the player still holds (typically the starting
+		# weapon). Pushing that back to the client overwrites the freshly
+		# loaded SRX/sniper/etc magazine with the AK20's 29 rounds — kid
+		# reported "切到狙击但开火表现还是 AK20". The server's ammo gate in
+		# _on_client_fire_server still runs against the server's own counter;
+		# they drift but neither corrupts the other. Proper fix needs a
+		# client_switch_weapon RPC + server-tracked weapon_id in the snapshot
+		# (codexreview.md 2026-05-25 P0 option 2 / test.md Bug A) — wired in
+		# when the loadout/shop system goes live.
 		if p.is_local:
 			var hp: int = int(e.get("hp", -1))
 			if hp >= 0 and "hp" in p:
 				p.hp = float(hp)
 				p.hp_changed.emit(p.hp, p.max_hp)
-			var mag: int = int(e.get("mag", -1))
-			var res: int = int(e.get("res", -1))
-			if mag >= 0 and "ammo_in_mag" in p:
-				p.ammo_in_mag = mag
-				if res >= 0 and "ammo_reserve" in p:
-					p.ammo_reserve = res
-				p.ammo_changed.emit(p.ammo_in_mag, p.ammo_reserve)
 
 
 ## Connection failures land us back at the main menu with a clear error
@@ -798,9 +802,26 @@ func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float
 			if is_dedicated_server:
 				print("[server]   ↳ ignored: non-finite aim")
 			return
+		# R2: pick the correct aim baseline for this peer's connection mode.
+		# DS path → server replays inputs into _remote_input_yaw/pitch.
+		# Listen-host path → use_remote_input=false; instead the remote
+		# client's last `_net_apply_state` RPC populates _net_remote_yaw/pitch.
+		# Previously this branch was gated solely on use_remote_input, so on
+		# every listen-host LAN game the snap-aim cheat check was a no-op.
+		var have_baseline: bool = false
+		var baseline_yaw: float = 0.0
+		var baseline_pitch: float = 0.0
 		if shooter.use_remote_input and shooter._remote_input_tick >= 0:
-			var dy: float = absf(wrapf(fire_yaw - shooter._remote_input_yaw, -PI, PI))
-			var dp: float = absf(fire_pitch - shooter._remote_input_pitch)
+			have_baseline = true
+			baseline_yaw = shooter._remote_input_yaw
+			baseline_pitch = shooter._remote_input_pitch
+		elif "_net_has_remote_target" in shooter and shooter._net_has_remote_target:
+			have_baseline = true
+			baseline_yaw = shooter._net_remote_yaw
+			baseline_pitch = shooter._net_remote_pitch
+		if have_baseline:
+			var dy: float = absf(wrapf(fire_yaw - baseline_yaw, -PI, PI))
+			var dp: float = absf(fire_pitch - baseline_pitch)
 			if dy > NetProtocol.MAX_AIM_DELTA_RAD or dp > NetProtocol.MAX_AIM_DELTA_RAD:
 				if is_dedicated_server:
 					print("[server]   ↳ ignored: aim delta yaw=%.2f pitch=%.2f exceeds %.2f" % [dy, dp, NetProtocol.MAX_AIM_DELTA_RAD])
@@ -844,7 +865,22 @@ func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float
 			pnode.global_position = sample.pos
 			pnode.rotation.y = sample.yaw
 			pnode.head.rotation.x = sample.pitch
-		# Force physics server to refresh transforms before raycast.
+			# Codex 12:39 P1: PhysicsServer3D doesn't auto-resync Area3D
+			# broadphase entries when their global_position is written from
+			# script; same-tick raycasts will see the OLD hitbox AABB. Push
+			# the new transform for the target's body AND both hitbox areas
+			# so intersect_ray below sees the rewound silhouette. Skipping
+			# this is why the experimental lag_comp_integration test
+			# flickered between hit/miss in a single tick.
+			PhysicsServer3D.body_set_state(pnode.get_rid(),
+				PhysicsServer3D.BODY_STATE_TRANSFORM, pnode.global_transform)
+			if "head_hitbox" in pnode and pnode.head_hitbox != null:
+				PhysicsServer3D.area_set_transform(pnode.head_hitbox.get_rid(),
+					pnode.head_hitbox.global_transform)
+			if "body_hitbox" in pnode and pnode.body_hitbox != null:
+				PhysicsServer3D.area_set_transform(pnode.body_hitbox.get_rid(),
+					pnode.body_hitbox.global_transform)
+		# Shooter's own physics state (kept for the aim-spoof a few lines up).
 		PhysicsServer3D.body_set_state(shooter.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, shooter.global_transform)
 
 	var origin: Vector3 = shooter.camera.global_position
@@ -865,7 +901,10 @@ func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float
 		else:
 			print("[server]   ↳ ray hit %s (%s)" % [hit.collider.name, hit.collider.get_class()])
 
-	# Restore rewound players regardless of hit/miss.
+	# Restore rewound players regardless of hit/miss. Also re-push physics
+	# transforms so other systems (collisions, area enter/exit, the very
+	# next raycast on a different fire RPC the same tick) see the present
+	# position rather than the lingering rewound one.
 	for tp in saved_positions.keys():
 		var pnode2: Node = players_by_peer.get(tp)
 		if pnode2 == null or not is_instance_valid(pnode2):
@@ -874,6 +913,14 @@ func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float
 		pnode2.global_position = saved["pos"]
 		pnode2.rotation.y = saved["yaw"]
 		pnode2.head.rotation.x = saved["pitch"]
+		PhysicsServer3D.body_set_state(pnode2.get_rid(),
+			PhysicsServer3D.BODY_STATE_TRANSFORM, pnode2.global_transform)
+		if "head_hitbox" in pnode2 and pnode2.head_hitbox != null:
+			PhysicsServer3D.area_set_transform(pnode2.head_hitbox.get_rid(),
+				pnode2.head_hitbox.global_transform)
+		if "body_hitbox" in pnode2 and pnode2.body_hitbox != null:
+			PhysicsServer3D.area_set_transform(pnode2.body_hitbox.get_rid(),
+				pnode2.body_hitbox.global_transform)
 	# Restore the shooter's pre-fire aim too — we only spoofed it for the ray.
 	if not saved_shooter_aim.is_empty():
 		shooter.rotation.y = saved_shooter_aim["yaw"]
@@ -898,18 +945,28 @@ func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float
 			var dmg: float = PlayerController._compute_damage(weapon, is_head)
 			var victim_peer: int = victim.get_multiplayer_authority()
 			var hp_before: float = victim.hp
-			var new_hp: float = maxf(0.0, victim.hp - dmg)
 			victim.apply_damage(dmg, shooter)
+			# test.md Bug B: read AUTHORITATIVE post-damage HP rather than the
+			# pre-computed `victim.hp - dmg`. If apply_damage rejected the hit
+			# (typically the 2.5s post-respawn i-frame, or victim_is_dead from a
+			# concurrent kill shot), HP is unchanged. Broadcasting the fake
+			# reduction would let every client decrement HP and potentially
+			# fake a death animation for a still-alive victim — kid reported
+			# "刚复活就立刻又被弹回死亡画面".
+			var new_hp: float = victim.hp
+			if new_hp == hp_before:
+				if is_dedicated_server:
+					print("[server]   ↳ absorbed: victim %d in i-frame or dead" % victim_peer)
+				return
 			if is_dedicated_server:
 				print("[server] hit: shooter=%d victim=%d dmg=%.1f head=%s new_hp=%.1f hitbox=%s" % [peer_id, victim_peer, dmg, is_head, new_hp, collider.name])
 			var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 			if net_rpc != null:
 				net_rpc.server_apply_damage.rpc(victim_peer, new_hp, peer_id, weapon_id, is_head)
-				# C6: explicit death broadcast on the kill shot. Clients route
-				# through _on_server_player_died (single death path) instead of
-				# inferring from new_hp<=0 — which lost the killer attribution.
-				if new_hp <= 0.0 and hp_before > 0.0:
-					net_rpc.server_player_died.rpc(victim_peer, peer_id, weapon_id, is_head)
+			# Death broadcast happens in _on_any_player_died now (R1 fix):
+			# damage_zone / admin nuke / scripted test kills all funnel
+			# through the `died` signal, so the broadcast belongs in the
+			# central listener — not duplicated per damage source.
 			return
 		# Non-player damageable (e.g. DummyTarget). Use whichever entrypoint
 		# the target exposes.
@@ -1062,6 +1119,19 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 				break
 	if match_controller != null:
 		match_controller.record_kill(killer_peer, victim_peer)
+
+	# R1: single death-broadcast point. Every kill source (gun, damage_zone,
+	# admin nuke, headless_main --test-kill hooks, future map gimmicks) hits
+	# `died.emit()` → here. Previously the broadcast lived in the
+	# _on_client_fire_server bullet path only, so poison-pool / admin-nuke
+	# victims looked alive on every non-host client for the full 3s respawn
+	# window. Weapon / headshot attribution isn't propagated for non-bullet
+	# deaths — the client-side handler ignores those fields today; revisit
+	# when kill feed wants per-source icons.
+	if is_dedicated_server or (multiplayer.has_multiplayer_peer() and multiplayer.is_server()):
+		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+		if net_rpc != null:
+			net_rpc.server_player_died.rpc(victim_peer, killer_peer, &"", false)
 
 	# Economy: if the LOCAL player got the kill, award credits per mode_def.
 	# Persisted via Settings autoload so progress survives between sessions.

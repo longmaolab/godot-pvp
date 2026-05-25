@@ -154,10 +154,18 @@ func push_feed(text: String, color: Color = Color.WHITE) -> void:
 		var old: Node = feed.get_child(0)
 		feed.remove_child(old)
 		old.queue_free()
+	# test.md Bug C: capture instance_id (int) instead of the Node so that if
+	# the feed line is freed early (e.g. scene teardown or FEED_MAX_LINES
+	# pushes it out), Godot doesn't dump
+	# `ERROR: Lambda capture at index 0 was freed. Passed "null" instead.`
+	# when the timer fires. is_instance_valid + instance_from_id is the
+	# nullable lookup.
+	var pc_id: int = pc.get_instance_id()
 	get_tree().create_timer(FEED_LIFETIME_SEC).timeout.connect(
 		func():
-			if is_instance_valid(pc):
-				pc.queue_free()
+			var node: Object = instance_from_id(pc_id)
+			if node != null and is_instance_valid(node):
+				node.queue_free()
 	)
 
 

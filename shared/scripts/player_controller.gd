@@ -914,6 +914,12 @@ func apply_damage(dmg: float, attacker: Node) -> void:
 
 
 func _die() -> void:
+	# R5 idempotency: a stale RPC, double damage path, or test hook that
+	# calls _die() twice on the same player would otherwise re-emit `died`
+	# and run scoring twice (H2 dedup only guards the respawn timer, not the
+	# score counter). One line, zero risk.
+	if is_dead:
+		return
 	is_dead = true
 	visible = false
 	collision_layer = 0

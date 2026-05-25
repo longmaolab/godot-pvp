@@ -84,11 +84,17 @@ func _play_arpeggio_wave(freqs: Array, note_duration: float, wave: String, volum
 			pb.push_frame(Vector2(s * env, s * env))
 
 	# Auto-cleanup after the sound has had time to play out.
+	# test.md Bug C: instance_id capture instead of Node reference — the
+	# AudioStreamPlayer may be freed (scene exit) before the timer fires,
+	# and a Node capture turns into a `null` arg that Godot logs as
+	# "Lambda capture at index 0 was freed".
 	var total: float = note_duration * float(freqs.size()) + 0.1
+	var player_id: int = player.get_instance_id()
 	get_tree().create_timer(total).timeout.connect(
 		func():
-			if is_instance_valid(player):
-				player.queue_free())
+			var node: Object = instance_from_id(player_id)
+			if node != null and is_instance_valid(node):
+				node.queue_free())
 
 
 func _wave_sample(phase: float, wave: String) -> float:

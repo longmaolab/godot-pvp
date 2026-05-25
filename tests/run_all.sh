@@ -70,6 +70,8 @@ run_one "mp_game_test (host & client spawn each other)" \
 # 5. Multiplayer SERVER-AUTHORITATIVE damage (client fires, server resolves).
 run_one "mp_hit_test (server-authoritative damage)" \
     "$PROJ/tests/run_mp_hit_test.sh"
+run_one "mp_burst_hit_test (listen-host accepts multi-shot burst)" \
+    "$PROJ/tests/run_mp_burst_hit_test.sh"
 
 # ── Dedicated server pipeline (DS-M1 → DS-M5) ────────────────────────────
 run_one "server_boot_test  (DS-M1: world + handshake)" \
@@ -94,6 +96,8 @@ run_one "three_client_test (3 clients, multi-shooter, mid-match leave)" \
     "$PROJ/tests/run_three_client_test.sh"
 run_one "real_aim_test     (try_fire() real LMB path, not bypass-RPC)" \
     "$PROJ/tests/run_real_aim_test.sh"
+run_one "hitbox_geometry    (HeadHitbox/BodyHitbox cover visible model for every skin)" \
+    "$PROJ/tests/run_hitbox_geometry_test.sh"
 run_one "weapon_switch_test (swap + per-weapon ammo + reload timer)" \
     "$PROJ/tests/run_weapon_switch_test.sh"
 run_one "hud_signal_test   (hp_changed / ammo_changed / weapon_switched bindings)" \

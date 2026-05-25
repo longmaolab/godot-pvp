@@ -59,6 +59,16 @@ const CHAT_WINDOW_MS := 4000
 var _chat_rate_state: Dictionary = {}   # peer_id → { window_start_ms: int, count: int }
 
 
+# R4: called from GameController._on_peer_disconnected_as_host. Without this,
+# (a) the dict grows by one entry per ever-connected peer for the DS process
+# lifetime, and (b) peer-id reuse (Godot's IDs are 32-bit random; collisions
+# rare but possible across reconnects) would let a new connection inherit
+# the old occupant's saturated chat budget and get silently muted on their
+# first message.
+func forget_peer(peer: int) -> void:
+	_chat_rate_state.erase(peer)
+
+
 @rpc("any_peer", "reliable", "call_remote")
 func client_chat_line(text: String, color: Color) -> void:
 	var peer := multiplayer.get_remote_sender_id()
