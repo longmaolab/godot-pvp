@@ -189,15 +189,13 @@ func _update_credits(new_total: int) -> void:
 		credits_pill.text = "💰 %d" % new_total
 
 
-## "Click to resume" overlay + ability cooldown bar — polled each frame.
-## Click-to-recapture lives on PlayerController._unhandled_input (matches
-## arena-shooter-3d's pattern); HUD just shows the prompt when relevant.
+## Ability cooldown bar — polled each frame.
+## (The "Click to resume" overlay was retired; pause_menu now auto-opens on
+## mouse-loss so the user always lands on the same UI no matter how capture
+## was broken — ESC, alt-tab, browser pointer-lock release.)
 func _process(_delta: float) -> void:
-	if resume_prompt != null:
-		var loose: bool = Input.mouse_mode == Input.MOUSE_MODE_VISIBLE \
-			and not DisplayServer.is_touchscreen_available()
-		if resume_prompt.visible != loose:
-			resume_prompt.visible = loose
+	if resume_prompt != null and resume_prompt.visible:
+		resume_prompt.visible = false
 	# Ability cooldown bar — derived live from the local player's state.
 	if _ability_player != null and is_instance_valid(_ability_player) \
 			and ability_bar != null and ability_label != null:

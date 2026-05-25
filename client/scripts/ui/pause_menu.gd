@@ -13,11 +13,40 @@ const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
 @onready var menu_btn: Button = $Center/Card/V/MenuBtn
 @onready var quit_btn: Button = $Center/Card/V/QuitBtn
 
+# Track the previous mouse mode so we can detect the CAPTURED→VISIBLE edge.
+# On web, ESC first gets eaten by the browser to release pointer lock — we
+# never see that key event. Polling for the mode flip lets us still open the
+# pause menu on the SAME first press, matching native FPS UX.
+var _last_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
+
 
 func _ready() -> void:
 	resume_btn.pressed.connect(_on_resume)
 	menu_btn.pressed.connect(_on_main_menu)
 	quit_btn.pressed.connect(_on_quit)
+	# Initialize from current state so the very first tick doesn't see a
+	# spurious CAPTURED→VISIBLE transition during scene load.
+	_last_mouse_mode = Input.mouse_mode
+
+
+func _process(_delta: float) -> void:
+	var mode: int = Input.mouse_mode
+	# Auto-open on mouse-loss: pointer lock released by browser, alt-tab,
+	# cmd-tab — anything that breaks capture should land in the pause menu
+	# instead of leaving the player in a "Click to resume" limbo.
+	if not visible \
+			and _last_mouse_mode == Input.MOUSE_MODE_CAPTURED \
+			and mode == Input.MOUSE_MODE_VISIBLE \
+			and not DisplayServer.is_touchscreen_available():
+		_open()
+	# Auto-close on mouse-recapture: PlayerController grabs the mouse when
+	# the user clicks in the world (player_controller.gd:251-256). If the
+	# menu is up at that moment, the click should also dismiss the menu.
+	elif visible \
+			and _last_mouse_mode == Input.MOUSE_MODE_VISIBLE \
+			and mode == Input.MOUSE_MODE_CAPTURED:
+		visible = false
+	_last_mouse_mode = mode
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -27,12 +56,17 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func toggle() -> void:
-	visible = not visible
 	if visible:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		resume_btn.grab_focus()
-	else:
+		visible = false
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		_open()
+
+
+func _open() -> void:
+	visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	resume_btn.grab_focus()
 
 
 func _on_resume() -> void:
