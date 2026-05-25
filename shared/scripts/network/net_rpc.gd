@@ -37,6 +37,11 @@ signal server_mode_info_received(is_dedicated: bool)
 ## on a client that picked Trenches → bullets pass through it visually,
 ## players fall into pits that don't exist for them, etc).
 signal server_map_info_received(map_path: String)
+## Host clicked START in the menu's staging area; all clients should leave
+## the lobby state and load the game scene now. The host's map/mode picks
+## are already authoritative via _launch_game → server_map_info during
+## sync_request, so this RPC carries no payload — it's just "go".
+signal server_match_starting_received()
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -147,6 +152,14 @@ func server_mode_info(is_dedicated: bool) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_map_info(map_path: String) -> void:
 	server_map_info_received.emit(map_path)
+
+
+# Staging "host clicked START" broadcast. Fired from main_menu's staging
+# panel; every joined client transitions from "waiting in lobby" to
+# "loading game scene".
+@rpc("authority", "reliable", "call_remote")
+func server_match_starting() -> void:
+	server_match_starting_received.emit()
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

@@ -108,6 +108,10 @@ if [ -f "$PROJ/tests/run_map_sync_test.sh" ]; then
     run_serial "map_sync (client swaps to server's map_path)" \
         "$PROJ/tests/run_map_sync_test.sh"
 fi
+if [ -f "$PROJ/tests/run_staging_lobby_test.sh" ]; then
+    run_serial "staging_lobby (HOST/JOIN/START state machine)" \
+        "$PROJ/tests/run_staging_lobby_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"
@@ -120,6 +124,7 @@ echo
 specs=(
   "multiplayer_integration:::$PROJ/tests/run_multiplayer_test.sh"
   "mp_game_test:::$PROJ/tests/run_mp_game_test.sh"
+  "mp_host_collision_guard:::$PROJ/tests/run_mp_host_collision_guard_test.sh"
   "mp_hit_test:::$PROJ/tests/run_mp_hit_test.sh"
   "server_boot_test:::$PROJ/tests/run_server_boot_test.sh"
   "input_rpc_test:::$PROJ/tests/run_input_rpc_test.sh"

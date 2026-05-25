@@ -63,6 +63,20 @@ var MODES: Array = []
 @onready var summary_map: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMap
 @onready var summary_mode: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMode
 @onready var summary_skin: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummarySkin
+# Staging panel — between JoinButton and Spacer. Hidden until HOST or JOIN
+# is pressed; replaces the immediate "click HOST → in-game" flow with a
+# lobby state where the host waits for joiners + clicks START to launch.
+@onready var staging_panel: PanelContainer = $Scroll/Center/Cols/RightCard/V/StagingPanel
+@onready var staging_status: Label = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StagingStatus
+@onready var staging_count: Label = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StagingCount
+@onready var start_btn: Button = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/StartButton
+@onready var cancel_btn: Button = $Scroll/Center/Cols/RightCard/V/StagingPanel/V/CancelButton
+
+# Staging state. _is_staging=false → normal menu; =true → user already
+# clicked HOST or JOIN and is waiting in the lobby.
+var _is_staging: bool = false
+var _is_host: bool = false      # true while staging as the server side
+var _peer_count: int = 1        # 1 = us; host increments on peer_connected
 
 
 func _ready() -> void:
@@ -72,6 +86,24 @@ func _ready() -> void:
 	join_btn.pressed.connect(_on_join)
 	weapons_btn.pressed.connect(_on_show_weapons)
 	shop_btn.pressed.connect(_on_open_shop)
+	# Staging-panel wiring. Hidden by default in the .tscn — _enter_staging
+	# flips it visible. START is host-only; CANCEL tears down whichever
+	# peer (server or client) and returns to the normal menu.
+	start_btn.pressed.connect(_on_start_match)
+	cancel_btn.pressed.connect(_on_cancel_staging)
+	# Multiplayer signals — fire on the menu while staging is active. The
+	# guards inside the handlers no-op when _is_staging=false so they're
+	# safe to leave connected for the menu's lifetime.
+	multiplayer.peer_connected.connect(_on_peer_connected_staging)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected_staging)
+	multiplayer.connected_to_server.connect(_on_connected_to_host_staging)
+	multiplayer.connection_failed.connect(_on_connection_failed_staging)
+	multiplayer.server_disconnected.connect(_on_server_disconnected_staging)
+	# START broadcast from the host.
+	if has_node(^"/root/NetRpc"):
+		var net_rpc: Node = get_node(^"/root/NetRpc")
+		if not net_rpc.server_match_starting_received.is_connected(_on_match_starting):
+			net_rpc.server_match_starting_received.connect(_on_match_starting)
 	# Identity row — wire name + skin to the Settings autoload.
 	skin_prev_btn.pressed.connect(_skin_step.bind(-1))
 	skin_next_btn.pressed.connect(_skin_step.bind(1))
@@ -478,13 +510,22 @@ func _on_host() -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	status_label.text = "✅ Hosting on :7777"
-	_launch_game()
+	# Stop in the menu's staging panel instead of jumping into the game.
+	# Host gets the START button; clients arrive and wait.
+	_enter_staging(true)
 
 
 func _on_join() -> void:
 	var address: String = join_address.text.strip_edges()
 	if address.is_empty():
-		address = "ws://127.0.0.1:7777"
+		# Fall back to whatever ServerDiscovery resolved (web export reads
+		# server.json → production wss URL; native fallback = ws://127.0.0.1:7777).
+		# Reading placeholder_text alone isn't enough — placeholder is the gray
+		# hint, not the actual value the user "agreed to".
+		if has_node(^"/root/ServerDiscovery"):
+			address = get_node(^"/root/ServerDiscovery").url
+		else:
+			address = "ws://127.0.0.1:7777"
 	var peer := WebSocketMultiplayerPeer.new()
 	var err := peer.create_client(address)
 	if err != OK:
@@ -492,7 +533,104 @@ func _on_join() -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	status_label.text = "Connecting to %s..." % address
+	# Don't jump to game yet — wait for host's server_match_starting.
+	_enter_staging(false)
+
+
+## Toggle the menu into staging (lobby) mode. The HOST/JOIN/PRACTICE
+## buttons get disabled, the StagingPanel appears with status + count,
+## START shows only on the host side, CANCEL shows for both.
+func _enter_staging(as_host: bool) -> void:
+	_is_staging = true
+	_is_host = as_host
+	_peer_count = 1
+	staging_panel.visible = true
+	start_btn.visible = as_host
+	if as_host:
+		staging_status.text = "🌐  Hosting on :7777 — 等人加入"
+		staging_count.text = "Connected: 1 (you)"
+	else:
+		staging_status.text = "🔗  Connecting to host..."
+		staging_count.text = "等房主点 START"
+	# Lock the entry buttons so user can't double-host or double-join.
+	practice_btn.disabled = true
+	host_btn.disabled = true
+	join_btn.disabled = true
+
+
+## Tear down the peer + return to normal menu state. Triggered by
+## CANCEL, by connection_failed, or by server_disconnected.
+func _exit_staging() -> void:
+	_is_staging = false
+	_is_host = false
+	staging_panel.visible = false
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+	practice_btn.disabled = false
+	host_btn.disabled = false
+	join_btn.disabled = false
+
+
+# ── Staging signal handlers ──────────────────────────────────────────────
+func _on_peer_connected_staging(_id: int) -> void:
+	if not _is_staging or not _is_host:
+		return
+	_peer_count += 1
+	staging_count.text = "Connected: %d players (1 host + %d joined)" % [_peer_count, _peer_count - 1]
+
+
+func _on_peer_disconnected_staging(_id: int) -> void:
+	if not _is_staging or not _is_host:
+		return
+	_peer_count = maxi(1, _peer_count - 1)
+	staging_count.text = "Connected: %d players" % _peer_count
+
+
+func _on_connected_to_host_staging() -> void:
+	if not _is_staging or _is_host:
+		return
+	staging_status.text = "🔗  Connected — 等房主点 START"
+
+
+func _on_connection_failed_staging() -> void:
+	if not _is_staging or _is_host:
+		return
+	status_label.text = "❌ 连不上服务器"
+	_exit_staging()
+
+
+func _on_server_disconnected_staging() -> void:
+	if not _is_staging:
+		return
+	# If we're the host this fires when our peer goes down — host normally
+	# doesn't see it (we tear ourselves down via CANCEL), but defensively
+	# handle it the same way.
+	status_label.text = "❌ 服务器断开" if not _is_host else "❌ 服务器关闭"
+	_exit_staging()
+
+
+## Host clicked START — broadcast to all clients and launch self into the
+## game scene. call_remote on the RPC excludes us, so the local launch
+## here is the host's own trip into the game.
+func _on_start_match() -> void:
+	if not _is_staging or not _is_host:
+		return
+	if has_node(^"/root/NetRpc"):
+		get_node(^"/root/NetRpc").server_match_starting.rpc()
 	_launch_game()
+
+
+## Client received server_match_starting — match has begun.
+func _on_match_starting() -> void:
+	if not _is_staging or _is_host:
+		return  # host already launched in _on_start_match
+	_launch_game()
+
+
+func _on_cancel_staging() -> void:
+	_exit_staging()
+	status_label.text = "已取消"
 
 
 func _launch_game() -> void:
