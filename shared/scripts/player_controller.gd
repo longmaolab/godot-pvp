@@ -479,6 +479,14 @@ func push_remote_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 	# Reject NaN/Inf aim (would corrupt CharacterBody3D transform on next sim).
 	if not (is_finite(yaw) and is_finite(pitch)):
 		return
+	# R6: clamp pitch BEFORE the delta check + before storing. Previously the
+	# clamp only happened on store (line below), so a first frame with pitch=±100
+	# would land a clamped ~±1.54 into _remote_input_pitch and then the SECOND
+	# frame's `pitch - _remote_input_pitch` delta check used a poisoned baseline
+	# (legit values would look like a giant aim snap and get rejected). yaw has
+	# no analogous fix because it's wrap-modular — wrapf(-PI, PI) handles any
+	# input.
+	pitch = clampf(pitch, -PI * 0.49, PI * 0.49)
 	# Drop replays / out-of-order, AND wildly-future ticks. A peer cramming
 	# `tick = INT_MAX` on its first packet would otherwise pin _remote_input_tick
 	# permanently and lock out every legitimate subsequent input frame.
@@ -501,7 +509,7 @@ func push_remote_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 	_remote_input_tick = tick
 	_remote_input_bits = bits
 	_remote_input_yaw = yaw
-	_remote_input_pitch = clampf(pitch, -PI * 0.49, PI * 0.49)
+	_remote_input_pitch = pitch
 	# Apply aim immediately so a fire issued in the same tick uses the freshest
 	# look direction (matters for snap-aim sniper shots).
 	if use_remote_input:

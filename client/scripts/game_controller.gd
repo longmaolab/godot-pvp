@@ -130,12 +130,13 @@ func _ready() -> void:
 		_enter_practice_mode()
 	else:
 		# Damage broadcast handler is the same on host and client.
+		# (R7: server_death_received is NOT wired here — _on_server_player_died's
+		# first line is `if multiplayer.is_server(): return`, so connecting it on
+		# the host side is a no-op. _enter_client_mode() wires it for clients
+		# only, where it has actual work to do.)
 		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 		if net_rpc != null:
 			net_rpc.server_damage_received.connect(_on_server_damage_broadcast)
-			# C6: death broadcast wired here too so listen-host clients receive
-			# the explicit death event (the host itself broadcasts to non-self).
-			net_rpc.server_death_received.connect(_on_server_player_died)
 		if multiplayer.is_server():
 			_enter_host_mode()
 		else:
@@ -584,11 +585,13 @@ func _rpc_sync_request() -> void:
 	if not multiplayer.is_server():
 		return
 	var requester: int = multiplayer.get_remote_sender_id()
-	# C2: idempotent + rate-limited. Each peer is allowed exactly ONE successful
-	# sync per session, and any retry within a 1s window is dropped. Without
-	# this gate, an unauthenticated peer could spam this RPC and force the
-	# server to rebroadcast N spawns per call — both a free DoS amplifier and
-	# a way to insert themselves into _ready_peers before any auth check.
+	# C2: per-peer rate-limited (1/s). Re-syncs OUTSIDE the 1s window are
+	# served (legit reason: the first sync's spawn RPC got dropped, or the
+	# peer briefly re-mounted its game scene) — re-syncs INSIDE the window
+	# are silently dropped. The 1s gate is what bounds the DoS: without it
+	# an unauthenticated peer could spam this RPC and force the server to
+	# rebroadcast N spawns per call — both a free DoS amplifier and a way
+	# to insert themselves into _ready_peers before any auth check.
 	var now_ms: int = Time.get_ticks_msec()
 	if _synced_peers.has(requester):
 		var last: int = int(_synced_peers[requester])
