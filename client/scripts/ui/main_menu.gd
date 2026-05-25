@@ -47,6 +47,8 @@ var MODES: Array = []
 @onready var weapons_btn: Button = $Scroll/Center/Cols/LeftCard/V/WeaponsButton
 @onready var shop_btn: Button = $Scroll/Center/Cols/LeftCard/V/ShopButton
 @onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
+@onready var create_room_btn: Button = $Scroll/Center/Cols/RightCard/V/CreateRoomButton
+@onready var browse_rooms_btn: Button = $Scroll/Center/Cols/RightCard/V/BrowseRoomsButton
 @onready var host_btn: Button = $Scroll/Center/Cols/RightCard/V/HostButton
 @onready var join_btn: Button = $Scroll/Center/Cols/RightCard/V/JoinButton
 @onready var join_address: LineEdit = $Scroll/Center/Cols/RightCard/V/JoinAddress
@@ -80,13 +82,24 @@ var MODES: Array = []
 	$Scroll/Center/Cols/RightCard/V/PracticeButton,
 	$Scroll/Center/Cols/RightCard/V/PracticeHint,
 	$Scroll/Center/Cols/RightCard/V/Sep1,
-	$Scroll/Center/Cols/RightCard/V/MPHeader,
-	$Scroll/Center/Cols/RightCard/V/MPHint,
+	$Scroll/Center/Cols/RightCard/V/PublicHeader,
+	$Scroll/Center/Cols/RightCard/V/PublicHint,
+	$Scroll/Center/Cols/RightCard/V/CreateRoomButton,
+	$Scroll/Center/Cols/RightCard/V/BrowseRoomsButton,
+	$Scroll/Center/Cols/RightCard/V/SepLan,
+	$Scroll/Center/Cols/RightCard/V/LanHeader,
 	$Scroll/Center/Cols/RightCard/V/HostButton,
 	$Scroll/Center/Cols/RightCard/V/JoinAddrLabel,
 	$Scroll/Center/Cols/RightCard/V/JoinAddress,
 	$Scroll/Center/Cols/RightCard/V/JoinButton,
 ]
+
+# When the user clicks JOIN-to-DS via the new flow, this captures whether
+# they meant "create a new room" (CREATE button) or "browse and pick"
+# (BROWSE button). _on_server_mode_info_for_routing reads it after the
+# DS handshake to either send a create_room RPC + transition to lobby,
+# or transition to room_browser. Cleared after each consumption.
+var _connect_intent: String = "browse"   # "browse" | "create"
 
 # Staging state. _is_staging=false → normal menu; =true → user already
 # clicked HOST or JOIN and is waiting in the lobby.
@@ -98,6 +111,8 @@ var _peer_count: int = 1        # 1 = us; host increments on peer_connected
 func _ready() -> void:
 	_build_modes_from_disk()
 	practice_btn.pressed.connect(_on_practice)
+	create_room_btn.pressed.connect(_on_create_room_pressed)
+	browse_rooms_btn.pressed.connect(_on_browse_rooms_pressed)
 	host_btn.pressed.connect(_on_host)
 	join_btn.pressed.connect(_on_join)
 	weapons_btn.pressed.connect(_on_show_weapons)
@@ -123,9 +138,17 @@ func _ready() -> void:
 		# DS-vs-listen-host routing: when we JOIN, the server tells us
 		# which mode it's running via server_mode_info. If it's a DS, we
 		# don't stay on the staging panel — we route into the room
-		# browser instead (multi-room lobby system per Phase 1 plan).
+		# browser (BROWSE intent) or send create_room (CREATE intent).
 		if not net_rpc.server_mode_info_received.is_connected(_on_server_mode_info_for_routing):
 			net_rpc.server_mode_info_received.connect(_on_server_mode_info_for_routing)
+		# CREATE-flow follow-up: when the DS replies with server_room_joined
+		# we jump straight into room_lobby. Hooked on the menu (and not just
+		# on room_browser) because the browser scene is skipped in the
+		# CREATE path entirely.
+		if not net_rpc.server_room_joined_received.is_connected(_on_server_room_joined_from_menu):
+			net_rpc.server_room_joined_received.connect(_on_server_room_joined_from_menu)
+		if not net_rpc.server_room_join_failed_received.is_connected(_on_server_room_join_failed_from_menu):
+			net_rpc.server_room_join_failed_received.connect(_on_server_room_join_failed_from_menu)
 	# Identity row — wire name + skin to the Settings autoload.
 	skin_prev_btn.pressed.connect(_skin_step.bind(-1))
 	skin_next_btn.pressed.connect(_skin_step.bind(1))
@@ -538,25 +561,65 @@ func _on_host() -> void:
 
 
 func _on_join() -> void:
-	var address: String = join_address.text.strip_edges()
-	if address.is_empty():
-		# Fall back to whatever ServerDiscovery resolved (web export reads
-		# server.json → production wss URL; native fallback = ws://127.0.0.1:7777).
-		# Reading placeholder_text alone isn't enough — placeholder is the gray
-		# hint, not the actual value the user "agreed to".
-		if has_node(^"/root/ServerDiscovery"):
-			address = get_node(^"/root/ServerDiscovery").url
-		else:
-			address = "ws://127.0.0.1:7777"
+	# Generic JOIN-by-address — could be a DS or a listen-host LAN game.
+	# Intent defaults to "browse" so if it's a DS we end up in the room
+	# browser (most useful for "type a friend's URL and join their server").
+	_connect_intent = "browse"
+	_connect_to_server(_resolve_join_address())
+
+
+## CREATE flow: pick map/mode on the left card, click this, get dropped
+## straight into your new room's lobby. Skips the browser entirely.
+func _on_create_room_pressed() -> void:
+	_connect_intent = "create"
+	create_room_btn.disabled = true
+	browse_rooms_btn.disabled = true
+	_connect_to_server(_default_public_server())
+
+
+## BROWSE flow: connect to the default public DS, jump to the room
+## browser, pick from existing or create from there.
+func _on_browse_rooms_pressed() -> void:
+	_connect_intent = "browse"
+	create_room_btn.disabled = true
+	browse_rooms_btn.disabled = true
+	_connect_to_server(_default_public_server())
+
+
+## Single place that creates the client peer + transitions to the staging
+## panel "connecting" state. Called by all 3 paths (JOIN-by-address, CREATE,
+## BROWSE) so failure handling lives in one spot.
+func _connect_to_server(address: String) -> void:
 	var peer := WebSocketMultiplayerPeer.new()
 	var err := peer.create_client(address)
 	if err != OK:
-		status_label.text = "Join failed: %s" % err
+		status_label.text = "Connect failed: %s" % err
+		create_room_btn.disabled = false
+		browse_rooms_btn.disabled = false
 		return
 	multiplayer.multiplayer_peer = peer
 	status_label.text = "Connecting to %s..." % address
-	# Don't jump to game yet — wait for host's server_match_starting.
 	_enter_staging(false)
+
+
+## What URL does CREATE / BROWSE point at? Prefer ServerDiscovery's
+## resolved URL (web build reads server.json → production wss); else
+## fall back to the local DS default.
+func _default_public_server() -> String:
+	if has_node(^"/root/ServerDiscovery"):
+		var sd: Node = get_node(^"/root/ServerDiscovery")
+		if "url" in sd and not String(sd.url).is_empty():
+			return sd.url
+	return "ws://127.0.0.1:7777"
+
+
+## JOIN-by-address: use the text the user typed if any, otherwise fall
+## back to ServerDiscovery's URL just like CREATE/BROWSE.
+func _resolve_join_address() -> String:
+	var address: String = join_address.text.strip_edges()
+	if not address.is_empty():
+		return address
+	return _default_public_server()
 
 
 ## Toggle the menu into staging (lobby) mode. Hides the PRACTICE +
@@ -593,6 +656,9 @@ func _exit_staging() -> void:
 	# Restore the normal menu nodes.
 	for n in _menu_state_nodes:
 		n.visible = true
+	# Re-enable the public-flow buttons in case CREATE/BROWSE disabled them.
+	create_room_btn.disabled = false
+	browse_rooms_btn.disabled = false
 
 
 # ── Staging signal handlers ──────────────────────────────────────────────
@@ -669,24 +735,64 @@ func _on_match_starting() -> void:
 	_launch_game()
 
 
-## Decide which way to go after JOIN connects: server tells us if it's a
-## dedicated server. DS → public room model, jump to room_browser.tscn.
-## Listen-host → stay on the current staging panel (LAN flow unchanged).
+## Decide which way to go after a DS handshake completes. Server replies
+## with server_mode_info(is_dedicated=true), and _connect_intent tells us
+## which button got us here:
+##   "create" → fire client_create_room immediately + wait for joined
+##              response (handled in _on_server_room_joined_from_menu).
+##   "browse" → transition to the browser scene; user picks from there.
+## Listen-host (is_dedicated=false) → stay on the staging panel; the LAN
+## flow's HOST clicks START etc.
 const ROOM_BROWSER_SCENE := "res://client/scenes/ui/room_browser.tscn"
+const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
 
 func _on_server_mode_info_for_routing(is_dedicated: bool) -> void:
 	if not _is_staging or _is_host:
 		return  # host doesn't route — host has its own flow; client-only path
 	if not is_dedicated:
 		return  # listen-host — fall through to existing _on_match_starting flow
-	# DS: stash menu picks for the browser to consume + change scene.
+	# Stash menu picks for either downstream scene to read via Settings.
 	if has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		if "pending_room_map" in s:
 			s.pending_room_map = _selected_map_path()
 		if "pending_room_mode" in s:
 			s.pending_room_mode = _selected_mode_path()
-	get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
+	if _connect_intent == "create":
+		# Fire create_room immediately. server_room_joined will land in
+		# _on_server_room_joined_from_menu which does the scene swap.
+		status_label.text = "正在创建房间..."
+		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+		if net_rpc != null:
+			net_rpc.client_create_room.rpc_id(1, _selected_map_path(), _selected_mode_path())
+	else:
+		# Browse intent: into the room list, user picks from there.
+		get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
+
+
+## CREATE-flow follow-up: server confirmed our room. Stash state for the
+## lobby scene + transition. Idempotent against the browser also handling
+## this signal — browser does its own change_scene, but it's freed by
+## then if we took the CREATE shortcut.
+func _on_server_room_joined_from_menu(_room_id: String, room_state: Dictionary) -> void:
+	if _connect_intent != "create" or not _is_staging:
+		return
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		if "pending_room_state" in s:
+			s.pending_room_state = room_state.duplicate()
+	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
+
+
+func _on_server_room_join_failed_from_menu(reason: String) -> void:
+	if _connect_intent != "create" or not _is_staging:
+		return
+	status_label.text = "❌ 创建房间失败：%s" % reason
+	# Stay on the menu — user can try again, change settings, or pick a
+	# different MP path. Re-enable so they can do that.
+	create_room_btn.disabled = false
+	browse_rooms_btn.disabled = false
+	_exit_staging()
 
 
 func _on_cancel_staging() -> void:

@@ -603,36 +603,65 @@ theme_override_colors/font_color = Color(0.65, 0.78, 0.92, 1)
 
 [node name="Sep1" type="HSeparator" parent="Scroll/Center/Cols/RightCard/V"]
 
-[node name="MPHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+[node name="PublicHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▸  联机 / MULTIPLAYER"
+theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
+text = "▸  公网房间 / PUBLIC ARENA"
 
-[node name="MPHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
-text = "MAP/MODE 只在你 HOST 时生效；JOIN 时跟随服务器"
+[node name="PublicHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+text = "在线匹配 — CREATE 用上面选的 MAP/MODE 直接开房"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
 
-[node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 68)
+[node name="CreateRoomButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 88)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
+theme_override_constants/outline_size = 3
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+text = "➕   CREATE ROOM"
+
+[node name="BrowseRoomsButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 56)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
-text = "🌐   HOST   ·   开服 :7777"
+text = "🔍   BROWSE ROOMS  ·  看别人的房间"
+
+[node name="SepLan" type="HSeparator" parent="Scroll/Center/Cols/RightCard/V"]
+
+[node name="LanHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
+text = "▸  局域网 / LAN  (同 WiFi 直连)"
+
+[node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
+custom_minimum_size = Vector2(0, 52)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "🌐   HOST LAN   ·   开服 :7777"
 
 [node name="JoinAddrLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 text = "服务器地址 / SERVER ADDRESS"
-theme_override_font_sizes/font_size = 15
-theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.9)
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.7)
 
 [node name="JoinAddress" type="LineEdit" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 44)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
 theme_override_colors/font_placeholder_color = Color(0.5, 0.65, 0.82, 1)
 theme_override_colors/caret_color = Color(0.4, 0.85, 1, 1)
@@ -641,13 +670,13 @@ theme_override_styles/focus = SubResource("lineedit_style")
 placeholder_text = "ws://127.0.0.1:7777"
 
 [node name="JoinButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 68)
+custom_minimum_size = Vector2(0, 52)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 17
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
-text = "🔗   JOIN   ·   连接服务器"
+text = "🔗   JOIN BY ADDRESS"
 
 [node name="Spacer" type="Control" parent="Scroll/Center/Cols/RightCard/V"]
 size_flags_vertical = 3
