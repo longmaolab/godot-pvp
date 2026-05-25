@@ -18,6 +18,7 @@ class_name RoomLobbyScene
 
 const ROOM_BROWSER_SCENE := "res://client/scenes/ui/room_browser.tscn"
 const MAIN_MENU_SCENE := "res://client/scenes/main_menu.tscn"
+const GAME_SCENE := "res://client/scenes/game.tscn"
 
 @onready var room_id_label: Label = $Center/Panel/V/RoomIdLabel
 @onready var map_label: Label = $Center/Panel/V/MapLabel
@@ -114,10 +115,12 @@ func _on_room_destroyed(room_id: String) -> void:
 
 
 func _on_match_starting() -> void:
-	# M2 will hook this into the actual game scene transition. For M1 we
-	# just acknowledge so the user knows START was registered.
-	status_label.text = "▶ 对局开始 (M2 工作中)"
+	# M2: server has booted the match for this room — load the game scene.
+	# The multiplayer peer persists across change_scene_to_file, so the
+	# game scene's _enter_client_mode picks up where we left off.
+	status_label.text = "▶ 进入对局..."
 	start_btn.disabled = true
+	get_tree().change_scene_to_file(GAME_SCENE)
 
 
 func _on_server_disconnected() -> void:
@@ -140,19 +143,17 @@ func _on_leave_pressed() -> void:
 func _on_start_pressed() -> void:
 	if not _is_host:
 		return
-	# M1 stub: don't actually trigger anything yet. The previous attempt
-	# called server_match_starting.rpc() from the client, which fails — that
-	# RPC is @rpc("authority"), only the server (peer 1) is allowed to
-	# broadcast it. M2 will add a `client_start_match` client→server RPC
-	# that RoomManager translates into the per-room match boot. For now,
-	# just acknowledge the click so the user sees something happened.
-	status_label.text = "▶ START registered — M2 will wire the actual match boot"
+	# M2: send the new client_start_match RPC. Server's RoomManager
+	# handler validates host + single-active-match, flips room.state to
+	# MATCH, GameController boots the world, server_match_starting fires
+	# back to all room players → _on_match_starting above does the scene
+	# transition. Disable START in the meantime so a double-click can't
+	# fire twice.
 	start_btn.disabled = true
-	# Re-enable after a beat so the user can try again if they want.
-	await get_tree().create_timer(2.0).timeout
-	if is_inside_tree():
-		start_btn.disabled = false
-		status_label.text = "可以 START 了"
+	status_label.text = "▶ 启动对局中..."
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		net_rpc.client_start_match.rpc_id(1)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

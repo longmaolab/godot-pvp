@@ -194,6 +194,15 @@ func _enter_dedicated_server_mode() -> void:
 		# input instead of reading Input.* (which is meaningless on the server).
 		if not net_rpc.client_input_received.is_connected(_on_client_input_ds):
 			net_rpc.client_input_received.connect(_on_client_input_ds)
+	# Lobby M2: RoomManager fires match_started when a room's host clicks
+	# START — boot the match world here for that room's players. M3:
+	# match_controller.match_ended (already hooked in _ready) calls back
+	# into RoomManager.end_match below to tear down + return players to
+	# the room lobby.
+	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
+	if room_mgr != null:
+		if not room_mgr.match_started.is_connected(_boot_match_for_room):
+			room_mgr.match_started.connect(_boot_match_for_room)
 
 
 ## DS-M1 hello handshake. When a client sends client_hello, reply with
@@ -383,6 +392,12 @@ func _enter_host_mode() -> void:
 
 
 func _on_peer_connected_as_host(new_peer: int) -> void:
+	# Phase 1 lock per .agent/lobby_plan.md: DS keeps the legacy
+	# auto-spawn behavior. Rooms are a UI/metadata layer on top of a
+	# single shared world — when a room's host clicks START, the
+	# room's clients transition into game.tscn and find their already-
+	# spawned players via sync_request. Phase 2 will add per-room World3D
+	# isolation, at which point we DO want to skip auto-spawn on DS.
 	# Do NOT push spawn RPCs to the new peer yet — their game scene isn't
 	# mounted. They'll request a sync via _rpc_sync_request once ready.
 	# Only inform already-ready peers about the new arrival, and instantiate
@@ -451,6 +466,10 @@ func _enter_client_mode() -> void:
 		# C6: explicit death broadcast — single source of truth for kills.
 		if not net_rpc.server_death_received.is_connected(_on_server_player_died):
 			net_rpc.server_death_received.connect(_on_server_player_died)
+		# Lobby M3: match end on a DS room → server pushes us back to
+		# room_lobby with the latest room state in the payload.
+		if not net_rpc.server_match_ended_received.is_connected(_on_server_match_ended):
+			net_rpc.server_match_ended_received.connect(_on_server_match_ended)
 	# WebSocket may still be CONNECTING right now — sending an RPC at this
 	# moment would error "Trying to call an RPC via a multiplayer peer which
 	# is not connected." Defer client_hello + _rpc_sync_request until the
@@ -523,6 +542,24 @@ func _on_server_map_info(map_path: String) -> void:
 	if hud != null:
 		hud.push_feed("Loaded server map: %s" % map_path.get_file().get_basename(),
 			Color(0.55, 0.85, 1, 1))
+
+
+## M3: match for our room ended on the DS. The payload carries the room's
+## state (now back in LOBBY) so room_lobby can pick it up without a
+## separate round-trip. Stash + transition to room_lobby.tscn.
+const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
+
+func _on_server_match_ended(room_state: Dictionary) -> void:
+	# Hand off the room state via the Settings autoload — the lobby scene
+	# reads `pending_room_state` in its _ready (same channel room_browser
+	# uses on Create/Join). This is the only place this client receives
+	# room_state during a match-ended transition because the game scene
+	# doesn't subscribe to server_room_state_received.
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		if "pending_room_state" in s:
+			s.pending_room_state = room_state.duplicate()
+	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
 
 
 ## Configure a player on a DS-client to render purely from snapshots. Local
@@ -1053,9 +1090,12 @@ func _on_round_ended(winner: int, _scores: Dictionary) -> void:
 func _on_match_ended(winner: int, final: Dictionary) -> void:
 	if hud != null:
 		hud.push_feed("MATCH OVER — winner peer %d" % winner, Color(1.0, 0.85, 0.2))
-	# Dedicated server doesn't show end-of-match UI; just log + reset.
+	# Dedicated server: tear down the active room's match world + tell
+	# RoomManager so it broadcasts server_match_ended to room players.
+	# Listen-host / practice: pop up the themed scoreboard (legacy flow).
 	if is_dedicated_server:
 		print("[server] match ended — winner peer %d" % winner)
+		_tear_down_active_match()
 		return
 	# Pop up the themed end-of-match scoreboard.
 	var screen: Node = MATCH_END_SCENE.instantiate()
@@ -1064,3 +1104,105 @@ func _on_match_ended(winner: int, final: Dictionary) -> void:
 	screen.show_for(winner, final, my_id)
 	# Release the cursor so the user can click "Return / Play again".
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+# ── Lobby M2: per-room match boot ────────────────────────────────────────
+# Active room being played on this DS. Phase 1 locks to single-active-match
+# so there's only one of these at a time; Phase 2 would make this a dict
+# keyed by world id.
+var _active_room_id: String = ""
+
+
+## Called by RoomManager.match_started when a room's host clicks START.
+## Phase 1 model is single-shared-world (per .agent/lobby_plan.md): peers
+## were already auto-spawned in _on_peer_connected_as_host when they
+## joined the DS, so this just swaps the map, sets up the room's mode,
+## repositions the room's players, and broadcasts server_match_starting
+## so the clients transition out of room_lobby.tscn into game.tscn.
+func _boot_match_for_room(room) -> void:
+	if not is_dedicated_server or not multiplayer.is_server():
+		return
+	if not _active_room_id.is_empty():
+		push_warning("[server] _boot_match_for_room called while %s already active" % _active_room_id)
+		return
+	_active_room_id = room.room_id
+	print("[server] booting match for room %s (%d players, map=%s)" % \
+		[room.room_id, room.players.size(), room.map_path])
+
+	# Swap in the room's map. map_scene also gets reassigned so the
+	# `_rpc_sync_request` reply path (which reads map_scene.resource_path
+	# for server_map_info) tells joining clients the right thing.
+	var new_map: PackedScene = load(room.map_path) as PackedScene
+	if new_map == null:
+		new_map = load("res://shared/scenes/maps/blank.tscn") as PackedScene
+		push_warning("[server] room %s map %s failed to load, falling back to blank" % [room.room_id, room.map_path])
+	map_scene = new_map
+	if map_root != null:
+		map_root.queue_free()
+	map_root = new_map.instantiate()
+	add_child(map_root)
+
+	# Spin up a match controller for the room's mode (if any). The signal
+	# wired in _ready connected to a controller built at scene load time;
+	# replace that controller so the new one's match_ended also routes
+	# through _on_match_ended.
+	if match_controller != null:
+		match_controller.queue_free()
+		match_controller = null
+	if not room.mode_def_path.is_empty():
+		var md: Resource = load(room.mode_def_path)
+		if md != null:
+			mode_def = md
+			var mc_script := load("res://shared/scripts/match_controller.gd")
+			if mc_script != null:
+				match_controller = mc_script.new()
+				match_controller.mode_def = md
+				add_child(match_controller)
+				match_controller.match_ended.connect(_on_match_ended)
+				match_controller.round_ended.connect(_on_round_ended)
+				match_controller.start()
+
+	# Players are already spawned (auto-spawn on peer_connect). But their
+	# positions were from the OLD map's spawn points (or default 0,0,0).
+	# Reposition each room player to the new map's spawn points so they
+	# don't materialize inside a KOTH wall after a Trenches → KOTH swap.
+	for peer in room.players:
+		if players_by_peer.has(peer):
+			var p: Node = players_by_peer[peer]
+			if is_instance_valid(p) and p.has_method(&"respawn"):
+				p.respawn(_spawn_pos_for(peer))
+
+	# Tell the room's clients the match is on — they transition from
+	# room_lobby.tscn into game.tscn, which then runs _enter_client_mode
+	# → sends client_hello + sync_request → server replies with
+	# server_map_info + spawn RPCs (the same path used everywhere else).
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		var live: Array = multiplayer.get_peers()
+		for peer in room.players:
+			if peer in live:
+				net_rpc.server_match_starting.rpc_id(peer)
+
+
+## M3: called from _on_match_ended on the DS side. Resets the match
+## state and tells RoomManager to broadcast server_match_ended so the
+## room's clients return to room_lobby.tscn. Phase 1 keeps players
+## spawned + the map loaded — they're "between matches", room can
+## START again with the same setup (or host can change map → leave →
+## create new room, since in-lobby map change is Phase 2).
+func _tear_down_active_match() -> void:
+	var room_id: String = _active_room_id
+	if room_id.is_empty():
+		return
+	_active_room_id = ""
+	# Drop the match_controller so the next boot starts a fresh one with
+	# whichever mode the room now has set.
+	if match_controller != null:
+		match_controller.queue_free()
+		match_controller = null
+	# Tell RoomManager — it broadcasts server_match_ended to room players
+	# (game scene's handler stashes the room state + transitions to
+	# room_lobby.tscn).
+	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
+	if room_mgr != null:
+		room_mgr.end_match(room_id)

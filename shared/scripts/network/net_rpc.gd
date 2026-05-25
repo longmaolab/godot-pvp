@@ -28,6 +28,7 @@ signal client_list_rooms_received(peer_id: int)
 signal client_create_room_received(peer_id: int, map_path: String, mode_def_path: String)
 signal client_join_room_received(peer_id: int, room_id: String)
 signal client_leave_room_received(peer_id: int)
+signal client_start_match_received(peer_id: int)
 
 # ── client-side signals (fired when an RPC arrives from the server) ──────
 signal server_welcome_received(your_peer: int, server_tick: int)
@@ -59,6 +60,11 @@ signal server_room_joined_received(room_id: String, room_state: Dictionary)
 signal server_room_join_failed_received(reason: String)
 signal server_room_state_received(room_state: Dictionary)
 signal server_room_destroyed_received(room_id: String)
+## Server sends this when the match for `room_state.id` is over. Includes
+## the fresh room state so the room_lobby that's about to load can read it
+## from Settings.pending_room_state without a separate round-trip — avoids
+## the race where the broadcaster could fire before the scene loaded.
+signal server_match_ended_received(room_state: Dictionary)
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -116,6 +122,12 @@ func client_join_room(room_id: String) -> void:
 func client_leave_room() -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_leave_room_received.emit(peer)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_start_match() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_start_match_received.emit(peer)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
@@ -231,6 +243,11 @@ func server_room_state(room_state: Dictionary) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_room_destroyed(room_id: String) -> void:
 	server_room_destroyed_received.emit(room_id)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_match_ended(room_state: Dictionary) -> void:
+	server_match_ended_received.emit(room_state)
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

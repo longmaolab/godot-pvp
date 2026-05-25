@@ -35,6 +35,15 @@ signal room_state_changed(room: Room)
 # destruction time so the broadcaster can rpc_id to just them — by the
 # time this signal fires, peer_to_room has already been cleared.
 signal room_destroyed(room_id: String, evicted_peers: Array)
+## A room just transitioned LOBBY → MATCH. GameController listens for
+## this to load the room's map + spawn the room's players + broadcast
+## server_match_starting to them.
+signal match_started(room: Room)
+## A room's match finished — GameController emits this back through after
+## tearing down. Room is already back in LOBBY state by the time this
+## fires. RoomManager broadcasts server_match_ended to room players so
+## their game scenes transition back to room_lobby.tscn.
+signal match_finished(room: Room)
 
 
 var rooms: Dictionary = {}              # room_id (String) → Room
@@ -54,9 +63,11 @@ func _ready() -> void:
 	net_rpc.client_create_room_received.connect(_on_client_create_room)
 	net_rpc.client_join_room_received.connect(_on_client_join_room)
 	net_rpc.client_leave_room_received.connect(_on_client_leave_room)
+	net_rpc.client_start_match_received.connect(_on_client_start_match)
 	# Propagate room mutations out to room members via authority RPCs.
 	room_state_changed.connect(_broadcast_room_state)
 	room_destroyed.connect(_broadcast_room_destroyed)
+	match_finished.connect(_broadcast_match_ended)
 
 
 ## Create a new room owned by `host_peer`. Returns the room_id on success,
@@ -207,6 +218,70 @@ func _on_client_leave_room(peer_id: int) -> void:
 	# leave_room handles host-vs-non-host + emits room_state_changed or
 	# room_destroyed which we broadcast below.
 	leave_room(peer_id)
+
+
+## Phase 1 single-active-match coordination: only one room can be in
+## MATCH state at a time. Other rooms stay in LOBBY (player can still
+## browse + join + see them in the list, just can't start their own
+## match until the current one ends). Per .agent/lobby_plan.md Q5 the
+## current room comes back to LOBBY after match_ended fires.
+func _on_client_start_match(peer_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	if not peer_to_room.has(peer_id):
+		return
+	var room_id: String = peer_to_room[peer_id]
+	var room: Room = rooms.get(room_id, null)
+	if room == null:
+		return
+	# Only the room's host can start its match.
+	if room.host_peer != peer_id:
+		return
+	# Already running? Idempotent — ignore.
+	if room.state == Room.STATE_MATCH:
+		return
+	# Phase 1 single-active-match guard: reject if any other room is
+	# already in MATCH state.
+	for other_id in rooms.keys():
+		var other: Room = rooms[other_id]
+		if other_id != room_id and other.state == Room.STATE_MATCH:
+			# In Phase 2 this would queue or fail with a clear reason RPC.
+			# For Phase 1 just silently no-op + log.
+			push_warning("[RoomManager] start_match for %s blocked — %s already in MATCH" % [room_id, other_id])
+			return
+	start_match(room_id)
+
+
+func start_match(room_id: String) -> void:
+	var room: Room = rooms.get(room_id, null)
+	if room == null:
+		return
+	room.state = Room.STATE_MATCH
+	room_state_changed.emit(room)   # tell room players the state changed
+	match_started.emit(room)         # tell GameController to boot the match
+
+
+## Called by GameController after the match controller's match_ended
+## signal fires. Flips room back to LOBBY + broadcasts so all room
+## players' game scenes return to room_lobby.tscn.
+func end_match(room_id: String) -> void:
+	var room: Room = rooms.get(room_id, null)
+	if room == null:
+		return
+	room.state = Room.STATE_LOBBY
+	match_finished.emit(room)
+	room_state_changed.emit(room)
+
+
+func _broadcast_match_ended(room: Room) -> void:
+	if not _is_real_networked_server():
+		return
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	var state_dict: Dictionary = room.to_dict()
+	var live: Array = multiplayer.get_peers()
+	for peer in room.players:
+		if peer in live:
+			net_rpc.server_match_ended.rpc_id(peer, state_dict)
 
 
 # Whether `peer_id` is currently connected to us as a server. Used to gate
