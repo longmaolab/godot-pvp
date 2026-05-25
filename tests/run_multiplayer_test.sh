@@ -11,13 +11,28 @@ mkdir -p "$LOG_DIR"
 SERVER_LOG="$LOG_DIR/server.log"
 CLIENT_LOG="$LOG_DIR/client.log"
 
+# Randomize within a band so back-to-back runs avoid TIME_WAIT collisions
+# AND so the test doesn't fight a user-launched Godot server on the default
+# 7777 (which used to make this test fail every single time anyone had the
+# editor open). Pattern mirrors run_match_e2e_test.sh.
+PORT=$((9700 + RANDOM % 200))
+
 echo "=== multiplayer integration test ==="
 echo "godot: $GODOT"
+echo "port:  $PORT"
 echo "logs:  $LOG_DIR"
+
+# Defensively wait if the port is held from a previous run (OS TIME_WAIT
+# can hold a port for ~60s after a noisy close).
+for i in 1 2 3 4 5; do
+    if ! lsof -i ":$PORT" >/dev/null 2>&1; then break; fi
+    echo "  (waiting on port $PORT to free, attempt $i)"
+    sleep 2
+done
 
 # 1) Start server in background, auto-exit after 12s so it doesn't linger if
 #    the client test crashes.
-"$GODOT" --headless --path "$PROJ" -- --server --port 7777 --seconds 12 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 12 \
     >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "server pid=$SERVER_PID, waiting 2s for boot..."
@@ -25,7 +40,7 @@ sleep 2
 
 # 2) Run client; it self-quits when welcome received (exit 0) or on timeout (exit 1).
 "$GODOT" --headless --path "$PROJ" tests/headless_client.tscn \
-    -- --address ws://127.0.0.1:7777 \
+    -- --address "ws://127.0.0.1:$PORT" \
     >"$CLIENT_LOG" 2>&1
 CLIENT_RC=$?
 
