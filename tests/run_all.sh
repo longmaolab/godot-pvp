@@ -104,6 +104,10 @@ if [ -f "$PROJ/tests/run_ability_buff_test.sh" ]; then
     run_serial "ability_buff (server-side buff state + damage mult)" \
         "$PROJ/tests/run_ability_buff_test.sh"
 fi
+if [ -f "$PROJ/tests/run_map_sync_test.sh" ]; then
+    run_serial "map_sync (client swaps to server's map_path)" \
+        "$PROJ/tests/run_map_sync_test.sh"
+fi
 
 echo
 echo "═════════════════════════════════════════"

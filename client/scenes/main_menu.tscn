@@ -562,6 +562,12 @@ theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 text = "▸  联机 / MULTIPLAYER"
 
+[node name="MPHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
+text = "MAP/MODE 只在你 HOST 时生效；JOIN 时跟随服务器"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
+
 [node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
 custom_minimum_size = Vector2(0, 68)
 theme_override_fonts/font = ExtResource("3_font")

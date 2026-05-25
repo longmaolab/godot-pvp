@@ -29,6 +29,14 @@ signal server_chat_received(peer: int, text: String, color: Color)
 # DS-M3: server tells the client what kind of host it is right after welcome
 # (true = dedicated → client must send input + render from snapshot only).
 signal server_mode_info_received(is_dedicated: bool)
+## Server tells the client which map file is actually loaded server-side.
+## The menu's MAP picker is host-only — when a peer JOINs, this RPC arrives
+## during sync_request and the client swaps off whatever local map it
+## happened to load. Without it the two sides render different geometries
+## while sharing server-authoritative positions (host's KOTH wall = invisible
+## on a client that picked Trenches → bullets pass through it visually,
+## players fall into pits that don't exist for them, etc).
+signal server_map_info_received(map_path: String)
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -131,6 +139,14 @@ func server_chat_line(peer: int, text: String, color: Color) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_mode_info(is_dedicated: bool) -> void:
 	server_mode_info_received.emit(is_dedicated)
+
+
+# Server-authoritative map sync. Sent during sync_request before spawn RPCs
+# so the client can free its locally-picked map (the menu's MAP picker is
+# host-only) and load the server's choice before player positions arrive.
+@rpc("authority", "reliable", "call_remote")
+func server_map_info(map_path: String) -> void:
+	server_map_info_received.emit(map_path)
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

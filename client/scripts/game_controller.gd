@@ -438,6 +438,8 @@ func _enter_client_mode() -> void:
 	if net_rpc != null:
 		if not net_rpc.server_mode_info_received.is_connected(_on_server_mode_info):
 			net_rpc.server_mode_info_received.connect(_on_server_mode_info)
+		if not net_rpc.server_map_info_received.is_connected(_on_server_map_info):
+			net_rpc.server_map_info_received.connect(_on_server_map_info)
 		if not net_rpc.server_snapshot_received.is_connected(_on_server_snapshot):
 			net_rpc.server_snapshot_received.connect(_on_server_snapshot)
 		if not net_rpc.server_respawn_received.is_connected(_on_server_respawn):
@@ -485,6 +487,38 @@ func _on_server_mode_info(is_dedicated: bool) -> void:
 		var p: Node = players_by_peer[peer_id]
 		if p != null and is_instance_valid(p):
 			_apply_ds_client_mode_to_player(p)
+
+
+## Server is the source of truth for which map is loaded. Arrives during the
+## sync_request handshake before any spawn RPC lands, so we have a window to
+## free our local (menu-picked) map and load the server's. Idempotent on
+## same-path messages; safe to fire multiple times.
+func _on_server_map_info(map_path: String) -> void:
+	if map_path.is_empty():
+		return
+	# Already on the requested map (host's local game already loaded it,
+	# or a previous server_map_info already swapped us). No-op.
+	var current_path: String = ""
+	if map_root != null and map_root.scene_file_path != "":
+		current_path = map_root.scene_file_path
+	if current_path == map_path:
+		return
+	if not ResourceLoader.exists(map_path):
+		push_warning("[client] server requested unknown map: %s — staying on %s" % [map_path, current_path])
+		return
+	var new_scene: PackedScene = load(map_path) as PackedScene
+	if new_scene == null:
+		push_warning("[client] failed to load server map: %s" % map_path)
+		return
+	# Out with the old map, in with the new. queue_free is deferred but the
+	# replacement is added now — no frame where map_root is null + accessed.
+	if map_root != null:
+		map_root.queue_free()
+	map_root = new_scene.instantiate()
+	add_child(map_root)
+	if hud != null:
+		hud.push_feed("Loaded server map: %s" % map_path.get_file().get_basename(),
+			Color(0.55, 0.85, 1, 1))
 
 
 ## Configure a player on a DS-client to render purely from snapshots. Local
@@ -610,6 +644,13 @@ func _rpc_sync_request() -> void:
 	_synced_peers[requester] = now_ms
 	if not requester in _ready_peers:
 		_ready_peers.append(requester)
+	# Tell the client what map we're running BEFORE the spawn loop so the
+	# client can swap geometry first; otherwise spawn positions land in
+	# whatever map the client locally picked (which is meaningless — the
+	# menu's MAP picker is host-only).
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null and map_scene != null and not map_scene.resource_path.is_empty():
+		net_rpc.server_map_info.rpc_id(requester, map_scene.resource_path)
 	for peer in players_by_peer.keys():
 		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer))
 
