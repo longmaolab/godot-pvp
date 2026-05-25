@@ -23,7 +23,17 @@ func _ready() -> void:
 	# read res://server.json or fire HTTPRequest — nothing to discover.
 	if NetProtocol.is_dedicated_server_boot():
 		return
-	# Try the bundled file first — cheap and synchronous.
+	# Local-dev guard: when running from the editor (F5 / Play), KEEP the
+	# 127.0.0.1 default even if server.json is checked in. Without this,
+	# pressing CREATE ROOM in the editor connects to the production DS
+	# at game.boobank.com (which usually lags behind local code → RPC
+	# checksum mismatch and infinite "Connected — 等房主点 START"). To
+	# explicitly test against production from the editor, type the wss://
+	# URL into the JOIN BY ADDRESS field manually.
+	if OS.has_feature("editor"):
+		resolved.emit(url)
+		return
+	# Exported native builds + web: try the bundled file first.
 	if FileAccess.file_exists(REMOTE_HINT_FILE):
 		var f := FileAccess.open(REMOTE_HINT_FILE, FileAccess.READ)
 		if f != null:
