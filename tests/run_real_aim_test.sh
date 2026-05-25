@@ -15,7 +15,7 @@ A_LOG="$LOG_DIR/real_aim_A.log"
 B_LOG="$LOG_DIR/real_aim_B.log"
 
 echo "=== DS real-camera-aim test ==="
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 10 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 8 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2

@@ -20,7 +20,7 @@ A_LOG="$LOG_DIR/multi_rejoin_A.log"
 B_LOG="$LOG_DIR/multi_rejoin_B.log"
 
 echo "=== DS multi-client rejoin test ==="
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 20 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 14 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2

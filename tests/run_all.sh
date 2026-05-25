@@ -1,118 +1,153 @@
 #!/usr/bin/env bash
-# Run every M1 test in order. Exit non-zero on first failure.
+# Full test suite. Two-tier structure:
+#   - tier 1: unit / single-process tests, serial (fast, ~30s total)
+#   - tier 2: MP integration tests, 4-way parallel via xargs -P (each binds
+#             a distinct port so they don't fight). Without parallelism this
+#             used to take ~5 min; with 4-way it's ~90-120s.
+#
+# Tweak the parallel width with PARALLEL=N env var. Default 4.
+# Exits 0 if every test passed; non-zero if any failed.
 
 set -u
 GODOT="${GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"
+LOG_DIR="$PROJ/tests/.logs/run_all"
+mkdir -p "$LOG_DIR"
+
+# ── tier 2 worker: invoked once per spec by xargs -P ──────────────────────
+# IMPORTANT: this branch runs BEFORE the parent's `rm -f *.rc` cleanup so
+# concurrent workers don't delete each other's freshly-written rc markers
+# (that was the bug behind "produced no rc marker" for 13/16 tests).
+# Spec format: "<name>:::<path-to-script>"  →  rc to $LOG_DIR/<name>.rc
+if [[ "${1:-}" = "--worker" ]]; then
+    spec="$2"
+    name="${spec%%:::*}"
+    cmd="${spec##*:::}"
+    bash "$cmd" > "$LOG_DIR/$name.log" 2>&1
+    rc=$?
+    echo "$rc" > "$LOG_DIR/$name.rc"
+    if [[ $rc -eq 0 ]]; then
+        echo "  ✓ $name"
+    else
+        echo "  ✗ $name (rc=$rc, see $LOG_DIR/$name.log)"
+    fi
+    exit 0
+fi
+
+# Parent-only setup beyond here. (Workers exited above.)
+# Wipe stale per-test rc markers from a previous run.
+rm -f "$LOG_DIR"/*.rc 2>/dev/null
+PARALLEL="${PARALLEL:-4}"
+START_TS=$(date +%s)
 
 pass_count=0
 fail_count=0
+failed_names=""
 
-run_one() {
+# ── tier 1 helper ─────────────────────────────────────────────────────────
+run_serial() {
     local name="$1"
     shift
     echo
-    echo "========================================="
-    echo "  TEST: $name"
-    echo "========================================="
+    echo "─── [serial] $name ───"
     if "$@"; then
         echo "  ✓ $name"
         pass_count=$((pass_count + 1))
     else
         echo "  ✗ $name"
         fail_count=$((fail_count + 1))
+        failed_names="$failed_names $name"
     fi
 }
 
-# 1. Unit smoke (parses + Resource loads + pure math).
-run_one "smoke_test (data + math)" \
-    "$GODOT" --headless --path "$PROJ" --script tests/smoke_test.gd
+echo "═════════════════════════════════════════"
+echo "  TIER 1: unit + single-process tests"
+echo "═════════════════════════════════════════"
 
-# 1b. Boot the actual main scene — catches runtime _ready errors that
-#     pure-parse smoke tests miss (bad @onready paths, autoload init fails).
-run_one "boot_test (main_menu boots clean)" \
+run_serial "smoke_test (data + math)" \
+    "$PROJ/tests/run_smoke_test.sh"
+run_serial "boot_test (main_menu boots clean)" \
     "$PROJ/tests/run_boot_test.sh"
-
-# 2. Practice integration (real player + dummy + raycast hits).
-run_one "practice_integration (player vs dummy)" \
+run_serial "practice_integration (player vs dummy)" \
     "$GODOT" --headless --path "$PROJ" tests/practice_integration.tscn
-
-# 2b. AI bot integration (bot hunts dummy).
-run_one "bot_integration (AI hunts stationary dummy)" \
+run_serial "bot_integration (AI hunts stationary dummy)" \
     "$GODOT" --headless --path "$PROJ" tests/bot_integration.tscn
-
-# 2bb. Death + respawn cycle (catches HUD signal-signature drift).
-run_one "death_respawn_test (signal sigs + respawn refill)" \
+run_serial "death_respawn_test (signal sigs + respawn refill)" \
     "$GODOT" --headless --path "$PROJ" tests/death_respawn_test.tscn
-
-# 2c. Match-mode controller (FFA / ELIM / RACE win conditions).
-run_one "match_mode_test (FFA/ELIM/RACE win conditions)" \
+run_serial "match_mode_test (FFA/ELIM/RACE win conditions)" \
     "$GODOT" --headless --path "$PROJ" tests/match_mode_test.tscn
-
-# 2d. LagCompensator history + interpolation math.
-run_one "lag_comp_test (history record + sample interpolation)" \
+run_serial "lag_comp_test (history record + sample interpolation)" \
     "$GODOT" --headless --path "$PROJ" tests/lag_comp_test.tscn
-
-# NOTE: lag_comp_integration single-process test was experimental — the
-# Area3D broadphase doesn't synchronously refresh on global_position writes,
-# which makes the rewind-then-raycast assertion flaky in a single tick.
-# The math is covered by lag_comp_test (unit), and the wired-up rewind path
-# is exercised in mp_hit_test (which still passes with lag-comp enabled).
-
-# 3. Multiplayer integration (real WebSocket client/server, NetRpc round-trip).
-run_one "multiplayer_integration (server + client RPC)" \
-    "$PROJ/tests/run_multiplayer_test.sh"
-
-# 4. Multiplayer GAME-spawn integration (host + client both load game.tscn).
-run_one "mp_game_test (host & client spawn each other)" \
-    "$PROJ/tests/run_mp_game_test.sh"
-
-# 5. Multiplayer SERVER-AUTHORITATIVE damage (client fires, server resolves).
-run_one "mp_hit_test (server-authoritative damage)" \
-    "$PROJ/tests/run_mp_hit_test.sh"
-run_one "mp_burst_hit_test (listen-host accepts multi-shot burst)" \
-    "$PROJ/tests/run_mp_burst_hit_test.sh"
-run_one "listen_host_weapon_tick (host ticks remote cooldown + reload)" \
-    "$PROJ/tests/run_listen_host_weapon_tick_test.sh"
-
-# ── Dedicated server pipeline (DS-M1 → DS-M5) ────────────────────────────
-run_one "server_boot_test  (DS-M1: world + handshake)" \
-    "$PROJ/tests/run_server_boot_test.sh"
-run_one "input_rpc_test    (DS-M2: client input → server sim)" \
-    "$PROJ/tests/run_input_rpc_test.sh"
-run_one "snapshot_test     (DS-M3: server snapshot → client interpolation)" \
-    "$PROJ/tests/run_snapshot_test.sh"
-run_one "fire_test         (DS-M4: server-authoritative hitscan)" \
-    "$PROJ/tests/run_fire_test.sh"
-run_one "respawn_test      (DS-M5: death + 3s respawn loop)" \
-    "$PROJ/tests/run_respawn_test.sh"
-
-# ── New end-to-end client tests (the user's actual flows) ─────────────────
-run_one "two_client_test   (2 real clients on DS, A shoots B, damage lands)" \
-    "$PROJ/tests/run_two_client_test.sh"
-run_one "rejoin_test       (quit + rejoin: first client cleanly reconnects)" \
-    "$PROJ/tests/run_rejoin_test.sh"
-run_one "multi_rejoin_test (A+B in match, A leaves+rejoins, A still shoots B)" \
-    "$PROJ/tests/run_multi_rejoin_test.sh"
-run_one "three_client_test (3 clients, multi-shooter, mid-match leave)" \
-    "$PROJ/tests/run_three_client_test.sh"
-run_one "real_aim_test     (try_fire() real LMB path, not bypass-RPC)" \
-    "$PROJ/tests/run_real_aim_test.sh"
-run_one "hitbox_geometry    (HeadHitbox/BodyHitbox cover visible model for every skin)" \
-    "$PROJ/tests/run_hitbox_geometry_test.sh"
-run_one "weapon_switch_test (swap + per-weapon ammo + reload timer)" \
-    "$PROJ/tests/run_weapon_switch_test.sh"
-run_one "hud_signal_test   (hp_changed / ammo_changed / weapon_switched bindings)" \
+run_serial "hud_signal_test (hp/ammo/weapon_switched bindings)" \
     "$GODOT" --headless --path "$PROJ" tests/hud_signal_test.tscn
-run_one "respawn_safe_test (anti-spawn-kill + post-respawn i-frame)" \
-    "$PROJ/tests/run_respawn_safe_test.sh"
-run_one "match_e2e_test    (DS + --mode ffa_kill5 + match_ended fires)" \
-    "$PROJ/tests/run_match_e2e_test.sh"
+if [ -f "$PROJ/tests/run_hitbox_geometry_test.sh" ]; then
+    run_serial "hitbox_geometry (per-skin coverage)" \
+        "$PROJ/tests/run_hitbox_geometry_test.sh"
+fi
 
 echo
-echo "========================================="
+echo "═════════════════════════════════════════"
+echo "  TIER 2: MP integration tests (parallel x$PARALLEL)"
+echo "═════════════════════════════════════════"
+echo
+
+# Each spec: "<name>:::<absolute-path-to-script>"  ← :::  separator avoids
+# colliding with shell-meta in the path.
+specs=(
+  "multiplayer_integration:::$PROJ/tests/run_multiplayer_test.sh"
+  "mp_game_test:::$PROJ/tests/run_mp_game_test.sh"
+  "mp_hit_test:::$PROJ/tests/run_mp_hit_test.sh"
+  "server_boot_test:::$PROJ/tests/run_server_boot_test.sh"
+  "input_rpc_test:::$PROJ/tests/run_input_rpc_test.sh"
+  "snapshot_test:::$PROJ/tests/run_snapshot_test.sh"
+  "fire_test:::$PROJ/tests/run_fire_test.sh"
+  "respawn_test:::$PROJ/tests/run_respawn_test.sh"
+  "two_client_test:::$PROJ/tests/run_two_client_test.sh"
+  "rejoin_test:::$PROJ/tests/run_rejoin_test.sh"
+  "multi_rejoin_test:::$PROJ/tests/run_multi_rejoin_test.sh"
+  "three_client_test:::$PROJ/tests/run_three_client_test.sh"
+  "real_aim_test:::$PROJ/tests/run_real_aim_test.sh"
+  "weapon_switch_test:::$PROJ/tests/run_weapon_switch_test.sh"
+  "respawn_safe_test:::$PROJ/tests/run_respawn_safe_test.sh"
+  "match_e2e_test:::$PROJ/tests/run_match_e2e_test.sh"
+)
+[ -f "$PROJ/tests/run_mp_burst_hit_test.sh" ] && \
+  specs+=("mp_burst_hit_test:::$PROJ/tests/run_mp_burst_hit_test.sh")
+
+# Pipe specs into xargs, one per line. -P4 -L1 = up to 4 in flight, one
+# spec per invocation. Each worker writes its rc to LOG_DIR/<name>.rc.
+SCRIPT="$0"
+printf '%s\n' "${specs[@]}" | xargs -P "$PARALLEL" -I {} bash "$SCRIPT" --worker '{}'
+
+# Collect rc markers and tally.
+for spec in "${specs[@]}"; do
+    name="${spec%%:::*}"
+    rc_file="$LOG_DIR/$name.rc"
+    if [[ -f "$rc_file" ]]; then
+        rc=$(cat "$rc_file")
+        if [[ "$rc" = "0" ]]; then
+            pass_count=$((pass_count + 1))
+        else
+            fail_count=$((fail_count + 1))
+            failed_names="$failed_names $name"
+        fi
+    else
+        echo "  ! $name produced no rc marker — treating as failed"
+        fail_count=$((fail_count + 1))
+        failed_names="$failed_names $name(no-rc)"
+    fi
+done
+
+ELAPSED=$(($(date +%s) - START_TS))
+echo
+echo "═════════════════════════════════════════"
 echo "  SUMMARY"
-echo "========================================="
+echo "═════════════════════════════════════════"
 echo "  passed: $pass_count"
 echo "  failed: $fail_count"
+echo "  elapsed: ${ELAPSED}s"
+if [[ $fail_count -gt 0 ]]; then
+    echo "  failed tests:$failed_names"
+    echo "  full logs: $LOG_DIR/<name>.log"
+fi
 [ "$fail_count" -eq 0 ] && exit 0 || exit 1

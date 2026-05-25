@@ -15,18 +15,18 @@ A_LOG="$LOG_DIR/respawn_safe_A.log"
 B_LOG="$LOG_DIR/respawn_safe_B.log"
 
 echo "=== DS respawn-safety test ==="
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 14 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 11 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2
 
 "$GODOT" --headless --path "$PROJ" tests/headless_respawn_safe.tscn \
-	-- --role B --address "ws://127.0.0.1:$PORT" --fire-seconds 10.0 \
+	-- --role B --address "ws://127.0.0.1:$PORT" --fire-seconds 7.5 \
 	>"$B_LOG" 2>&1 &
 B_PID=$!
 sleep 0.7
 "$GODOT" --headless --path "$PROJ" tests/headless_respawn_safe.tscn \
-	-- --role A --address "ws://127.0.0.1:$PORT" --fire-seconds 10.0 \
+	-- --role A --address "ws://127.0.0.1:$PORT" --fire-seconds 7.5 \
 	>"$A_LOG" 2>&1 &
 A_PID=$!
 

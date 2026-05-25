@@ -16,7 +16,7 @@ B_LOG="$LOG_DIR/three_client_B.log"
 C_LOG="$LOG_DIR/three_client_C.log"
 
 echo "=== DS three-client test ==="
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 16 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 12 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2
@@ -28,13 +28,13 @@ C_PID=$!
 sleep 0.4
 "$GODOT" --headless --path "$PROJ" tests/headless_three_client.tscn \
 	-- --role B --address "ws://127.0.0.1:$PORT" \
-	   --fire-after 1.0 --fire-duration 7.0 \
+	   --fire-after 1.0 --fire-duration 5.0 \
 	>"$B_LOG" 2>&1 &
 B_PID=$!
 sleep 0.4
 "$GODOT" --headless --path "$PROJ" tests/headless_three_client.tscn \
 	-- --role A --address "ws://127.0.0.1:$PORT" \
-	   --fire-after 1.0 --fire-duration 7.0 \
+	   --fire-after 1.0 --fire-duration 5.0 \
 	>"$A_LOG" 2>&1 &
 A_PID=$!
 

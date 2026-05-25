@@ -14,7 +14,7 @@ A_LOG="$LOG_DIR/weapon_switch_A.log"
 B_LOG="$LOG_DIR/weapon_switch_B.log"
 
 echo "=== DS weapon-switch test ==="
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 12 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 9 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2

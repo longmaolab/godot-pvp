@@ -17,6 +17,7 @@ func _ready() -> void:
 	await _test_ffa_kill_goal()
 	await _test_elim_round_progression()
 	await _test_race_kill_goal()
+	await _test_elim_round_kills_dont_leak()
 	print("\n=== result: %s (%d failures) ===" % ["PASS" if failed == 0 else "FAIL", failed])
 	get_tree().quit(0 if failed == 0 else 1)
 
@@ -107,6 +108,46 @@ func _test_race_kill_goal() -> void:
 		mc.queue_free()
 		return
 	print("  [ok] RACE/TDM: peer 7 won at 10 kills")
+	mc.queue_free()
+
+
+## codexreview 12:39 P2 regression: round 2 timeout must not crown the
+## player who scored in round 1. Locks in the round-local stats fix.
+func _test_elim_round_kills_dont_leak() -> void:
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_ELIM
+	add_child(mc)
+	mc.start()
+
+	# Round 1: peer 5 kills peer 9. record_kill auto-ends the elim round.
+	mc.record_kill(5, 9)
+	await get_tree().process_frame
+	if mc.round_wins.get(5, 0) != 1:
+		_fail("round-leak: expected peer 5 has 1 round_win after round 1, got %d" %
+			mc.round_wins.get(5, 0))
+		mc.queue_free()
+		return
+
+	# Manually start round 2 (bypass the 2s inter-round timer).
+	mc._start_round()
+	# Sanity: round_kills must be cleared on _start_round; the previous
+	# round's 1 kill for peer 5 must not still be sitting there.
+	if mc.round_kills.get(5, 0) != 0:
+		_fail("round-leak: peer 5 round_kills should be 0 at start of round 2, got %d" %
+			mc.round_kills.get(5, 0))
+		mc.queue_free()
+		return
+
+	# Round 2: nobody scores; timeout fires. The bug we're guarding against
+	# would crown peer 5 because their CUMULATIVE `kills` is still 1.
+	mc._on_round_timeout()
+	await get_tree().process_frame
+	if mc.round_wins.get(5, 0) != 1:
+		_fail("round-leak: peer 5 round_wins jumped to %d on zero-kill timeout — round 1's kill leaked into round 2's tally" %
+			mc.round_wins.get(5, 0))
+		mc.queue_free()
+		return
+	print("  [ok] ELIM round 2 zero-kill timeout: no spurious winner from round 1's kills")
 	mc.queue_free()
 
 

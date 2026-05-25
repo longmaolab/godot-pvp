@@ -14,8 +14,12 @@ const FAMILY_KOTH  := &"koth"    # hold-the-hill (later)
 
 @export var mode_def: Resource = null
 
-var kills: Dictionary = {}        # peer_id → count
-var deaths: Dictionary = {}       # peer_id → count
+var kills: Dictionary = {}        # peer_id → count, cumulative for whole match
+var deaths: Dictionary = {}       # peer_id → count, cumulative for whole match
+# codexreview P2: round-local stats so ELIM timeout doesn't reuse the
+# previous round's kills. Cleared at the top of every _start_round.
+var round_kills: Dictionary = {}  # peer_id → kills this round only
+var round_deaths: Dictionary = {} # peer_id → deaths this round only
 var round_wins: Dictionary = {}   # peer_id → rounds won
 var current_round: int = 1
 var time_remaining: float = 0.0
@@ -39,6 +43,8 @@ func start() -> void:
 		return
 	kills.clear()
 	deaths.clear()
+	round_kills.clear()
+	round_deaths.clear()
 	round_wins.clear()
 	current_round = 1
 	match_over = false
@@ -59,6 +65,11 @@ func start() -> void:
 
 func _start_round() -> void:
 	round_active = true
+	# Reset round-local stats so ELIM `_on_round_timeout` only counts kills
+	# scored in THIS round. Without this, round 2 timeout would crown the
+	# player who happened to score in round 1, even if round 2 had 0 kills.
+	round_kills.clear()
+	round_deaths.clear()
 	time_remaining = float(mode_def.round_seconds)
 	round_started.emit(current_round)
 
@@ -83,8 +94,10 @@ func record_kill(killer_peer: int, victim_peer: int) -> void:
 	kill_recorded.emit(killer_peer, victim_peer)
 	if killer_peer > 0 and killer_peer != victim_peer:
 		kills[killer_peer] = kills.get(killer_peer, 0) + 1
+		round_kills[killer_peer] = round_kills.get(killer_peer, 0) + 1
 		score_changed.emit(killer_peer, kills.get(killer_peer, 0), deaths.get(killer_peer, 0))
 	deaths[victim_peer] = deaths.get(victim_peer, 0) + 1
+	round_deaths[victim_peer] = round_deaths.get(victim_peer, 0) + 1
 	score_changed.emit(victim_peer, kills.get(victim_peer, 0), deaths.get(victim_peer, 0))
 
 	# Win-condition checks per family.
@@ -99,13 +112,17 @@ func record_kill(killer_peer: int, victim_peer: int) -> void:
 
 
 func _on_round_timeout() -> void:
-	# In elim with timeout: the player with most kills this round wins.
-	# Simplified — first player in kills dict wins ties.
+	# In elim with timeout: the player with most kills THIS ROUND wins.
+	# Previously read from `kills` (match-cumulative), which let a player
+	# who scored only in round 1 still win round 2's timeout. Ties go to
+	# the first peer iterated; if nobody scored this round, top_peer stays
+	# 0 → _end_round(0) which doesn't increment round_wins (= no-op winner,
+	# the next round starts fresh).
 	var top_peer: int = 0
-	var top_score: int = -1
-	for peer in kills.keys():
-		if kills[peer] > top_score:
-			top_score = kills[peer]
+	var top_score: int = 0
+	for peer in round_kills.keys():
+		if round_kills[peer] > top_score:
+			top_score = round_kills[peer]
 			top_peer = peer
 	_end_round(top_peer)
 

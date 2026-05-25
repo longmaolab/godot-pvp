@@ -23,19 +23,19 @@ for i in 1 2 3 4 5; do
 	echo "  (waiting on port $PORT to free, attempt $i)"
 	sleep 2
 done
-"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 30 \
-	--mode ffa_kill5 --test-repeat-kill-interval 1.5 \
+"$GODOT" --headless --path "$PROJ" -- --server --port "$PORT" --seconds 24 \
+	--mode ffa_kill5 --test-repeat-kill-interval 0.5 \
 	>"$SERVER_LOG" 2>&1 &
 SPID=$!
 sleep 1.2
 
 "$GODOT" --headless --path "$PROJ" tests/headless_match_e2e.tscn \
-	-- --role B --address "ws://127.0.0.1:$PORT" --fire-seconds 26.0 \
+	-- --role B --address "ws://127.0.0.1:$PORT" --fire-seconds 16.0 \
 	>"$B_LOG" 2>&1 &
 B_PID=$!
 sleep 0.7
 "$GODOT" --headless --path "$PROJ" tests/headless_match_e2e.tscn \
-	-- --role A --address "ws://127.0.0.1:$PORT" --fire-seconds 26.0 \
+	-- --role A --address "ws://127.0.0.1:$PORT" --fire-seconds 16.0 \
 	>"$A_LOG" 2>&1 &
 A_PID=$!
 
