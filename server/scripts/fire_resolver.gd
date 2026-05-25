@@ -237,6 +237,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 			if new_hp == hp_before:
 				if is_dedicated_server:
 					print("[server]   ↳ absorbed: victim %d in i-frame or dead" % victim_peer)
+				# R9: shot landed but did 0 damage (victim in 2.5s respawn
+				# i-frame, or already-dead). The fire-interval cooldown we
+				# armed in stage 4 above doesn't earn its keep when the shot
+				# accomplished nothing — refund it so the next fire RPC isn't
+				# gated by a "you wasted a shot" penalty. Caveat: this only
+				# resets the SERVER-side counter. The remote client's local
+				# time_until_next_shot was armed by its own try_fire() and
+				# ticks independently; a fully-refunded UX needs a broadcast
+				# RPC (revisit when hit feedback gets a general polish pass).
+				shooter.time_until_next_shot = 0.0
 				return
 			if is_dedicated_server:
 				print("[server] hit: shooter=%d victim=%d dmg=%.1f head=%s new_hp=%.1f hitbox=%s" % [peer_id, victim_peer, dmg, is_head, new_hp, collider.name])
