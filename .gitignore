@@ -7,6 +7,7 @@ export_credentials.cfg
 *.tmp
 *.log
 exports/
+tests/.logs/
 
 # Internal working state — not for public repo
 .agent/
