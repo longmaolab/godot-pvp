@@ -311,16 +311,23 @@ anchor_bottom = 1.0
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 1
 
-[node name="Center" type="CenterContainer" parent="Scroll"]
+[node name="Center" type="MarginContainer" parent="Scroll"]
 size_flags_horizontal = 3
 size_flags_vertical = 3
-custom_minimum_size = Vector2(0, 980)
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_bottom = 32
 
 [node name="Cols" type="HBoxContainer" parent="Scroll/Center"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_constants/separation = 36
 
 [node name="LeftCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(620, 0)
+custom_minimum_size = Vector2(560, 900)
+size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass")
 
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/LeftCard"]
@@ -465,7 +472,9 @@ theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "🛒   商店  /  SHOP"
 
 [node name="RightCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(560, 0)
+custom_minimum_size = Vector2(500, 900)
+size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass_warm")
 
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/RightCard"]
@@ -504,6 +513,28 @@ theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
 text = "▸  开始游戏 / PLAY"
+
+[node name="SelectionSummary" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_styles/panel = SubResource("info_pill")
+
+[node name="H" type="HBoxContainer" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary"]
+alignment = 1
+theme_override_constants/separation = 18
+
+[node name="SummaryMap" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
+text = "📍  --"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
+
+[node name="SummaryMode" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
+text = "🎯  --"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
+
+[node name="SummarySkin" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
+text = "👤  --"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="PracticeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
 custom_minimum_size = Vector2(0, 96)

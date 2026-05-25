@@ -60,6 +60,9 @@ var MODES: Array = []
 @onready var skin_name_label: Label = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinName
 @onready var skin_prev_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinPrev
 @onready var skin_next_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinNext
+@onready var summary_map: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMap
+@onready var summary_mode: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMode
+@onready var summary_skin: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummarySkin
 
 
 func _ready() -> void:
@@ -146,6 +149,23 @@ func _refresh_skin_label() -> void:
 	# A..R letter mapping mirrors PlayerController.SKIN_LETTERS.
 	var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
 	skin_name_label.text = "Character %s   (%d / 18)" % [letter, s.skin_index + 1]
+	_refresh_summary()
+
+
+## Mirror the current left-side selections (map / mode / skin) into the
+## right-card "you're about to play" pill, so picks visibly affect both
+## halves of the screen instead of just updating a small description label.
+func _refresh_summary() -> void:
+	if summary_map != null and map_picker != null:
+		var midx: int = clampi(map_picker.selected, 0, MAPS.size() - 1)
+		summary_map.text = "📍  %s" % MAPS[midx].name
+	if summary_mode != null and mode_picker != null and MODES.size() > 0:
+		var oidx: int = clampi(mode_picker.selected, 0, MODES.size() - 1)
+		summary_mode.text = "🎯  %s" % MODES[oidx].name
+	if summary_skin != null and has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
+		summary_skin.text = "👤  Character %s" % letter
 
 
 func _on_name_changed(new_text: String) -> void:
@@ -173,6 +193,7 @@ func _count_weapons_on_disk() -> int:
 func _on_map_changed(idx: int) -> void:
 	idx = clampi(idx, 0, MAPS.size() - 1)
 	map_desc.text = MAPS[idx].desc
+	_refresh_summary()
 
 
 func _on_mode_changed(idx: int) -> void:
@@ -183,8 +204,10 @@ func _on_mode_changed(idx: int) -> void:
 		var mode_res: Resource = load(path)
 		if mode_res != null and "description" in mode_res and not mode_res.description.is_empty():
 			mode_desc.text = mode_res.description
+			_refresh_summary()
 			return
 	mode_desc.text = MODES[idx].desc
+	_refresh_summary()
 
 
 func _on_show_weapons() -> void:
