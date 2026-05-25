@@ -74,6 +74,7 @@ func _ready() -> void:
 ## empty string if at the global room cap.
 func create_room(host_peer: int, map_path: String, mode_def_path: String) -> String:
 	if rooms.size() >= MAX_ROOMS:
+		print("[RoomMgr] create_room rejected: at cap %d" % MAX_ROOMS)
 		return ""
 	# If this peer is already in a room, kick them out of it first — a
 	# create implies they're starting over.
@@ -92,6 +93,7 @@ func create_room(host_peer: int, map_path: String, mode_def_path: String) -> Str
 	room.add_player(host_peer)
 	rooms[room.room_id] = room
 	peer_to_room[host_peer] = room.room_id
+	print("[RoomMgr] CREATE %s host=%d map=%s" % [room.room_id, host_peer, map_path.get_file()])
 	room_state_changed.emit(room)
 	return room.room_id
 
@@ -100,11 +102,14 @@ func create_room(host_peer: int, map_path: String, mode_def_path: String) -> Str
 ## Fails if the room doesn't exist, is full, or already in a match.
 func join_room(peer: int, room_id: String) -> bool:
 	if not rooms.has(room_id):
+		print("[RoomMgr] JOIN peer=%d → %s rejected: room not found" % [peer, room_id])
 		return false
 	var room: Room = rooms[room_id]
 	if room.is_full():
+		print("[RoomMgr] JOIN peer=%d → %s rejected: room full (%d/%d)" % [peer, room_id, room.players.size(), room.max_players])
 		return false
 	if room.state != Room.STATE_LOBBY:
+		print("[RoomMgr] JOIN peer=%d → %s rejected: state=%d not LOBBY" % [peer, room_id, room.state])
 		return false   # mid-match — no late join in Phase 1
 	# Already in another room? Leave it first (a peer can only be in one
 	# room at a time).
@@ -114,6 +119,7 @@ func join_room(peer: int, room_id: String) -> bool:
 		leave_room(peer)
 	room.add_player(peer)
 	peer_to_room[peer] = room_id
+	print("[RoomMgr] JOIN %s peer=%d (now %d/%d players)" % [room_id, peer, room.players.size(), room.max_players])
 	room_state_changed.emit(room)
 	return true
 
@@ -127,17 +133,21 @@ func leave_room(peer: int) -> String:
 	var room_id: String = peer_to_room[peer]
 	peer_to_room.erase(peer)
 	if not rooms.has(room_id):
+		print("[RoomMgr] LEAVE peer=%d from %s (room missing — already destroyed?)" % [peer, room_id])
 		return room_id   # defensive — shouldn't happen
 	var room: Room = rooms[room_id]
 	room.remove_player(peer)
 	# Host left → destroy the room and evict remaining players.
 	if peer == room.host_peer:
+		print("[RoomMgr] LEAVE %s peer=%d (HOST) → destroy" % [room_id, peer])
 		_destroy_room(room_id)
 		return room_id
 	# Regular player left → just notify the room.
 	if room.is_empty():
+		print("[RoomMgr] LEAVE %s peer=%d (last) → destroy" % [room_id, peer])
 		_destroy_room(room_id)
 	else:
+		print("[RoomMgr] LEAVE %s peer=%d (non-host, %d/%d remain) → keep" % [room_id, peer, room.players.size(), room.max_players])
 		room_state_changed.emit(room)
 	return room_id
 
@@ -256,6 +266,7 @@ func start_match(room_id: String) -> void:
 	var room: Room = rooms.get(room_id, null)
 	if room == null:
 		return
+	print("[RoomMgr] START_MATCH %s (%d players)" % [room_id, room.players.size()])
 	room.state = Room.STATE_MATCH
 	room_state_changed.emit(room)   # tell room players the state changed
 	match_started.emit(room)         # tell GameController to boot the match
@@ -268,6 +279,7 @@ func end_match(room_id: String) -> void:
 	var room: Room = rooms.get(room_id, null)
 	if room == null:
 		return
+	print("[RoomMgr] END_MATCH %s → LOBBY (%d players)" % [room_id, room.players.size()])
 	room.state = Room.STATE_LOBBY
 	match_finished.emit(room)
 	room_state_changed.emit(room)
@@ -345,6 +357,7 @@ func _destroy_room(room_id: String) -> void:
 	# Capture the player list BEFORE clearing so listeners (e.g. the RPC
 	# broadcaster) can target the evicted set with rpc_id.
 	var evicted: Array = room.players.duplicate()
+	print("[RoomMgr] DESTROY %s (was state=%d, evicting %s)" % [room_id, room.state, str(evicted)])
 	# Evict any stragglers from peer_to_room (host already removed; this
 	# handles the "host left while joiners were still in lobby" case).
 	for peer in room.players:
