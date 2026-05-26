@@ -202,33 +202,30 @@ static func spawn_local_tracer(tree: SceneTree, camera: Camera3D, color: Color, 
 	tt.tween_callback(trail.queue_free)
 
 
-## Floating Label3D billboarded above a remote player so the local human can
-## SEE where the enemy is. Skipped for the local player's own avatar (you
-## don't need to see your own name floating in first-person).
+## Floating Label3D billboarded above a remote player so the local human
+## can SEE where the enemy is. Skipped for the local player's own avatar.
 ##
-## Sized for legibility at typical engagement range — bigger pixel_size +
-## chunky outline so the name reads against busy map geometry, plus the
-## CJK-capable ui_font.tres so Chinese names render instead of tofu.
+## Mirrors arena-shooter-3d/scenes/player.tscn:32-41 verbatim (24/4/0.0022,
+## white modulate, billboard=enabled, no_depth_test, fixed_size, y=2.4).
+## User explicitly asked for parity — earlier tweaks toward bigger/gold
+## kept looking off-target. Only addition vs arena: ui_font.tres so CJK
+## names render (arena-shooter doesn't need this; its names are ASCII).
 static func attach_name_tag(parent: Node, name_text: String) -> void:
 	var tag := Label3D.new()
 	tag.name = "_NameTag"
 	tag.text = name_text
-	# Font matters: Label3D's default font has no CJK glyphs. Loading
-	# ui_font.tres (RussoOne + NotoSansSC fallback) makes Chinese names
-	# render correctly. Loaded inline to avoid an export-resource cycle.
+	# Font: Label3D's default font has no CJK glyphs. Loading ui_font.tres
+	# (RussoOne + NotoSansSC fallback) makes Chinese names render. Arena-
+	# shooter-3d skips this because its names are ASCII.
 	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
 	if ui_font != null:
 		tag.font = ui_font
-	# Sizing matches arena-shooter-3d/scenes/player.tscn (24/4/0.0022)
-	# so the screen footprint is comparable. Earlier 72/18/0.0035 was
-	# huge — name tag covered half the screen at close range.
-	tag.font_size = 28                                    # arena uses 24; +4 for slight extra weight
-	tag.outline_size = 5                                  # arena uses 4
-	tag.outline_modulate = Color(0, 0, 0, 1)
-	tag.modulate = Color(1, 0.92, 0.55, 1)                # warm gold, holds up vs blue maps
+	tag.font_size = 24
+	tag.outline_size = 4
+	tag.modulate = Color(1, 1, 1, 1)
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	tag.no_depth_test = true                              # render through walls
-	tag.fixed_size = true                                 # constant screen size regardless of distance
-	tag.pixel_size = 0.0024                               # arena uses 0.0022; tiny bump for legibility
-	tag.position = Vector3(0, 2.4, 0)                     # original offset — head clearance
+	tag.no_depth_test = true
+	tag.fixed_size = true
+	tag.pixel_size = 0.0022
+	tag.position = Vector3(0, 2.4, 0)
 	parent.add_child(tag)

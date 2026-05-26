@@ -1149,6 +1149,19 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 	var scoring_mc: Node = _resolve_match_controller_for_peer(victim_peer)
 	if scoring_mc != null:
 		scoring_mc.record_kill(killer_peer, victim_peer)
+	# Scoreboard counters: always tick the room's K/D dicts so mode-less
+	# (mode_def_path="") rooms still show kill counts in the HUD. The
+	# match_controller path above is for win-condition logic; this is
+	# purely the display feed. Trigger a scoreboard broadcast directly
+	# since there's no score_changed signal when mc is null.
+	var victim_room_id: String = _room_id_for_peer(victim_peer)
+	if not victim_room_id.is_empty():
+		var rm: Node = get_node_or_null(^"/root/RoomManager")
+		if rm != null:
+			var rooms: Dictionary = rm.rooms
+			if rooms.has(victim_room_id):
+				rooms[victim_room_id].record_kill(killer_peer, victim_peer)
+				_broadcast_scoreboard_for_room(victim_room_id)
 
 	# R1: single death-broadcast point. Every kill source (gun, damage_zone,
 	# admin nuke, headless_main --test-kill hooks, future map gimmicks) hits
@@ -1556,17 +1569,12 @@ func _broadcast_scoreboard_for_room(room_id: String) -> void:
 	var rw: Variant = room_worlds.get(room_id)
 	if rw == null or not is_instance_valid(rw):
 		return
-	# Build one row per room player. Read kills/deaths from match_controller
-	# IF the room has one. A room created with mode_def_path="" has no
-	# match_controller (practice-style FFA — nothing to score) so we fall
-	# back to empty kill/death dicts; the scoreboard still lists who's in
-	# the match, which is what users actually want from this panel.
-	var mc: Variant = rw.get("match_controller")
-	var kills: Dictionary = {}
-	var deaths: Dictionary = {}
-	if mc != null and is_instance_valid(mc):
-		kills = mc.kills
-		deaths = mc.deaths
+	# Read K/D from the room itself — it's the single source of truth,
+	# maintained on every death regardless of mode_def. (match_controller
+	# also tracks them when present, but it's optional and mode-specific;
+	# room.kills/deaths is always populated by _on_any_player_died.)
+	var kills: Dictionary = room.kills
+	var deaths: Dictionary = room.deaths
 	var rows: Array = []
 	var profiles: Dictionary = room.profiles
 	for peer in room.players:

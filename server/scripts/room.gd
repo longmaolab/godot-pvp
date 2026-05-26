@@ -29,6 +29,13 @@ var max_players: int = 4           # Phase 1: locked at 4 per .agent/lobby_plan.
 # filled on add_player so the dict is never missing an entry for a present
 # player — joiners can overwrite via set_profile + set_ready RPCs.
 var profiles: Dictionary = {}
+# Per-peer kill / death counters. Always maintained regardless of whether
+# a mode_def is loaded — gives us a scoreboard data source even for
+# mode-less FFA rooms (where match_controller is null and would never
+# accumulate anything). Mode-driven win conditions still live on
+# match_controller; this is purely for display.
+var kills: Dictionary = {}    # peer_id (int) → int
+var deaths: Dictionary = {}   # peer_id (int) → int
 
 
 ## Serialize to a plain Dictionary for RPC payload + browser display.
@@ -129,6 +136,22 @@ func clear_ready_bits() -> void:
 		var p: Dictionary = profiles[k]
 		p["ready"] = false
 		profiles[k] = p
+
+
+## Increment K/D counters. Always called when a player dies, regardless
+## of whether the room has a mode-driven match_controller. Self-kills
+## (suicide / fall damage) credit deaths but not kills.
+func record_kill(killer_peer: int, victim_peer: int) -> void:
+	if killer_peer > 0 and killer_peer != victim_peer:
+		kills[killer_peer] = int(kills.get(killer_peer, 0)) + 1
+	deaths[victim_peer] = int(deaths.get(victim_peer, 0)) + 1
+
+
+## Reset K/D for a fresh match. Called from RoomManager.end_match alongside
+## clear_ready_bits so round 2 starts from 0/0.
+func clear_scores() -> void:
+	kills.clear()
+	deaths.clear()
 
 
 func is_full() -> bool:

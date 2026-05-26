@@ -307,6 +307,9 @@ func end_match(room_id: String) -> void:
 	# bits from before the match carry over and host sees "all ready"
 	# even though half the table is staring at the end-screen.
 	room.clear_ready_bits()
+	# Reset the per-room K/D counters so the next round starts from 0/0
+	# (otherwise the scoreboard keeps accumulating across rematches).
+	room.clear_scores()
 	match_finished.emit(room)
 	room_state_changed.emit(room)
 
