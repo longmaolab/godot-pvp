@@ -615,6 +615,16 @@ func _selected_mode_path() -> String:
 
 
 func _on_practice() -> void:
+	# Belt-and-suspenders: if the user previously hit HOST / JOIN / CREATE
+	# ROOM / BROWSE ROOMS and then backed out without a clean teardown,
+	# `multiplayer.multiplayer_peer` can still be a live WebSocket peer.
+	# Without this cleanup, game_controller's _ready sees _is_networked()
+	# == true and walks the MP enter_host/client path INSTEAD of practice
+	# → ends up showing a lobby-like HUD on an empty world. Drop the peer
+	# so the new game scene boots into _enter_practice_mode.
+	if multiplayer.has_multiplayer_peer():
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
 	_launch_game()
 
 
