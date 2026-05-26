@@ -77,6 +77,17 @@ else
   echo ""
 fi
 
+# ---- 3.5 brotli 预压缩 pck 给 Caddy precompressed 用 ----
+# Caddy 配的 file_server.precompressed 会在客户端 Accept-Encoding: br 时
+# 优先 serve `<file>.br`,跳过现场压缩。pck 从 15MB → 2.5MB,首页下载量
+# 直接腰斩。.br 文件 .gitignore 掉,VPS 那边在 import 后自己压(VPS 有
+# brotli CLI)。本地这步是冗余但留着方便本地调试 web 包大小。
+if command -v brotli >/dev/null 2>&1; then
+  echo "→ 本地预压缩 docs/index.pck (brotli q8)..."
+  brotli -q 8 -f docs/index.pck -o docs/index.pck.br
+  ls -lh docs/index.pck docs/index.pck.br | awk '{printf "  %s  %s\n", $5, $9}'
+fi
+
 # ---- 4. git 检查 + commit ----
 if [ ! -d .git ]; then
   echo "⚠️  这个项目还没用 git 初始化。"
@@ -101,6 +112,8 @@ echo "→ 通知服务器拉取、import、重启 ..."
 ssh "$SERVER_HOST" "cd '$SERVER_PATH' \
   && git pull --rebase \
   && godot --headless --path . --import 2>&1 | tail -3 \
+  && brotli -q 11 -f docs/index.pck -o docs/index.pck.br \
+  && brotli -q 11 -f docs/index.wasm -o docs/index.wasm.br \
   && sudo systemctl restart $SERVICE_NAME"
 
 # ---- 7. done ----
