@@ -355,7 +355,7 @@ horizontal_alignment = 1
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▸  你是谁 / IDENTITY"
+text = "▶  你是谁 / IDENTITY"
 
 [node name="NameRow" type="HBoxContainer" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_constants/separation = 14
@@ -409,7 +409,7 @@ text = "▶"
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▸  地图 / MAP"
+text = "▶  地图 / MAP"
 
 [node name="MapPicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
 custom_minimum_size = Vector2(0, 60)
@@ -433,7 +433,7 @@ theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▸  模式 / MODE"
+text = "▶  模式 / MODE"
 
 [node name="ModePicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
 custom_minimum_size = Vector2(0, 60)
@@ -512,7 +512,7 @@ theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
-text = "▸  开始游戏 / PLAY"
+text = "▶  开始游戏 / PLAY"
 
 [node name="SelectionSummary" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V"]
 theme_override_styles/panel = SubResource("info_pill")
@@ -547,7 +547,7 @@ theme_override_constants/separation = 14
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
-text = "▸  房间 / LOBBY"
+text = "▶  房间 / LOBBY"
 horizontal_alignment = 1
 
 [node name="StagingStatus" type="Label" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
@@ -581,7 +581,7 @@ theme_override_font_sizes/font_size = 18
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
-text = "✕   取消 / Cancel"
+text = "×   取消 / Cancel"
 
 [node name="PracticeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
 custom_minimum_size = Vector2(0, 96)
@@ -607,7 +607,7 @@ theme_override_colors/font_color = Color(0.65, 0.78, 0.92, 1)
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
-text = "▸  公网房间 / PUBLIC ARENA"
+text = "▶  公网房间 / PUBLIC ARENA"
 
 [node name="PublicHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 text = "在线匹配 — CREATE 用上面选的 MAP/MODE 直接开房"
@@ -668,7 +668,7 @@ text = "🔗  JOIN"
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
-text = "▸  局域网 / LAN  (同 WiFi 直连)"
+text = "▶  局域网 / LAN  (同 WiFi 直连)"
 
 [node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
 custom_minimum_size = Vector2(0, 52)

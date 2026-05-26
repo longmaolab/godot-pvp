@@ -45,7 +45,7 @@ func dismiss() -> void:
 func show_error(msg: String) -> void:
 	visible = true
 	_timed_out = true
-	spinner.text = "✗"
+	spinner.text = "×"
 	subtitle.text = msg
 	back_button.visible = true
 	set_process(true)

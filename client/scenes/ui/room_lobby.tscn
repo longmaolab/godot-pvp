@@ -90,7 +90,7 @@ theme_override_font_sizes/font_size = 17
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 
 [node name="PlayersHeader" type="Label" parent="Center/Panel/V"]
-text = "▸  玩家 / PLAYERS"
+text = "▶  玩家 / PLAYERS"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 1)

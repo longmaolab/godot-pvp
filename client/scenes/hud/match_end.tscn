@@ -164,7 +164,7 @@ horizontal_alignment = 1
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▸  SCOREBOARD"
+text = "▶  SCOREBOARD"
 
 [node name="ScoreboardList" type="VBoxContainer" parent="Center/Card/V"]
 theme_override_constants/separation = 4

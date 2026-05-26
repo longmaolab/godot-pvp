@@ -92,4 +92,4 @@ custom_minimum_size = Vector2(0, 44)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 15
 theme_override_styles/normal = SubResource("pause_btn_normal")
-text = "✕  QUIT · 退出游戏"
+text = "×  QUIT · 退出游戏"
