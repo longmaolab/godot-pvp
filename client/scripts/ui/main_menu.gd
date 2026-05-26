@@ -49,6 +49,8 @@ var MODES: Array = []
 @onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
 @onready var create_room_btn: Button = $Scroll/Center/Cols/RightCard/V/CreateRoomButton
 @onready var browse_rooms_btn: Button = $Scroll/Center/Cols/RightCard/V/BrowseRoomsButton
+@onready var room_code_input: LineEdit = $Scroll/Center/Cols/RightCard/V/RoomCodeRow/RoomCodeInput
+@onready var join_by_code_btn: Button = $Scroll/Center/Cols/RightCard/V/RoomCodeRow/JoinByCodeButton
 @onready var host_btn: Button = $Scroll/Center/Cols/RightCard/V/HostButton
 @onready var join_btn: Button = $Scroll/Center/Cols/RightCard/V/JoinButton
 @onready var join_address: LineEdit = $Scroll/Center/Cols/RightCard/V/JoinAddress
@@ -86,6 +88,7 @@ var MODES: Array = []
 	$Scroll/Center/Cols/RightCard/V/PublicHint,
 	$Scroll/Center/Cols/RightCard/V/CreateRoomButton,
 	$Scroll/Center/Cols/RightCard/V/BrowseRoomsButton,
+	$Scroll/Center/Cols/RightCard/V/RoomCodeRow,
 	$Scroll/Center/Cols/RightCard/V/SepLan,
 	$Scroll/Center/Cols/RightCard/V/LanHeader,
 	$Scroll/Center/Cols/RightCard/V/HostButton,
@@ -95,11 +98,13 @@ var MODES: Array = []
 ]
 
 # When the user clicks JOIN-to-DS via the new flow, this captures whether
-# they meant "create a new room" (CREATE button) or "browse and pick"
-# (BROWSE button). _on_server_mode_info_for_routing reads it after the
-# DS handshake to either send a create_room RPC + transition to lobby,
-# or transition to room_browser. Cleared after each consumption.
-var _connect_intent: String = "browse"   # "browse" | "create"
+# they meant "create a new room" (CREATE button), "browse and pick"
+# (BROWSE button), or "join a specific code" (ROOM CODE entry / invite
+# link). _on_server_mode_info_for_routing reads it after the DS
+# handshake to pick the right next step. Cleared after each consumption.
+var _connect_intent: String = "browse"   # "browse" | "create" | "join_code"
+# Set alongside _connect_intent = "join_code". Cleared on consumption.
+var _pending_room_code: String = ""
 
 # Staging state. _is_staging=false → normal menu; =true → user already
 # clicked HOST or JOIN and is waiting in the lobby.
@@ -113,6 +118,9 @@ func _ready() -> void:
 	practice_btn.pressed.connect(_on_practice)
 	create_room_btn.pressed.connect(_on_create_room_pressed)
 	browse_rooms_btn.pressed.connect(_on_browse_rooms_pressed)
+	join_by_code_btn.pressed.connect(_on_join_by_code_pressed)
+	# Submit-on-Enter for the code field so users can type AXJ7 → Return.
+	room_code_input.text_submitted.connect(func(_t): _on_join_by_code_pressed())
 	host_btn.pressed.connect(_on_host)
 	join_btn.pressed.connect(_on_join)
 	weapons_btn.pressed.connect(_on_show_weapons)
@@ -586,6 +594,22 @@ func _on_browse_rooms_pressed() -> void:
 	_connect_to_server(_default_public_server())
 
 
+## ROOM CODE flow: friend shared "AXJ7" — connect, send client_join_room
+## with that code, skip the browser. Also the auto-join target for the
+## web `?room=AXJ7` URL param path (M2 work).
+func _on_join_by_code_pressed() -> void:
+	var code: String = room_code_input.text.strip_edges().to_upper()
+	if code.length() != 4:
+		status_label.text = "❌ 房间码要 4 位字母 / 数字"
+		return
+	_connect_intent = "join_code"
+	_pending_room_code = code
+	create_room_btn.disabled = true
+	browse_rooms_btn.disabled = true
+	join_by_code_btn.disabled = true
+	_connect_to_server(_default_public_server())
+
+
 ## Single place that creates the client peer + transitions to the staging
 ## panel "connecting" state. Called by all 3 paths (JOIN-by-address, CREATE,
 ## BROWSE) so failure handling lives in one spot.
@@ -758,16 +782,24 @@ func _on_server_mode_info_for_routing(is_dedicated: bool) -> void:
 			s.pending_room_map = _selected_map_path()
 		if "pending_room_mode" in s:
 			s.pending_room_mode = _selected_mode_path()
-	if _connect_intent == "create":
-		# Fire create_room immediately. server_room_joined will land in
-		# _on_server_room_joined_from_menu which does the scene swap.
-		status_label.text = "正在创建房间..."
-		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
-		if net_rpc != null:
-			net_rpc.client_create_room.rpc_id(1, _selected_map_path(), _selected_mode_path())
-	else:
-		# Browse intent: into the room list, user picks from there.
-		get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
+	match _connect_intent:
+		"create":
+			# Fire create_room immediately. server_room_joined will land in
+			# _on_server_room_joined_from_menu which does the scene swap.
+			status_label.text = "正在创建房间..."
+			var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+			if net_rpc != null:
+				net_rpc.client_create_room.rpc_id(1, _selected_map_path(), _selected_mode_path())
+		"join_code":
+			# Friend's invite code: send client_join_room directly. Same
+			# server_room_joined path as create lands us in the lobby.
+			status_label.text = "正在加入 %s..." % _pending_room_code
+			var nr: Node = get_node_or_null(^"/root/NetRpc")
+			if nr != null:
+				nr.client_join_room.rpc_id(1, _pending_room_code)
+		_:
+			# Browse intent (default): into the room list, user picks from there.
+			get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
 
 
 ## CREATE-flow follow-up: server confirmed our room. Stash state for the
@@ -775,23 +807,31 @@ func _on_server_mode_info_for_routing(is_dedicated: bool) -> void:
 ## this signal — browser does its own change_scene, but it's freed by
 ## then if we took the CREATE shortcut.
 func _on_server_room_joined_from_menu(_room_id: String, room_state: Dictionary) -> void:
-	if _connect_intent != "create" or not _is_staging:
+	# Both "create" and "join_code" paths funnel through here — the only
+	# diff is "did the server make a new room for us or put us into an
+	# existing one". UX-wise both end in the same lobby scene.
+	if not _is_staging:
+		return
+	if _connect_intent != "create" and _connect_intent != "join_code":
 		return
 	if has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		if "pending_room_state" in s:
 			s.pending_room_state = room_state.duplicate()
+	_pending_room_code = ""   # consumed
 	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
 
 
 func _on_server_room_join_failed_from_menu(reason: String) -> void:
-	if _connect_intent != "create" or not _is_staging:
+	if not _is_staging:
 		return
-	status_label.text = "❌ 创建房间失败：%s" % reason
+	if _connect_intent != "create" and _connect_intent != "join_code":
+		return
+	var label: String = "创建房间" if _connect_intent == "create" else "加入 %s" % _pending_room_code
+	status_label.text = "❌ %s 失败：%s" % [label, reason]
 	# Stay on the menu — user can try again, change settings, or pick a
 	# different MP path. Re-enable so they can do that.
-	create_room_btn.disabled = false
-	browse_rooms_btn.disabled = false
+	_pending_room_code = ""
 	_exit_staging()
 
 

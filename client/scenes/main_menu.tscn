@@ -636,6 +636,32 @@ theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "🔍   BROWSE ROOMS  ·  看别人的房间"
 
+[node name="RoomCodeRow" type="HBoxContainer" parent="Scroll/Center/Cols/RightCard/V"]
+theme_override_constants/separation = 10
+
+[node name="RoomCodeInput" type="LineEdit" parent="Scroll/Center/Cols/RightCard/V/RoomCodeRow"]
+custom_minimum_size = Vector2(0, 50)
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+theme_override_colors/font_placeholder_color = Color(0.5, 0.65, 0.82, 1)
+theme_override_colors/caret_color = Color(0.4, 0.85, 1, 1)
+theme_override_styles/normal = SubResource("lineedit_style")
+theme_override_styles/focus = SubResource("lineedit_style")
+placeholder_text = "AXJ7  ·  房间码"
+alignment = 1
+max_length = 4
+
+[node name="JoinByCodeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V/RoomCodeRow"]
+custom_minimum_size = Vector2(140, 50)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "🔗  JOIN"
+
 [node name="SepLan" type="HSeparator" parent="Scroll/Center/Cols/RightCard/V"]
 
 [node name="LanHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
