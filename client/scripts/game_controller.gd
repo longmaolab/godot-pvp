@@ -857,7 +857,17 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 	p.loadout = DEFAULT_LOADOUT
 	# Pull persisted name + skin if this is the local user; remote peers
 	# get a default skin keyed off their peer_id (M4 will sync real skins).
-	var local_id: int = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 0
+	# Practice (no multiplayer peer) spawns with the synthetic peer_id=1
+	# sentinel — see _enter_practice_mode's _local_spawn(1, ...) call.
+	# Default this to 1 (NOT 0) so the (peer_id == local_id) check below
+	# resolves to true in practice and is_local gets set correctly.
+	# Without this:
+	#   - is_local=false → first-person obstructions don't get hidden →
+	#     user sees their own character mesh filling the view (the "big
+	#     block of color" symptom)
+	#   - camera isn't made current → view is from some random default
+	#   - input is gated on is_local → WASD doesn't move the player
+	var local_id: int = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 1
 	if peer_id == local_id and has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		p.player_name = s.player_name if not s.player_name.is_empty() else "P%d" % peer_id
