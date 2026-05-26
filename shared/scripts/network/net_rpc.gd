@@ -71,6 +71,11 @@ signal server_room_destroyed_received(room_id: String)
 ## from Settings.pending_room_state without a separate round-trip — avoids
 ## the race where the broadcaster could fire before the scene loaded.
 signal server_match_ended_received(room_state: Dictionary)
+## In-match scoreboard payload. `rows` is an Array of Dictionaries:
+## { peer: int, name: String, skin: int, kills: int, deaths: int }.
+## Fired from the server side whenever a kill flips a room's scores;
+## scoped to that room's peers. Receiver-side: HUD.scoreboard refreshes.
+signal server_score_update_received(rows: Array)
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -266,6 +271,11 @@ func server_room_destroyed(room_id: String) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_match_ended(room_state: Dictionary) -> void:
 	server_match_ended_received.emit(room_state)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_score_update(rows: Array) -> void:
+	server_score_update_received.emit(rows)
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

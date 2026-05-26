@@ -458,14 +458,16 @@ func _on_peer_connected_as_host(new_peer: int) -> void:
 		# established later via sync_request when they actually enter
 		# a match together.
 		if not new_peer_room.is_empty():
+			var prof: Dictionary = _profile_for_peer(new_peer)
 			for peer in _ready_peers:
 				if peer == multiplayer.get_unique_id() or peer == new_peer:
 					continue
 				if _room_id_for_peer(peer) == new_peer_room:
-					_rpc_spawn.rpc_id(peer, new_peer, pos)
+					_rpc_spawn.rpc_id(peer, new_peer, pos, prof.name, prof.skin)
 	else:
 		# Legacy single-shared-world (tests, pre-lobby setups): broadcast
-		# to every ready peer like before.
+		# to every ready peer like before. No profile available — let the
+		# remote default ("P%d") render.
 		for peer in _ready_peers:
 			if peer != multiplayer.get_unique_id() and peer != new_peer:
 				_rpc_spawn.rpc_id(peer, new_peer, pos)
@@ -804,7 +806,8 @@ func _rpc_sync_request() -> void:
 		# keeps the original "everyone visible" behavior.
 		if not requester_room.is_empty() and _room_id_for_peer(peer) != requester_room:
 			continue
-		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer))
+		var peer_prof: Dictionary = _profile_for_peer(peer)
+		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer), peer_prof.name, peer_prof.skin)
 	# F3 fix: inverse direction. _on_peer_connected_as_host now SKIPS the
 	# spawn broadcast for lobbyists (the right call — they shouldn't ghost
 	# into other rooms' matches), but that means same-room peers won't
@@ -814,17 +817,26 @@ func _rpc_sync_request() -> void:
 	# game (in _ready_peers).
 	if not requester_room.is_empty():
 		var req_pos: Vector3 = _spawn_pos_for(requester)
+		var req_prof: Dictionary = _profile_for_peer(requester)
 		for peer in _ready_peers:
 			if peer == requester or peer == multiplayer.get_unique_id():
 				continue
 			if _room_id_for_peer(peer) == requester_room:
-				_rpc_spawn.rpc_id(peer, requester, req_pos)
+				_rpc_spawn.rpc_id(peer, requester, req_pos, req_prof.name, req_prof.skin)
+		# Send the initial scoreboard for this room so the requester sees
+		# every player's name even before the first kill. Subsequent
+		# updates ride on score_changed via _broadcast_scoreboard_for_room.
+		_broadcast_scoreboard_for_room(requester_room)
 
 
 # ── Spawn RPCs (server → all clients) ─────────────────────────────────────
+## Carries name + skin so remote clients can render the player with their
+## real identity instead of "P12345" + a peer-id-mod-18 skin. Defaulted
+## to ("", 0) so the existing 5-arg call sites (and any future spawn that
+## doesn't have a room context) still work.
 @rpc("authority", "reliable", "call_remote")
-func _rpc_spawn(peer_id: int, spawn_pos: Vector3) -> void:
-	_local_spawn(peer_id, spawn_pos)
+func _rpc_spawn(peer_id: int, spawn_pos: Vector3, player_name: String = "", skin_index: int = 0) -> void:
+	_local_spawn(peer_id, spawn_pos, player_name, skin_index)
 
 
 @rpc("authority", "reliable", "call_remote")
@@ -832,7 +844,11 @@ func _rpc_despawn(peer_id: int) -> void:
 	_despawn(peer_id)
 
 
-func _local_spawn(peer_id: int, spawn_pos: Vector3) -> void:
+## remote_name/remote_skin are populated by _rpc_spawn on the receiving
+## client so we render the real lobby identity, not a peer-id placeholder.
+## Server-side calls (where we know the local peer's Settings) pass the
+## defaults and the local-vs-remote branch above resolves identity itself.
+func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", remote_skin: int = -1) -> void:
 	if players_by_peer.has(peer_id):
 		return
 	var p: Node = PLAYER_SCENE.instantiate()
@@ -847,8 +863,12 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3) -> void:
 		p.player_name = s.player_name if not s.player_name.is_empty() else "P%d" % peer_id
 		p.skin_index = s.skin_index
 	else:
-		p.player_name = "P%d" % peer_id
-		p.skin_index = absi(peer_id) % 18
+		# Remote peer: prefer the name/skin the server told us via _rpc_spawn
+		# (synced from room.profiles). Falls back to placeholder if the
+		# server didn't pass a profile — for example, a legacy / non-room
+		# code path where there's nothing to look up.
+		p.player_name = remote_name if not remote_name.is_empty() else "P%d" % peer_id
+		p.skin_index = remote_skin if remote_skin >= 0 else absi(peer_id) % 18
 	# Death routed to match_controller so scoring works regardless of MP/practice.
 	# Capture peer_id explicitly so the lambda doesn't crash if the player node
 	# is freed before we read it.
@@ -1351,6 +1371,13 @@ func _boot_match_for_room(room) -> void:
 				# concurrent match ended without consulting a singleton.
 				room_mc.match_ended.connect(_on_match_ended.bind(room.room_id))
 				room_mc.round_ended.connect(_on_round_ended)
+				# Scoreboard: every kill ticks score_changed for one peer.
+				# Translate that into a full-room broadcast so every client's
+				# HUD scoreboard re-renders the leaderboard. Bind the room_id
+				# so the broadcaster knows the audience without consulting
+				# any room-state singleton.
+				room_mc.score_changed.connect(
+					func(_p, _k, _d): _broadcast_scoreboard_for_room(room.room_id))
 				room_world.set("match_controller", room_mc)
 				room_mc.start()
 
@@ -1434,6 +1461,30 @@ func _resolve_match_controller_for_peer(peer_id: int) -> Node:
 	return match_controller
 
 
+## F3 follow-up: read a peer's lobby identity (name + skin index) so we
+## can ship it inside _rpc_spawn to remote clients. Without this, every
+## remote peer renders as "P12345" and a default skin instead of the
+## name/skin the user picked in the menu.
+##
+## Returns {"name": String, "skin": int}. Falls back to ("", 0) when
+## the peer isn't in any room — caller's responsibility to pick a
+## default for that case.
+func _profile_for_peer(peer_id: int) -> Dictionary:
+	var rid: String = _room_id_for_peer(peer_id)
+	if rid.is_empty():
+		return {"name": "", "skin": 0}
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	if rm == null:
+		return {"name": "", "skin": 0}
+	var rooms: Dictionary = rm.rooms
+	if not rooms.has(rid):
+		return {"name": "", "skin": 0}
+	var room: Variant = rooms[rid]
+	var profiles: Dictionary = room.profiles
+	var p: Dictionary = profiles.get(peer_id, {"name": "", "skin": 0})
+	return {"name": String(p.get("name", "")), "skin": int(p.get("skin", 0))}
+
+
 ## F3-M3a: look up the room a peer belongs to, or "" if they're not in
 ## a room (practice / pre-lobby). Centralized so every per-room dispatcher
 ## (map, players, snapshot, damage) shares one source of truth and an
@@ -1487,6 +1538,52 @@ func _room_scoped_audience(peer_id: int) -> Array:
 		return []
 	var room: Variant = rooms[rid]
 	return (room.players as Array).duplicate()
+
+
+## Build + ship a fresh scoreboard for `room_id`. Called every time the
+## room's match_controller emits score_changed. Each row carries the
+## peer's lobby identity (name + skin) so the client doesn't need a
+## second lookup. Sent only to the room's own peers — concurrent rooms
+## each see their own leaderboard.
+func _broadcast_scoreboard_for_room(room_id: String) -> void:
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	if rm == null:
+		return
+	var rooms: Dictionary = rm.rooms
+	if not rooms.has(room_id):
+		return
+	var room: Variant = rooms[room_id]
+	var rw: Variant = room_worlds.get(room_id)
+	if rw == null or not is_instance_valid(rw):
+		return
+	var mc: Variant = rw.get("match_controller")
+	if mc == null or not is_instance_valid(mc):
+		return
+	# Build one row per room player. Read kills/deaths from match_controller
+	# (per-room since F3-M2). Profile (name + skin) lives on room.profiles.
+	var rows: Array = []
+	var kills: Dictionary = mc.kills
+	var deaths: Dictionary = mc.deaths
+	var profiles: Dictionary = room.profiles
+	for peer in room.players:
+		var prof: Dictionary = profiles.get(peer, {"name": "", "skin": 0})
+		var n: String = String(prof.get("name", ""))
+		if n.is_empty():
+			n = "P%d" % peer
+		rows.append({
+			"peer":   peer,
+			"name":   n,
+			"skin":   int(prof.get("skin", 0)),
+			"kills":  int(kills.get(peer, 0)),
+			"deaths": int(deaths.get(peer, 0)),
+		})
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc == null:
+		return
+	var live: Array = multiplayer.get_peers()
+	for peer in room.players:
+		if peer in live:
+			net_rpc.server_score_update.rpc_id(peer, rows)
 
 
 ## F3-M3a: res:// path of the map containing `peer_id`. Used by

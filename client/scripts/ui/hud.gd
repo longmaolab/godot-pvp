@@ -21,6 +21,14 @@ const FEED_LIFETIME_SEC := 6.0
 @onready var ability_label: Label = $AbilityIndicator/AbilityLabel
 var _ability_player: Node = null
 
+# Scoreboard (Tab to show). Built lazily in _build_scoreboard the first
+# time a server_score_update lands so the HUD scene file doesn't have
+# to know about it. `_score_rows` is the latest payload from the
+# server — re-rendered every time the player toggles Tab.
+var _scoreboard_panel: Control = null
+var _scoreboard_list: VBoxContainer = null
+var _score_rows: Array = []
+
 # Track HP delta so we can flash the screen red exactly when damage lands.
 var _last_hp: float = -1.0
 
@@ -47,6 +55,140 @@ func _ready() -> void:
 	_feed_row_style.content_margin_right = 10
 	_feed_row_style.content_margin_top = 6
 	_feed_row_style.content_margin_bottom = 6
+	# Listen for scoreboard updates from the server. The signal fires per
+	# kill (after a per-room broadcast) — cache the rows and re-render
+	# only if the panel is open. Tab toggling reads from `_score_rows`.
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		if not net_rpc.server_score_update_received.is_connected(_on_score_update):
+			net_rpc.server_score_update_received.connect(_on_score_update)
+
+
+# ── Scoreboard ────────────────────────────────────────────────────────────
+
+func _on_score_update(rows: Array) -> void:
+	_score_rows = rows
+	if _scoreboard_panel != null and _scoreboard_panel.visible:
+		_render_scoreboard()
+
+
+## Hold Tab to show the scoreboard; release to hide. Mirrors the
+## arena-shooter-3d convention and matches what FPS players already
+## reflex to do mid-match.
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
+		_set_scoreboard_visible(event.pressed)
+
+
+func _set_scoreboard_visible(show: bool) -> void:
+	if _scoreboard_panel == null:
+		_build_scoreboard()
+	_scoreboard_panel.visible = show
+	if show:
+		_render_scoreboard()
+
+
+func _build_scoreboard() -> void:
+	# Center the panel via a CenterContainer that fills the HUD.
+	var center := CenterContainer.new()
+	center.name = "Scoreboard"
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(560, 360)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.07, 0.14, 0.93)
+	style.border_color = Color(0.32, 0.72, 0.95, 0.7)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 14
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_right = 14
+	style.corner_radius_bottom_left = 14
+	style.content_margin_left = 28
+	style.content_margin_right = 28
+	style.content_margin_top = 22
+	style.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	panel.add_child(v)
+
+	var title := Label.new()
+	title.text = "▣  战绩 / SCOREBOARD"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(1, 0.85, 0.4, 1))
+	v.add_child(title)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 24)
+	v.add_child(header)
+	for spec in [["#", 36, HORIZONTAL_ALIGNMENT_CENTER], ["玩家 / NAME", 260, HORIZONTAL_ALIGNMENT_LEFT], \
+			["K", 60, HORIZONTAL_ALIGNMENT_CENTER], ["D", 60, HORIZONTAL_ALIGNMENT_CENTER], \
+			["净", 60, HORIZONTAL_ALIGNMENT_CENTER]]:
+		var col := Label.new()
+		col.text = spec[0]
+		col.custom_minimum_size.x = spec[1]
+		col.horizontal_alignment = spec[2]
+		col.add_theme_font_size_override("font_size", 14)
+		col.add_theme_color_override("font_color", Color(0.55, 0.78, 0.95, 1))
+		header.add_child(col)
+
+	var sep := HSeparator.new()
+	v.add_child(sep)
+
+	_scoreboard_list = VBoxContainer.new()
+	_scoreboard_list.add_theme_constant_override("separation", 4)
+	v.add_child(_scoreboard_list)
+	_scoreboard_panel = center
+	_scoreboard_panel.visible = false
+
+
+func _render_scoreboard() -> void:
+	if _scoreboard_list == null:
+		return
+	for child in _scoreboard_list.get_children():
+		child.queue_free()
+	# Sort by kills desc, deaths asc — standard FPS ranking.
+	var sorted: Array = _score_rows.duplicate()
+	sorted.sort_custom(func(a, b):
+		if int(a.get("kills", 0)) != int(b.get("kills", 0)):
+			return int(a.get("kills", 0)) > int(b.get("kills", 0))
+		return int(a.get("deaths", 0)) < int(b.get("deaths", 0)))
+	const SKIN_LETTERS := "ABCDEFGHIJKLMNOPQR"
+	var my_peer: int = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 0
+	for i in sorted.size():
+		var row: Dictionary = sorted[i]
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 24)
+		var kills: int = int(row.get("kills", 0))
+		var deaths: int = int(row.get("deaths", 0))
+		var net: int = kills - deaths
+		var skin_idx: int = clampi(int(row.get("skin", 0)), 0, SKIN_LETTERS.length() - 1)
+		var name_text: String = String(row.get("name", "P%d" % int(row.get("peer", 0))))
+		var is_me: bool = int(row.get("peer", 0)) == my_peer
+		var name_col: String = "%s  ·  [%s]%s" % [name_text, SKIN_LETTERS.substr(skin_idx, 1), "  (你)" if is_me else ""]
+		var row_color: Color = Color(1, 0.85, 0.4, 1) if is_me else Color(0.92, 0.95, 1, 1)
+		for spec in [["%d" % (i + 1), 36, HORIZONTAL_ALIGNMENT_CENTER], \
+				[name_col, 260, HORIZONTAL_ALIGNMENT_LEFT], \
+				["%d" % kills, 60, HORIZONTAL_ALIGNMENT_CENTER], \
+				["%d" % deaths, 60, HORIZONTAL_ALIGNMENT_CENTER], \
+				["%+d" % net, 60, HORIZONTAL_ALIGNMENT_CENTER]]:
+			var cell := Label.new()
+			cell.text = spec[0]
+			cell.custom_minimum_size.x = spec[1]
+			cell.horizontal_alignment = spec[2]
+			cell.add_theme_font_size_override("font_size", 17)
+			cell.add_theme_color_override("font_color", row_color)
+			hb.add_child(cell)
+		_scoreboard_list.add_child(hb)
 
 
 func bind_player(player: Node) -> void:
