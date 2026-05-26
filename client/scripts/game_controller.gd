@@ -54,6 +54,13 @@ var players_by_peer: Dictionary = {}              # peer_id → PlayerController
 var bots: Array[Node] = []
 var match_controller: Node = null                 # MatchController
 var lag_comp: Node = null                         # LagCompensator (host only)
+# F3-M1: per-room World3D containers. Keyed by room_id. Populated by
+# _boot_match_for_room when a room flips to MATCH state; entries freed
+# by _tear_down_match_world (or when the parent room is destroyed).
+# Empty in practice mode (practice doesn't use rooms). M1 only creates
+# the container — map/players still live on GameController until M3.
+const _ROOM_WORLD_SCRIPT := preload("res://server/scripts/room_world.gd")
+var room_worlds: Dictionary = {}                  # room_id (String) → RoomWorld
 
 # Peers whose game scene is confirmed loaded and ready to receive RPCs.
 # Server-only state. Empty on clients. Host is added immediately at boot;
@@ -1165,6 +1172,18 @@ func _boot_match_for_room(room) -> void:
 	print("[server] booting match for room %s (%d players, map=%s)" % \
 		[room.room_id, room.players.size(), room.map_path])
 
+	# F3-M1: stand up a per-room World3D container. Empty for now — M3
+	# will reparent map + players into it. Created BEFORE the map swap so
+	# the lifecycle stays parallel to map_root: both born here, both die
+	# in _tear_down_match_world. Typed as SubViewport (parent class) to
+	# dodge a `class_name`-resolution order issue between this file and
+	# room_world.gd; access room-specific fields via duck typing.
+	var room_world: SubViewport = _ROOM_WORLD_SCRIPT.new()
+	room_world.set("room_id", room.room_id)
+	room_world.name = "RoomWorld_%s" % room.room_id
+	add_child(room_world)
+	room_worlds[room.room_id] = room_world
+
 	# Swap in the room's map. map_scene also gets reassigned so the
 	# `_rpc_sync_request` reply path (which reads map_scene.resource_path
 	# for server_map_info) tells joining clients the right thing.
@@ -1255,7 +1274,15 @@ func _on_room_destroyed_check_active(room_id: String, _evicted: Array) -> void:
 ## RoomManager — both callers above arrived here BECAUSE of RoomManager
 ## signals firing, so a callback would cycle.
 func _tear_down_match_world() -> void:
+	var ended_room_id: String = _active_room_id
 	_active_room_id = ""
 	if match_controller != null:
 		match_controller.queue_free()
 		match_controller = null
+	# F3-M1: free the room's World3D container. erase() AFTER queue_free
+	# so the dict entry isn't pointing at a half-freed node mid-frame.
+	if not ended_room_id.is_empty() and room_worlds.has(ended_room_id):
+		var rw: Node = room_worlds[ended_room_id]
+		if is_instance_valid(rw):
+			rw.queue_free()
+		room_worlds.erase(ended_room_id)
