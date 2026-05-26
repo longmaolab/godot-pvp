@@ -1024,8 +1024,12 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 			if players_by_peer[p] == killer:
 				killer_peer = p
 				break
-	if match_controller != null:
-		match_controller.record_kill(killer_peer, victim_peer)
+	# F3-M2: prefer the room's match_controller (MP path) over the global
+	# one (practice path). The victim's room is the source of truth for
+	# scoring — `peer_to_room[victim_peer]` tells us which match cares.
+	var scoring_mc: Node = _resolve_match_controller_for_peer(victim_peer)
+	if scoring_mc != null:
+		scoring_mc.record_kill(killer_peer, victim_peer)
 
 	# R1: single death-broadcast point. Every kill source (gun, damage_zone,
 	# admin nuke, headless_main --test-kill hooks, future map gimmicks) hits
@@ -1197,25 +1201,27 @@ func _boot_match_for_room(room) -> void:
 	map_root = new_map.instantiate()
 	add_child(map_root)
 
-	# Spin up a match controller for the room's mode (if any). The signal
-	# wired in _ready connected to a controller built at scene load time;
-	# replace that controller so the new one's match_ended also routes
-	# through _on_match_ended.
-	if match_controller != null:
-		match_controller.queue_free()
-		match_controller = null
+	# F3-M2: per-room match_controller. Live as a child of room_world so
+	# the RoomWorld lifecycle (born here, freed in _tear_down_match_world)
+	# cascades cleanup automatically. self.match_controller is now reserved
+	# for the practice path; the MP path uses room_worlds[id].match_controller.
+	#
+	# The any "global" match_controller built at _ready time (practice mode,
+	# or the legacy pre-room-system listen-host path) is left alone. Without
+	# this the practice → MP transition would unhook its scoring loop.
 	if not room.mode_def_path.is_empty():
 		var md: Resource = load(room.mode_def_path)
 		if md != null:
 			mode_def = md
 			var mc_script := load("res://shared/scripts/match_controller.gd")
 			if mc_script != null:
-				match_controller = mc_script.new()
-				match_controller.mode_def = md
-				add_child(match_controller)
-				match_controller.match_ended.connect(_on_match_ended)
-				match_controller.round_ended.connect(_on_round_ended)
-				match_controller.start()
+				var room_mc: Node = mc_script.new()
+				room_mc.mode_def = md
+				room_world.add_child(room_mc)
+				room_mc.match_ended.connect(_on_match_ended)
+				room_mc.round_ended.connect(_on_round_ended)
+				room_world.set("match_controller", room_mc)
+				room_mc.start()
 
 	# Players are already spawned (auto-spawn on peer_connect). But their
 	# positions were from the OLD map's spawn points (or default 0,0,0).
@@ -1273,14 +1279,33 @@ func _on_room_destroyed_check_active(room_id: String, _evicted: Array) -> void:
 ## Pure local cleanup of the DS's match world. Does NOT call back into
 ## RoomManager — both callers above arrived here BECAUSE of RoomManager
 ## signals firing, so a callback would cycle.
+## F3-M2: pick the match_controller that should record this peer's
+## kill / score events. MP peers in a room → that room's MC; practice
+## or out-of-room peers → the global self.match_controller.
+##
+## Returns null if there's nothing to score against (e.g. a peer that
+## died before any match started). Caller no-ops on null.
+func _resolve_match_controller_for_peer(peer_id: int) -> Node:
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	if rm != null and "peer_to_room" in rm:
+		var rid: String = String(rm.peer_to_room.get(peer_id, ""))
+		if not rid.is_empty() and room_worlds.has(rid):
+			var rw: Node = room_worlds[rid]
+			if is_instance_valid(rw):
+				var room_mc: Variant = rw.get("match_controller")
+				if room_mc != null and is_instance_valid(room_mc):
+					return room_mc
+	return match_controller
+
+
 func _tear_down_match_world() -> void:
 	var ended_room_id: String = _active_room_id
 	_active_room_id = ""
-	if match_controller != null:
-		match_controller.queue_free()
-		match_controller = null
-	# F3-M1: free the room's World3D container. erase() AFTER queue_free
-	# so the dict entry isn't pointing at a half-freed node mid-frame.
+	# F3-M1 + M2: free the RoomWorld. Its match_controller child is a
+	# descendant so queue_free cascades — no separate match_controller
+	# cleanup needed for the MP path. self.match_controller is left alone
+	# (practice mode keeps it). erase() AFTER queue_free so the dict entry
+	# isn't pointing at a half-freed node mid-frame.
 	if not ended_room_id.is_empty() and room_worlds.has(ended_room_id):
 		var rw: Node = room_worlds[ended_room_id]
 		if is_instance_valid(rw):
