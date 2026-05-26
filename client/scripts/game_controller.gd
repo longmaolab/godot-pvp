@@ -366,7 +366,7 @@ func _enter_practice_mode() -> void:
 		bot_pos.y = 1.0
 		var bot: Node = spawn_bot(null, bot_pos, AK20)
 		if hud != null:
-			hud.push_feed("BOT 在你前方 — 5 秒后开始追击", Color(1, 0.85, 0.5))
+			hud.push_feed("BOT ahead -- chase in 5s", Color(1, 0.85, 0.5))
 		get_tree().create_timer(5.0).timeout.connect(
 			func():
 				if not is_instance_valid(bot) or not is_instance_valid(local_player):
@@ -375,7 +375,7 @@ func _enter_practice_mode() -> void:
 				bot.pursue_speed = 3.2
 				bot.attack_range = 22.0
 				if hud != null:
-					hud.push_feed("BOT 在追你！", Color(1, 0.5, 0.4))
+					hud.push_feed("BOT chasing you!", Color(1, 0.5, 0.4))
 		)
 func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	var bot: Node = BOT_SCENE.instantiate()
@@ -407,7 +407,7 @@ func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 
 func _on_bot_died(bot: Node, original_spawn: Vector3) -> void:
 	if hud != null:
-		hud.push_feed("BOT DOWN — respawn in 5s", Color(0.7, 1, 0.5))
+		hud.push_feed("BOT DOWN -- respawn in 5s", Color(0.7, 1, 0.5))
 	get_tree().create_timer(5.0).timeout.connect(func():
 		if not is_instance_valid(bot):
 			return
@@ -1147,12 +1147,12 @@ func _spawn_damage_label(world_pos: Vector3, dmg: int, is_head: bool) -> void:
 
 func _on_dummy_damaged(amount: float, is_headshot: bool, new_hp: float) -> void:
 	var label: String = "HEAD %d" % int(amount) if is_headshot else "hit %d" % int(amount)
-	hud.push_feed("%s  →  dummy %d hp" % [label, int(new_hp)],
+	hud.push_feed("%s  ->  dummy %d hp" % [label, int(new_hp)],
 		Color(1, 0.85, 0.2) if is_headshot else Color.WHITE)
 
 
 func _on_dummy_downed() -> void:
-	hud.push_feed("DUMMY DOWN — respawn 3s", Color(0.2, 1.0, 0.4))
+	hud.push_feed("DUMMY DOWN -- respawn 3s", Color(0.2, 1.0, 0.4))
 
 
 # ── Match scoring hook ────────────────────────────────────────────────────
@@ -1222,7 +1222,7 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 			per_kill = mode_def.credits_per_kill
 		settings_node.award_credits(per_kill)
 		if hud != null:
-			hud.push_feed("+%d 💰" % per_kill, Color(1, 0.85, 0.3))
+			hud.push_feed("+%d $" % per_kill, Color(1, 0.85, 0.3))
 		# Stat persistence — overall K/D tracked in StatsStore for menus.
 		var stats_node: Node = get_node_or_null(^"/root/StatsStore")
 		if stats_node != null:
@@ -1257,11 +1257,11 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 		return   # remote/bot respawn handled by host or server
 	if _is_networked():
 		if hud != null:
-			hud.push_feed("YOU DIED — server respawning…", Color(1, 0.4, 0.4))
+			hud.push_feed("YOU DIED -- server respawning...", Color(1, 0.4, 0.4))
 		return
 	# Practice / offline: respawn locally after 3s.
 	if hud != null:
-		hud.push_feed("YOU DIED — respawn in 3s", Color(1, 0.4, 0.4))
+		hud.push_feed("YOU DIED -- respawn in 3s", Color(1, 0.4, 0.4))
 	var pos2: Vector3 = _spawn_pos_for(victim_peer)
 	get_tree().create_timer(3.0).timeout.connect(_do_local_respawn.bind(victim, pos2))
 
@@ -1297,17 +1297,17 @@ func _do_local_respawn(victim: Node, pos: Vector3) -> void:
 		return
 	victim.respawn(pos)
 	if hud != null:
-		hud.push_feed("respawned — go!", Color(0.5, 1.0, 0.5))
+		hud.push_feed("respawned -- go!", Color(0.5, 1.0, 0.5))
 
 
 func _on_round_ended(winner: int, _scores: Dictionary) -> void:
 	if hud != null:
-		hud.push_feed("Round ended — winner peer %d" % winner, Color(0.9, 0.9, 0.4))
+		hud.push_feed("Round ended -- winner peer %d" % winner, Color(0.9, 0.9, 0.4))
 
 
 func _on_match_ended(winner: int, final: Dictionary, room_id: String = "") -> void:
 	if hud != null:
-		hud.push_feed("MATCH OVER — winner peer %d" % winner, Color(1.0, 0.85, 0.2))
+		hud.push_feed("MATCH OVER -- winner peer %d" % winner, Color(1.0, 0.85, 0.2))
 	# Dedicated server: kick off the end-of-match flow via RoomManager.
 	# RoomManager.end_match flips state + emits match_finished, which our
 	# _on_match_finished_in_room handler picks up to tear down the world.

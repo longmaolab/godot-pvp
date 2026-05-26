@@ -429,11 +429,11 @@ func show_kill_confirm(victim_name: String) -> void:
 			streak_color = tier["color"]
 
 	if streak_label != "":
-		kill_confirm.text = "★ %s ★" % streak_label
+		kill_confirm.text = "** %s **" % streak_label
 		kill_confirm.modulate = streak_color
 		kill_confirm.modulate.a = 1.0
 	else:
-		kill_confirm.text = "★ ELIMINATED ★"
+		kill_confirm.text = "** ELIMINATED **"
 		kill_confirm.modulate = Color(1, 0.95, 0.4, 1)
 	kill_confirm.scale = Vector2(0.55, 0.55)
 	var t: Tween = create_tween()
@@ -442,7 +442,7 @@ func show_kill_confirm(victim_name: String) -> void:
 	t.tween_property(kill_confirm, "modulate:a", 1.0, 0.05)
 	t.chain().tween_interval(0.55)
 	t.chain().tween_property(kill_confirm, "modulate:a", 0.0, 0.25)
-	push_feed("💀  killed %s%s" % [victim_name, "" if streak_label == "" else "  ·  " + streak_label],
+	push_feed("[X]  killed %s%s" % [victim_name, "" if streak_label == "" else "  -  " + streak_label],
 		Color(1, 0.6, 0.4))
 	_play_audio(&"play_kill")
 
