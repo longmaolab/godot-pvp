@@ -120,6 +120,10 @@ func _ready() -> void:
 	# user can't see the cursor or click ANY button on this menu — looks
 	# like the menu "froze" the second time they try to launch practice.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var vlabel: Label = get_node_or_null(^"VersionLabel")
+	if vlabel != null:
+		var bi := preload("res://client/scripts/build_info.gd")
+		vlabel.text = "build %s · godot 4.6" % bi.VERSION
 	_build_modes_from_disk()
 	practice_btn.pressed.connect(_on_practice)
 	create_room_btn.pressed.connect(_on_create_room_pressed)
@@ -636,6 +640,7 @@ func _on_practice() -> void:
 
 func _on_host() -> void:
 	var peer := WebSocketMultiplayerPeer.new()
+	_bump_buffers(peer)
 	var err := peer.create_server(7777)
 	if err != OK:
 		# Most common cause: a dedicated server is already running on 7777.
@@ -695,6 +700,7 @@ func _on_join_by_code_pressed() -> void:
 ## BROWSE) so failure handling lives in one spot.
 func _connect_to_server(address: String) -> void:
 	var peer := WebSocketMultiplayerPeer.new()
+	_bump_buffers(peer)
 	var err := peer.create_client(address)
 	if err != OK:
 		status_label.text = "Connect failed: %s" % err
@@ -940,3 +946,14 @@ func _launch_game() -> void:
 	get_tree().root.add_child(game)
 	get_tree().current_scene.queue_free()
 	get_tree().current_scene = game
+
+
+# Bump WebSocket send/recv buffers from the 64KB default to 1MB. Default
+# overflows under FPS-rate input streaming + per-hit RPCs — symptoms:
+# "Buffer payload full! Dropping data." spam + frozen client (input
+# silently dropped, server never hears player). Must be called BEFORE
+# create_client / create_server.
+func _bump_buffers(peer: WebSocketMultiplayerPeer) -> void:
+	peer.outbound_buffer_size = 1 << 20
+	peer.inbound_buffer_size = 1 << 20
+	peer.max_queued_packets = 8192

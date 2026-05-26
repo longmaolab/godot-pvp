@@ -58,6 +58,11 @@ func _ready() -> void:
 	print("[server] starting headless on port %d, map=%s" % [port, map_id])
 
 	var peer := WebSocketMultiplayerPeer.new()
+	# 1MB send/recv buffers (default 64KB overflows under FPS-rate
+	# input + per-hit RPCs — clients see "Buffer payload full" + freeze).
+	peer.outbound_buffer_size = 1 << 20
+	peer.inbound_buffer_size = 1 << 20
+	peer.max_queued_packets = 8192
 	var err := peer.create_server(port)
 	if err != OK:
 		push_error("[server] failed to bind port %d: %s" % [port, err])
