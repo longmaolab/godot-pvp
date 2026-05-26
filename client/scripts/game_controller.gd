@@ -1556,14 +1556,18 @@ func _broadcast_scoreboard_for_room(room_id: String) -> void:
 	var rw: Variant = room_worlds.get(room_id)
 	if rw == null or not is_instance_valid(rw):
 		return
-	var mc: Variant = rw.get("match_controller")
-	if mc == null or not is_instance_valid(mc):
-		return
 	# Build one row per room player. Read kills/deaths from match_controller
-	# (per-room since F3-M2). Profile (name + skin) lives on room.profiles.
+	# IF the room has one. A room created with mode_def_path="" has no
+	# match_controller (practice-style FFA — nothing to score) so we fall
+	# back to empty kill/death dicts; the scoreboard still lists who's in
+	# the match, which is what users actually want from this panel.
+	var mc: Variant = rw.get("match_controller")
+	var kills: Dictionary = {}
+	var deaths: Dictionary = {}
+	if mc != null and is_instance_valid(mc):
+		kills = mc.kills
+		deaths = mc.deaths
 	var rows: Array = []
-	var kills: Dictionary = mc.kills
-	var deaths: Dictionary = mc.deaths
 	var profiles: Dictionary = room.profiles
 	for peer in room.players:
 		var prof: Dictionary = profiles.get(peer, {"name": "", "skin": 0})

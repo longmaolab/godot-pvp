@@ -181,7 +181,17 @@ func _ready() -> void:
 			mode_picker.add_item(m.name)
 		mode_picker.item_selected.connect(_on_mode_changed)
 	_on_map_changed(0)
-	_on_mode_changed(0)
+	# Default to MODES[1] (the first real mode after Practice) rather than
+	# MODES[0] = Practice. Reason: MODES[0].path is empty by design — it's
+	# the single-player marker. If a user clicks CREATE ROOM without
+	# touching the mode picker, an empty mode_def_path lands on the
+	# server, which skips match_controller creation and leaves the
+	# scoreboard with no kills/deaths to display. Defaulting to a real
+	# mode makes the common-case path actually score.
+	var default_mode_idx: int = 1 if MODES.size() > 1 else 0
+	if mode_picker != null:
+		mode_picker.selected = default_mode_idx
+	_on_mode_changed(default_mode_idx)
 	_populate_weapons_dialog()
 	var weapon_count: int = _count_weapons_on_disk()
 	# Stat pills along the top of the right card.

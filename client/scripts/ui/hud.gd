@@ -68,96 +68,99 @@ func _ready() -> void:
 
 func _on_score_update(rows: Array) -> void:
 	_score_rows = rows
-	if _scoreboard_panel != null and _scoreboard_panel.visible:
-		_render_scoreboard()
+	# Scoreboard is always-visible in top-right (no Tab toggle anymore).
+	# Build on first update so we don't waste construction work when no
+	# match data ever arrives (single-player practice loads HUD too).
+	_ensure_scoreboard()
+	_render_scoreboard()
 
 
-## Hold Tab to show the scoreboard; release to hide. Mirrors the
-## arena-shooter-3d convention and matches what FPS players already
-## reflex to do mid-match.
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
-		_set_scoreboard_visible(event.pressed)
-
-
-func _set_scoreboard_visible(show: bool) -> void:
-	if _scoreboard_panel == null:
-		_build_scoreboard()
-	_scoreboard_panel.visible = show
-	if show:
-		_render_scoreboard()
+## The mini scoreboard lives in the top-right corner and is always
+## visible — Tab was reported as "too hidden" so we ditched the toggle
+## and just keep it on screen. Built lazily so the HUD scene file
+## doesn't need to know about it.
+func _ensure_scoreboard() -> void:
+	if _scoreboard_panel != null:
+		return
+	_build_scoreboard()
+	_relocate_credits_pill()
 
 
 func _build_scoreboard() -> void:
-	# Center the panel via a CenterContainer that fills the HUD.
-	var center := CenterContainer.new()
-	center.name = "Scoreboard"
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Theme-attach the CJK-capable font (RussoOne + NotoSansSC fallback)
-	# so 战绩 / 玩家 etc. actually render — runtime-built Controls
-	# don't inherit the project's default theme automatically, and the
-	# stock Godot font has no CJK glyphs (was rendering as tofu boxes).
+	# Top-right anchored panel. Width ~280, height grows with rows.
+	var panel := PanelContainer.new()
+	panel.name = "Scoreboard"
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0
+	panel.anchor_bottom = 0
+	panel.offset_left = -300
+	panel.offset_top = 16
+	panel.offset_right = -16
+	panel.offset_bottom = 16   # grows with content
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Runtime-built Controls don't inherit the project's default theme,
+	# and the stock Godot font has no CJK glyphs. Attach ui_font.tres so
+	# "战绩" doesn't tofu.
 	var sb_theme := Theme.new()
 	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
 	if ui_font != null:
 		sb_theme.default_font = ui_font
-	center.theme = sb_theme
-	add_child(center)
+	panel.theme = sb_theme
 
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(560, 360)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.07, 0.14, 0.93)
-	style.border_color = Color(0.32, 0.72, 0.95, 0.7)
+	style.bg_color = Color(0.04, 0.07, 0.14, 0.82)
+	style.border_color = Color(0.32, 0.72, 0.95, 0.55)
 	style.border_width_left = 2
 	style.border_width_top = 2
 	style.border_width_right = 2
 	style.border_width_bottom = 2
-	style.corner_radius_top_left = 14
-	style.corner_radius_top_right = 14
-	style.corner_radius_bottom_right = 14
-	style.corner_radius_bottom_left = 14
-	style.content_margin_left = 28
-	style.content_margin_right = 28
-	style.content_margin_top = 22
-	style.content_margin_bottom = 22
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_right = 10
+	style.corner_radius_bottom_left = 10
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
 	panel.add_theme_stylebox_override("panel", style)
-	center.add_child(panel)
+	add_child(panel)
 
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 4)
 	panel.add_child(v)
 
 	var title := Label.new()
-	title.text = "▣  战绩 / SCOREBOARD"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(1, 0.85, 0.4, 1))
+	title.text = "▣  战绩"
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", Color(0.55, 0.78, 0.95, 1))
 	v.add_child(title)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 24)
-	v.add_child(header)
-	for spec in [["#", 36, HORIZONTAL_ALIGNMENT_CENTER], ["玩家 / NAME", 260, HORIZONTAL_ALIGNMENT_LEFT], \
-			["K", 60, HORIZONTAL_ALIGNMENT_CENTER], ["D", 60, HORIZONTAL_ALIGNMENT_CENTER], \
-			["净", 60, HORIZONTAL_ALIGNMENT_CENTER]]:
-		var col := Label.new()
-		col.text = spec[0]
-		col.custom_minimum_size.x = spec[1]
-		col.horizontal_alignment = spec[2]
-		col.add_theme_font_size_override("font_size", 14)
-		col.add_theme_color_override("font_color", Color(0.55, 0.78, 0.95, 1))
-		header.add_child(col)
 
 	var sep := HSeparator.new()
 	v.add_child(sep)
 
 	_scoreboard_list = VBoxContainer.new()
-	_scoreboard_list.add_theme_constant_override("separation", 4)
+	_scoreboard_list.add_theme_constant_override("separation", 2)
 	v.add_child(_scoreboard_list)
-	_scoreboard_panel = center
-	_scoreboard_panel.visible = false
+	_scoreboard_panel = panel
+
+
+## CreditsPill is anchored to the top-right corner in the .tscn — same
+## real estate the scoreboard now wants. Reposition it to the bottom-
+## left so we don't lose the credits readout entirely.
+func _relocate_credits_pill() -> void:
+	if not has_node(^"CreditsPill"):
+		return
+	var cp: Control = get_node(^"CreditsPill")
+	cp.anchor_left = 0.0
+	cp.anchor_right = 0.0
+	cp.anchor_top = 1.0
+	cp.anchor_bottom = 1.0
+	cp.offset_left = 16
+	cp.offset_top = -56
+	cp.offset_right = 176
+	cp.offset_bottom = -24
+	cp.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 func _render_scoreboard() -> void:
@@ -173,30 +176,38 @@ func _render_scoreboard() -> void:
 		return int(a.get("deaths", 0)) < int(b.get("deaths", 0)))
 	const SKIN_LETTERS := "ABCDEFGHIJKLMNOPQR"
 	var my_peer: int = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 0
-	for i in sorted.size():
-		var row: Dictionary = sorted[i]
+	for row in sorted:
 		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 24)
+		hb.add_theme_constant_override("separation", 6)
 		var kills: int = int(row.get("kills", 0))
 		var deaths: int = int(row.get("deaths", 0))
-		var net: int = kills - deaths
 		var skin_idx: int = clampi(int(row.get("skin", 0)), 0, SKIN_LETTERS.length() - 1)
 		var name_text: String = String(row.get("name", "P%d" % int(row.get("peer", 0))))
 		var is_me: bool = int(row.get("peer", 0)) == my_peer
-		var name_col: String = "%s  ·  [%s]%s" % [name_text, SKIN_LETTERS.substr(skin_idx, 1), "  (你)" if is_me else ""]
 		var row_color: Color = Color(1, 0.85, 0.4, 1) if is_me else Color(0.92, 0.95, 1, 1)
-		for spec in [["%d" % (i + 1), 36, HORIZONTAL_ALIGNMENT_CENTER], \
-				[name_col, 260, HORIZONTAL_ALIGNMENT_LEFT], \
-				["%d" % kills, 60, HORIZONTAL_ALIGNMENT_CENTER], \
-				["%d" % deaths, 60, HORIZONTAL_ALIGNMENT_CENTER], \
-				["%+d" % net, 60, HORIZONTAL_ALIGNMENT_CENTER]]:
-			var cell := Label.new()
-			cell.text = spec[0]
-			cell.custom_minimum_size.x = spec[1]
-			cell.horizontal_alignment = spec[2]
-			cell.add_theme_font_size_override("font_size", 17)
-			cell.add_theme_color_override("font_color", row_color)
-			hb.add_child(cell)
+		# Skin letter (tight column).
+		var letter := Label.new()
+		letter.text = "[%s]" % SKIN_LETTERS.substr(skin_idx, 1)
+		letter.custom_minimum_size.x = 26
+		letter.add_theme_font_size_override("font_size", 12)
+		letter.add_theme_color_override("font_color", Color(0.55, 0.78, 0.92, 1))
+		hb.add_child(letter)
+		# Name — fills remaining width.
+		var name_lbl := Label.new()
+		name_lbl.text = "%s%s" % [name_text, "  ★" if is_me else ""]
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 15)
+		name_lbl.add_theme_color_override("font_color", row_color)
+		name_lbl.clip_text = true
+		hb.add_child(name_lbl)
+		# K/D right-aligned.
+		var kd := Label.new()
+		kd.text = "%d / %d" % [kills, deaths]
+		kd.custom_minimum_size.x = 56
+		kd.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		kd.add_theme_font_size_override("font_size", 15)
+		kd.add_theme_color_override("font_color", row_color)
+		hb.add_child(kd)
 		_scoreboard_list.add_child(hb)
 
 
