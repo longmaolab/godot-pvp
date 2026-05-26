@@ -857,17 +857,18 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 	p.loadout = DEFAULT_LOADOUT
 	# Pull persisted name + skin if this is the local user; remote peers
 	# get a default skin keyed off their peer_id (M4 will sync real skins).
-	# Practice (no multiplayer peer) spawns with the synthetic peer_id=1
+	# Practice (no real networking) spawns with the synthetic peer_id=1
 	# sentinel — see _enter_practice_mode's _local_spawn(1, ...) call.
-	# Default this to 1 (NOT 0) so the (peer_id == local_id) check below
-	# resolves to true in practice and is_local gets set correctly.
-	# Without this:
-	#   - is_local=false → first-person obstructions don't get hidden →
-	#     user sees their own character mesh filling the view (the "big
-	#     block of color" symptom)
-	#   - camera isn't made current → view is from some random default
-	#   - input is gated on is_local → WASD doesn't move the player
-	var local_id: int = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 1
+	# Gate on _is_networked() (not has_multiplayer_peer()) — Godot's
+	# default MultiplayerAPI has an OfflineMultiplayerPeer set, so
+	# has_multiplayer_peer() returns true even in pure offline mode,
+	# but get_unique_id() then errors with "No multiplayer peer is
+	# assigned" and returns 0. That made local_id=0 ≠ peer_id=1, so
+	# is_local stayed false in practice → own mesh visible + WASD dead +
+	# mouse never captured (exactly the user's repro).
+	# _is_networked() returns true only for a real network peer, which
+	# is what we actually need to differentiate practice vs MP here.
+	var local_id: int = multiplayer.get_unique_id() if _is_networked() else 1
 	if peer_id == local_id and has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		p.player_name = s.player_name if not s.player_name.is_empty() else "P%d" % peer_id
