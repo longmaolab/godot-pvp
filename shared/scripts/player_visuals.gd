@@ -219,13 +219,16 @@ static func attach_name_tag(parent: Node, name_text: String) -> void:
 	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
 	if ui_font != null:
 		tag.font = ui_font
-	tag.font_size = 72                                    # was 48
-	tag.outline_size = 18                                 # was 12 — heavier rim for contrast
+	# Sizing matches arena-shooter-3d/scenes/player.tscn (24/4/0.0022)
+	# so the screen footprint is comparable. Earlier 72/18/0.0035 was
+	# huge — name tag covered half the screen at close range.
+	tag.font_size = 28                                    # arena uses 24; +4 for slight extra weight
+	tag.outline_size = 5                                  # arena uses 4
 	tag.outline_modulate = Color(0, 0, 0, 1)
-	tag.modulate = Color(1, 0.92, 0.55, 1)                # warmer gold, more visible vs blue maps
+	tag.modulate = Color(1, 0.92, 0.55, 1)                # warm gold, holds up vs blue maps
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.no_depth_test = true                              # render through walls
-	tag.fixed_size = true                                 # don't shrink with distance — always readable
-	tag.pixel_size = 0.0035                               # tuned for fixed_size on typical FoV
-	tag.position = Vector3(0, 2.55, 0)                    # slightly higher above head
+	tag.fixed_size = true                                 # constant screen size regardless of distance
+	tag.pixel_size = 0.0024                               # arena uses 0.0022; tiny bump for legibility
+	tag.position = Vector3(0, 2.4, 0)                     # original offset — head clearance
 	parent.add_child(tag)
