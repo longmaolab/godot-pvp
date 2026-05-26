@@ -177,8 +177,10 @@ func _ready() -> void:
 		_aim_yaw = rotation.y
 		_aim_pitch = head.rotation.x
 		_configure_camera_current()
+	print("[DIAG player._ready] name=%s is_local=%s is_human_input=%s" % [name, is_local, is_human_input])
 	if is_local and is_human_input:
 		_hide_first_person_obstructions()
+		print("[DIAG player._ready] hide_first_person_obstructions DONE")
 
 	if not is_local or is_snapshot_only:
 		_configure_camera_current()

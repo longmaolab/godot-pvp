@@ -869,6 +869,8 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 	# _is_networked() returns true only for a real network peer, which
 	# is what we actually need to differentiate practice vs MP here.
 	var local_id: int = multiplayer.get_unique_id() if _is_networked() else 1
+	print("[DIAG _local_spawn] peer_id=%d local_id=%d is_networked=%s -> is_local=%s" % \
+		[peer_id, local_id, str(_is_networked()), str(peer_id == local_id)])
 	if peer_id == local_id and has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		p.player_name = s.player_name if not s.player_name.is_empty() else "P%d" % peer_id
