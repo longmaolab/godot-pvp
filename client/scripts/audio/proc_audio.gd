@@ -63,6 +63,15 @@ func _play_arpeggio_wave(freqs: Array, note_duration: float, wave: String, volum
 	player.bus = &"Master"
 	player.volume_db = MASTER_VOLUME_DB + linear_to_db(volume)
 	add_child(player)
+	# Wait one frame so the player's _ready finishes wiring up its stream
+	# playback. Otherwise the audio mixer thread can poll for samples BEFORE
+	# we've pushed any, producing "is trying to play a sample from a stream
+	# that cannot be sampled" warnings on every fire/kill. After 50-300
+	# warnings DevTools's stack-trace retention balloons to GB and the page
+	# appears frozen (Chrome F12 task manager: 8.7GB on DevTools tab).
+	await get_tree().process_frame
+	if not is_instance_valid(player):
+		return
 	player.play()
 
 	var pb: AudioStreamGeneratorPlayback = player.get_stream_playback()
