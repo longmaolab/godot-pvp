@@ -94,6 +94,15 @@ func _build_scoreboard() -> void:
 	center.name = "Scoreboard"
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Theme-attach the CJK-capable font (RussoOne + NotoSansSC fallback)
+	# so 战绩 / 玩家 etc. actually render — runtime-built Controls
+	# don't inherit the project's default theme automatically, and the
+	# stock Godot font has no CJK glyphs (was rendering as tofu boxes).
+	var sb_theme := Theme.new()
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	if ui_font != null:
+		sb_theme.default_font = ui_font
+	center.theme = sb_theme
 	add_child(center)
 
 	var panel := PanelContainer.new()

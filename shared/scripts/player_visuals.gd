@@ -205,16 +205,27 @@ static func spawn_local_tracer(tree: SceneTree, camera: Camera3D, color: Color, 
 ## Floating Label3D billboarded above a remote player so the local human can
 ## SEE where the enemy is. Skipped for the local player's own avatar (you
 ## don't need to see your own name floating in first-person).
+##
+## Sized for legibility at typical engagement range — bigger pixel_size +
+## chunky outline so the name reads against busy map geometry, plus the
+## CJK-capable ui_font.tres so Chinese names render instead of tofu.
 static func attach_name_tag(parent: Node, name_text: String) -> void:
 	var tag := Label3D.new()
 	tag.name = "_NameTag"
 	tag.text = name_text
-	tag.font_size = 48
-	tag.outline_size = 12
+	# Font matters: Label3D's default font has no CJK glyphs. Loading
+	# ui_font.tres (RussoOne + NotoSansSC fallback) makes Chinese names
+	# render correctly. Loaded inline to avoid an export-resource cycle.
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	if ui_font != null:
+		tag.font = ui_font
+	tag.font_size = 72                                    # was 48
+	tag.outline_size = 18                                 # was 12 — heavier rim for contrast
 	tag.outline_modulate = Color(0, 0, 0, 1)
-	tag.modulate = Color(1, 0.85, 0.4, 1)
+	tag.modulate = Color(1, 0.92, 0.55, 1)                # warmer gold, more visible vs blue maps
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	tag.no_depth_test = true  # render through walls so you can find enemies
-	tag.pixel_size = 0.004
-	tag.position = Vector3(0, 2.4, 0)  # above head
+	tag.no_depth_test = true                              # render through walls
+	tag.fixed_size = true                                 # don't shrink with distance — always readable
+	tag.pixel_size = 0.0035                               # tuned for fixed_size on typical FoV
+	tag.position = Vector3(0, 2.55, 0)                    # slightly higher above head
 	parent.add_child(tag)
