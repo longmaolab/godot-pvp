@@ -36,6 +36,11 @@ func _scan() -> void:
 			break
 		if dir.current_is_dir():
 			continue
+		# Web export rewrites .tres → .tres.remap (path indirection). Strip
+		# the .remap suffix so the rest of the loop sees the original name
+		# and load() resolves correctly. Native runs are unaffected.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if not fname.ends_with(".tres"):
 			continue
 		# Skip the schema files (underscore prefix convention).

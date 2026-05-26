@@ -114,6 +114,12 @@ var _peer_count: int = 1        # 1 = us; host increments on peer_connected
 
 
 func _ready() -> void:
+	# Release the mouse if a previous in-game scene left it captured.
+	# Without this, returning from game.tscn (via pause-menu MAIN MENU,
+	# server disconnect, etc.) keeps Input.mouse_mode = CAPTURED, so the
+	# user can't see the cursor or click ANY button on this menu — looks
+	# like the menu "froze" the second time they try to launch practice.
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build_modes_from_disk()
 	practice_btn.pressed.connect(_on_practice)
 	create_room_btn.pressed.connect(_on_create_room_pressed)
@@ -250,6 +256,13 @@ func _build_modes_from_disk() -> void:
 		var fname: String = dir.get_next()
 		if fname == "":
 			break
+		# Web export rewrites every .tres to <name>.tres.remap (a path
+		# indirection file — load() against the original .tres path still
+		# resolves correctly via the remap, but DirAccess only sees the
+		# .remap name). Without this strip the menu shows zero modes in
+		# the web build; native runs see real .tres and skip the strip.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 			continue
 		var res: Resource = load(MODES_DIR + fname)
@@ -316,6 +329,9 @@ func _count_weapons_on_disk() -> int:
 		var fname: String = dir.get_next()
 		if fname == "":
 			break
+		# .tres.remap strip — see comment in _build_modes_from_disk.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 			continue
 		n += 1

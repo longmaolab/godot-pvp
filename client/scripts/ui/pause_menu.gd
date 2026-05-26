@@ -78,6 +78,10 @@ func _on_main_menu() -> void:
 	if multiplayer.has_multiplayer_peer():
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
+	# Belt-and-suspenders: release the cursor before the scene swap so the
+	# new main_menu shows up clickable. main_menu._ready also resets this,
+	# but doing it here avoids any single-frame window of captured mouse.
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(MAIN_MENU_PATH)
 
 

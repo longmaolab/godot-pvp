@@ -67,6 +67,9 @@ func _populate_bundles() -> void:
 		var fname: String = dir.get_next()
 		if fname == "":
 			break
+		# Web export rewrites .tres → .tres.remap. Strip so load() resolves.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 			continue
 		var res: Resource = load("res://shared/data/bundles/" + fname)
@@ -198,6 +201,9 @@ func _populate_weapons() -> void:
 		var fname: String = dir.get_next()
 		if fname == "":
 			break
+		# Web export .tres.remap strip — see bundles loop above.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 			continue
 		var res: Resource = load("res://shared/data/weapons/" + fname)
@@ -318,6 +324,8 @@ func _on_open_chest(kind: StringName) -> void:
 				var fname: String = d.get_next()
 				if fname == "":
 					break
+				if fname.ends_with(".tres.remap"):
+					fname = fname.substr(0, fname.length() - 6)
 				if d.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 					continue
 				var w: Resource = load("res://shared/data/weapons/" + fname)
@@ -421,6 +429,8 @@ func _apply_wheel_outcome(o: Dictionary, s: Node) -> void:
 					var fn: String = d.get_next()
 					if fn == "":
 						break
+					if fn.ends_with(".tres.remap"):
+						fn = fn.substr(0, fn.length() - 6)
 					if d.current_is_dir() or fn.begins_with("_") or not fn.ends_with(".tres"):
 						continue
 					var w: Resource = load("res://shared/data/weapons/" + fn)
