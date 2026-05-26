@@ -135,8 +135,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 	if host.lag_compensation_enabled and host.lag_comp != null:
 		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + host.default_lag_comp_ping_ms * 0.5
 		var rewind_to_ms: float = float(Time.get_ticks_msec()) - rewind_ms
+		# F3-M4: only rewind peers in the SAME room as the shooter. Peers
+		# in other concurrent matches are physically in a different World3D
+		# anyway (the raycast can't hit them) — rewinding them would just
+		# waste CPU + create weird transient state for those rooms' own
+		# fire RPCs that fire the same tick.
+		var shooter_room: String = host._room_id_for_peer(peer_id)
 		for tp in host.players_by_peer.keys():
 			if tp == peer_id:
+				continue
+			if not shooter_room.is_empty() and host._room_id_for_peer(tp) != shooter_room:
 				continue
 			var pnode: Node = host.players_by_peer[tp]
 			if pnode == null or not is_instance_valid(pnode):
@@ -167,7 +175,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 	var origin: Vector3 = shooter.camera.global_position
 	var dir: Vector3 = -shooter.camera.global_transform.basis.z
 	var max_dist: float = 500.0 if weapon.is_hitscan() else 200.0
-	var space: PhysicsDirectSpaceState3D = host.get_world_3d().direct_space_state
+	# F3-M4: use the SHOOTER's World3D (= the room's SubViewport own world
+	# after F3-M3b) rather than the main scene's. Without this, raycasts
+	# in room A would query the default world's physics space and never
+	# intersect colliders that live under a per-room SubViewport.
+	# Falls back to host's world for shooters that haven't been reparented
+	# (e.g. practice / pre-room peers).
+	var shooter_world: World3D = shooter.get_world_3d()
+	if shooter_world == null:
+		shooter_world = host.get_world_3d()
+	var space: PhysicsDirectSpaceState3D = shooter_world.direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(origin, origin + dir * max_dist)
 	query.collision_mask = _SHOOT_MASK_SERVER
 	query.collide_with_areas = true
@@ -264,7 +281,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 				print("[server] hit: shooter=%d victim=%d dmg=%.1f head=%s new_hp=%.1f hitbox=%s" % [peer_id, victim_peer, dmg, is_head, new_hp, collider.name])
 			var net_rpc: Node = host.get_node_or_null(^"/root/NetRpc")
 			if net_rpc != null:
-				net_rpc.server_apply_damage.rpc(victim_peer, new_hp, peer_id, weapon_id, is_head)
+				# F3-M3c: scope damage feedback to the victim's room so a
+				# kid in room B doesn't see room A's HP bars dropping.
+				var audience: Array = host._room_scoped_audience(victim_peer)
+				if audience.is_empty():
+					net_rpc.server_apply_damage.rpc(victim_peer, new_hp, peer_id, weapon_id, is_head)
+				else:
+					var live: Array = host.multiplayer.get_peers()
+					for peer in audience:
+						if peer in live:
+							net_rpc.server_apply_damage.rpc_id(peer, victim_peer, new_hp, peer_id, weapon_id, is_head)
 			# Death broadcast happens in _on_any_player_died now (R1 fix):
 			# damage_zone / admin nuke / scripted test kills all funnel
 			# through the `died` signal, so the broadcast belongs in the

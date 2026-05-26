@@ -261,11 +261,11 @@ func _on_client_set_ready(peer_id: int, ready: bool) -> void:
 		room_state_changed.emit(room)
 
 
-## Phase 1 single-active-match coordination: only one room can be in
-## MATCH state at a time. Other rooms stay in LOBBY (player can still
-## browse + join + see them in the list, just can't start their own
-## match until the current one ends). Per .agent/lobby_plan.md Q5 the
-## current room comes back to LOBBY after match_ended fires.
+## Phase 2 (F3): multiple rooms can be in MATCH simultaneously. The
+## per-room World3D (RoomWorld SubViewport, F3-M1) gives each match its
+## own physics space, and all server→client broadcasts are scoped to
+## the room's player set (F3-M3c+M4) — so a peer in one match never
+## sees another room's bullets, HP bars, kill feed, or geometry.
 func _on_client_start_match(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -281,15 +281,6 @@ func _on_client_start_match(peer_id: int) -> void:
 	# Already running? Idempotent — ignore.
 	if room.state == Room.STATE_MATCH:
 		return
-	# Phase 1 single-active-match guard: reject if any other room is
-	# already in MATCH state.
-	for other_id in rooms.keys():
-		var other: Room = rooms[other_id]
-		if other_id != room_id and other.state == Room.STATE_MATCH:
-			# In Phase 2 this would queue or fail with a clear reason RPC.
-			# For Phase 1 just silently no-op + log.
-			push_warning("[RoomManager] start_match for %s blocked — %s already in MATCH" % [room_id, other_id])
-			return
 	start_match(room_id)
 
 

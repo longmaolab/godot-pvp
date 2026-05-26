@@ -269,10 +269,49 @@ func _physics_process(delta: float) -> void:
 	_snapshot_tick += 1
 	if players_by_peer.is_empty():
 		return
-	# Build snapshot payload: one flat dict per player. Cheap to serialize
-	# over WebSocket and easy for clients to consume without schema changes.
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc == null:
+		return
+	# F3-M3c: snapshot scoping. If any rooms exist server-side, send
+	# each room only its own players' positions — otherwise concurrent
+	# matches would see each other on the radar and through walls. The
+	# `else` branch keeps the legacy global broadcast for the MP
+	# integration tests (mp_game_test, fire_test, ...) that connect
+	# directly to the DS without going through the lobby system.
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	# Direct property access — see _room_id_for_peer's comment for why
+	# `rm.get("rooms")` doesn't work but `rm.rooms` does.
+	var rooms_dict: Dictionary = rm.rooms if rm != null else {}
+	if not rooms_dict.is_empty():
+		var live: Array = multiplayer.get_peers()
+		for rid in rooms_dict.keys():
+			var room: Variant = rooms_dict[rid]
+			if room == null:
+				continue
+			var room_peers: Array = room.players
+			var entities_r: Array = _build_snapshot_entities(room_peers)
+			# Empty entities = no players in this room → skip the RPC
+			# (saves a no-op packet per tick per empty room).
+			if entities_r.is_empty():
+				continue
+			for peer in room_peers:
+				if peer in live:
+					net_rpc.server_send_snapshot.rpc_id(peer, _snapshot_tick, entities_r)
+	else:
+		# Broadcast to every client. unreliable_ordered: snapshots are idempotent
+		# (latest wins), don't retransmit drops.
+		var entities: Array = _build_snapshot_entities(players_by_peer.keys())
+		net_rpc.server_send_snapshot.rpc(_snapshot_tick, entities)
+
+
+## F3-M3c: snapshot entity-builder. Pulled out of the per-tick path so
+## both the per-room and legacy-global broadcasts use one source of
+## truth for what a "snapshot entry" looks like.
+func _build_snapshot_entities(peer_ids) -> Array:
 	var entities: Array = []
-	for peer_id in players_by_peer.keys():
+	for peer_id in peer_ids:
+		if not players_by_peer.has(peer_id):
+			continue
 		var p: Node = players_by_peer[peer_id]
 		if p == null or not is_instance_valid(p):
 			continue
@@ -292,12 +331,7 @@ func _physics_process(delta: float) -> void:
 			"hp":    int(p.hp) if "hp" in p else 0,
 			"flags": flags,
 		})
-	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
-	if net_rpc == null:
-		return
-	# Broadcast to every client. unreliable_ordered: snapshots are idempotent
-	# (latest wins), don't retransmit drops.
-	net_rpc.server_send_snapshot.rpc(_snapshot_tick, entities)
+	return entities
 
 
 func _is_networked() -> bool:
@@ -726,10 +760,25 @@ func _rpc_sync_request() -> void:
 	# client can swap geometry first; otherwise spawn positions land in
 	# whatever map the client locally picked (which is meaningless — the
 	# menu's MAP picker is host-only).
+	#
+	# F3-M3a: map is now per-room. Look up THIS REQUESTER's map (their
+	# room's map if they're in one, else global) instead of the global
+	# map_scene — otherwise joiners to two different concurrent matches
+	# would get the same map info.
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
-	if net_rpc != null and map_scene != null and not map_scene.resource_path.is_empty():
-		net_rpc.server_map_info.rpc_id(requester, map_scene.resource_path)
+	if net_rpc != null:
+		var their_map: String = _map_path_for_peer(requester)
+		if not their_map.is_empty():
+			net_rpc.server_map_info.rpc_id(requester, their_map)
+	# Only spawn the requester's own room's players to them. Same logic
+	# as above — sending a spawn for a peer in a different match would
+	# materialize ghosts in the wrong client's world.
+	var requester_room: String = _room_id_for_peer(requester)
 	for peer in players_by_peer.keys():
+		# MP path: same room only. Practice path (requester_room == "")
+		# keeps the original "everyone visible" behavior.
+		if not requester_room.is_empty() and _room_id_for_peer(peer) != requester_room:
+			continue
 		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer))
 
 
@@ -823,14 +872,25 @@ func _despawn(peer_id: int) -> void:
 ## distance to any living player (the farther the safer), and pick from the
 ## top half. Mirrors arena-shooter-3d/scripts/game.gd's anti-spawn-kill logic.
 func _spawn_pos_for(peer_id: int) -> Vector3:
-	var spawn_root: Node = map_root.get_node_or_null(^"SpawnPoints") if map_root != null else null
+	# F3-M3a: read SpawnPoints from THIS PEER's room map, not the global
+	# one. Practice peers (no room) still fall back to self.map_root.
+	var peer_map: Node3D = _map_root_for_peer(peer_id)
+	var spawn_root: Node = peer_map.get_node_or_null(^"SpawnPoints") if peer_map != null else null
 	if spawn_root == null or spawn_root.get_child_count() == 0:
 		return Vector3(0, 1, 0)
 
 	# Gather living-player positions (exclude the peer being spawned).
+	# Also scope to peers in the SAME room — anti-spawn-kill shouldn't
+	# care about enemies in some other concurrent match.
+	var peer_room: String = _room_id_for_peer(peer_id)
 	var enemy_positions: Array = []
 	for p in players_by_peer.keys():
 		if p == peer_id:
+			continue
+		# In MP mode keep the comparison room-local. In practice (peer_room
+		# is "") fall through to the old global behavior — there's only one
+		# practice "room".
+		if not peer_room.is_empty() and _room_id_for_peer(p) != peer_room:
 			continue
 		var pn: Node = players_by_peer[p]
 		if pn != null and is_instance_valid(pn) and "is_dead" in pn and not pn.is_dead:
@@ -1042,7 +1102,17 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 	if is_dedicated_server or (multiplayer.has_multiplayer_peer() and multiplayer.is_server()):
 		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 		if net_rpc != null:
-			net_rpc.server_player_died.rpc(victim_peer, killer_peer, &"", false)
+			# F3-M3c: scope death feed to the victim's room. Empty audience
+			# falls back to the legacy global broadcast for test setups
+			# that connect to the DS without going through the lobby.
+			var audience: Array = _room_scoped_audience(victim_peer)
+			if audience.is_empty():
+				net_rpc.server_player_died.rpc(victim_peer, killer_peer, &"", false)
+			else:
+				var live: Array = multiplayer.get_peers()
+				for peer in audience:
+					if peer in live:
+						net_rpc.server_player_died.rpc_id(peer, victim_peer, killer_peer, &"", false)
 
 	# Economy: if the LOCAL player got the kill, award credits per mode_def.
 	# Persisted via Settings autoload so progress survives between sessions.
@@ -1110,7 +1180,15 @@ func _ds_respawn_player(victim_peer: int, pos: Vector3) -> void:
 	victim.respawn(pos)
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
-		net_rpc.server_player_respawned.rpc(victim_peer, pos)
+		# F3-M3c: scope respawn announcement to the victim's room.
+		var audience: Array = _room_scoped_audience(victim_peer)
+		if audience.is_empty():
+			net_rpc.server_player_respawned.rpc(victim_peer, pos)
+		else:
+			var live: Array = multiplayer.get_peers()
+			for peer in audience:
+				if peer in live:
+					net_rpc.server_player_respawned.rpc_id(peer, victim_peer, pos)
 	if is_dedicated_server:
 		print("[server] peer %d respawned at (%.2f, %.2f, %.2f)" % [victim_peer, pos.x, pos.y, pos.z])
 
@@ -1128,7 +1206,7 @@ func _on_round_ended(winner: int, _scores: Dictionary) -> void:
 		hud.push_feed("Round ended — winner peer %d" % winner, Color(0.9, 0.9, 0.4))
 
 
-func _on_match_ended(winner: int, final: Dictionary) -> void:
+func _on_match_ended(winner: int, final: Dictionary, room_id: String = "") -> void:
 	if hud != null:
 		hud.push_feed("MATCH OVER — winner peer %d" % winner, Color(1.0, 0.85, 0.2))
 	# Dedicated server: kick off the end-of-match flow via RoomManager.
@@ -1138,11 +1216,15 @@ func _on_match_ended(winner: int, final: Dictionary) -> void:
 	# (host disconnect → room_destroyed → same teardown).
 	# Listen-host / practice: pop up the themed scoreboard (legacy flow).
 	if is_dedicated_server:
-		print("[server] match ended — winner peer %d" % winner)
-		if not _active_room_id.is_empty():
+		print("[server] match ended — winner peer %d (room=%s)" % [winner, room_id])
+		# F3-M5: end_match the SPECIFIC room that ended, not "the one
+		# active room" (which is no longer a singleton). Practice / pre-
+		# room path passes "" — fall back to the legacy global self.match_controller
+		# cleanup via _tear_down_match_world("").
+		if not room_id.is_empty():
 			var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
 			if room_mgr != null:
-				room_mgr.end_match(_active_room_id)
+				room_mgr.end_match(room_id)
 		return
 	# Pop up the themed end-of-match scoreboard.
 	var screen: Node = MATCH_END_SCENE.instantiate()
@@ -1153,11 +1235,11 @@ func _on_match_ended(winner: int, final: Dictionary) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
-# ── Lobby M2: per-room match boot ────────────────────────────────────────
-# Active room being played on this DS. Phase 1 locks to single-active-match
-# so there's only one of these at a time; Phase 2 would make this a dict
-# keyed by world id.
-var _active_room_id: String = ""
+# ── Lobby: per-room match boot ───────────────────────────────────────────
+# F3-M5: the singleton `_active_room_id` is gone. `room_worlds` (a dict
+# keyed by room_id, see field declaration near map_root) is the authoritative
+# "which matches are currently running" registry. has-key checks replaced
+# the empty-string sentinel everywhere.
 
 
 ## Called by RoomManager.match_started when a room's host clicks START.
@@ -1169,37 +1251,45 @@ var _active_room_id: String = ""
 func _boot_match_for_room(room) -> void:
 	if not is_dedicated_server or not multiplayer.is_server():
 		return
-	if not _active_room_id.is_empty():
-		push_warning("[server] _boot_match_for_room called while %s already active" % _active_room_id)
+	# F3-M5: concurrent matches. Idempotency guard — same room booted
+	# twice (rare race) should no-op rather than stack RoomWorld instances.
+	if room_worlds.has(room.room_id):
+		push_warning("[server] _boot_match_for_room called for %s but it's already booted" % room.room_id)
 		return
-	_active_room_id = room.room_id
 	print("[server] booting match for room %s (%d players, map=%s)" % \
 		[room.room_id, room.players.size(), room.map_path])
 
-	# F3-M1: stand up a per-room World3D container. Empty for now — M3
-	# will reparent map + players into it. Created BEFORE the map swap so
-	# the lifecycle stays parallel to map_root: both born here, both die
-	# in _tear_down_match_world. Typed as SubViewport (parent class) to
-	# dodge a `class_name`-resolution order issue between this file and
-	# room_world.gd; access room-specific fields via duck typing.
+	# F3-M1/M3a: stand up a per-room World3D container and load the
+	# room's map under it. self.map_root is left alone — practice mode
+	# still uses it. _map_root_for_peer / _map_path_for_peer route peer-
+	# scoped lookups to the right place.
 	var room_world: SubViewport = _ROOM_WORLD_SCRIPT.new()
 	room_world.set("room_id", room.room_id)
 	room_world.name = "RoomWorld_%s" % room.room_id
 	add_child(room_world)
 	room_worlds[room.room_id] = room_world
+	# load_map() handles the blank.tscn fallback internally for bad paths.
+	if room_world.call("load_map", room.map_path) == null:
+		push_warning("[server] room %s failed to mount any map (bad path: %s)" % [room.room_id, room.map_path])
 
-	# Swap in the room's map. map_scene also gets reassigned so the
-	# `_rpc_sync_request` reply path (which reads map_scene.resource_path
-	# for server_map_info) tells joining clients the right thing.
-	var new_map: PackedScene = load(room.map_path) as PackedScene
-	if new_map == null:
-		new_map = load("res://shared/scenes/maps/blank.tscn") as PackedScene
-		push_warning("[server] room %s map %s failed to load, falling back to blank" % [room.room_id, room.map_path])
-	map_scene = new_map
-	if map_root != null:
-		map_root.queue_free()
-	map_root = new_map.instantiate()
-	add_child(map_root)
+	# F3-M3b: reparent the room's players from the global `players_root`
+	# into the room's own SubViewport. This is what gives us actual world
+	# isolation: a CharacterBody3D inside a SubViewport with own_world_3d
+	# auto-rebinds its physics RID to that subview's space on next physics
+	# step, so raycasts in room A can no longer hit colliders in room B.
+	#
+	# reparent() (Godot 4) preserves the global transform and re-fires
+	# NOTIFICATION_ENTER_TREE so per-frame physics state is consistent.
+	var room_players_root: Node = room_world.get("players_root")
+	if room_players_root != null and is_instance_valid(room_players_root):
+		for peer in room.players:
+			if not players_by_peer.has(peer):
+				continue
+			var pn: Node = players_by_peer[peer]
+			if not is_instance_valid(pn):
+				continue
+			if pn.get_parent() != room_players_root:
+				pn.reparent(room_players_root, false)
 
 	# F3-M2: per-room match_controller. Live as a child of room_world so
 	# the RoomWorld lifecycle (born here, freed in _tear_down_match_world)
@@ -1218,7 +1308,9 @@ func _boot_match_for_room(room) -> void:
 				var room_mc: Node = mc_script.new()
 				room_mc.mode_def = md
 				room_world.add_child(room_mc)
-				room_mc.match_ended.connect(_on_match_ended)
+				# F3-M5: bind the room_id so _on_match_ended knows WHICH
+				# concurrent match ended without consulting a singleton.
+				room_mc.match_ended.connect(_on_match_ended.bind(room.room_id))
 				room_mc.round_ended.connect(_on_round_ended)
 				room_world.set("match_controller", room_mc)
 				room_mc.start()
@@ -1253,17 +1345,21 @@ func _boot_match_for_room(room) -> void:
 ## players spawned + map loaded between matches; room host can just hit
 ## START again.
 func _on_match_finished_in_room(room) -> void:
-	if room.room_id != _active_room_id:
+	# F3-M5: concurrent matches — accept any room that we currently track.
+	# Pre-M5 single-active-match check (`room.room_id != _active_room_id`)
+	# is gone; we just need this room to actually be one we booted.
+	if not room_worlds.has(room.room_id):
 		return
-	_tear_down_match_world()
+	_tear_down_match_world(room.room_id)
 
 
 ## Companion to the above for the disconnect / host-leave path: when a
-## room is destroyed and it happened to be our active match, tear down.
+## room is destroyed and it happened to be one we'd booted, tear down
+## just that one (other concurrent rooms continue running).
 func _on_room_destroyed_check_active(room_id: String, _evicted: Array) -> void:
-	if room_id != _active_room_id:
+	if not room_worlds.has(room_id):
 		return
-	_tear_down_match_world()
+	_tear_down_match_world(room_id)
 	# room_destroyed already broadcast server_room_destroyed to the
 	# evicted set; their game scenes need an extra nudge back to the
 	# room_browser (no room exists for them to return to). Reuse the
@@ -1286,21 +1382,91 @@ func _on_room_destroyed_check_active(room_id: String, _evicted: Array) -> void:
 ## Returns null if there's nothing to score against (e.g. a peer that
 ## died before any match started). Caller no-ops on null.
 func _resolve_match_controller_for_peer(peer_id: int) -> Node:
-	var rm: Node = get_node_or_null(^"/root/RoomManager")
-	if rm != null and "peer_to_room" in rm:
-		var rid: String = String(rm.peer_to_room.get(peer_id, ""))
-		if not rid.is_empty() and room_worlds.has(rid):
-			var rw: Node = room_worlds[rid]
-			if is_instance_valid(rw):
-				var room_mc: Variant = rw.get("match_controller")
-				if room_mc != null and is_instance_valid(room_mc):
-					return room_mc
+	# Reuse _room_id_for_peer so the property-access workaround stays in
+	# exactly one place (Godot 4 `in` operator vs script-level vars, see
+	# _room_id_for_peer comment).
+	var rid: String = _room_id_for_peer(peer_id)
+	if not rid.is_empty() and room_worlds.has(rid):
+		var rw: Node = room_worlds[rid]
+		if is_instance_valid(rw):
+			var room_mc: Variant = rw.get("match_controller")
+			if room_mc != null and is_instance_valid(room_mc):
+				return room_mc
 	return match_controller
 
 
-func _tear_down_match_world() -> void:
-	var ended_room_id: String = _active_room_id
-	_active_room_id = ""
+## F3-M3a: look up the room a peer belongs to, or "" if they're not in
+## a room (practice / pre-lobby). Centralized so every per-room dispatcher
+## (map, players, snapshot, damage) shares one source of truth and an
+## eventual RoomManager rename only changes one place.
+func _room_id_for_peer(peer_id: int) -> String:
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	if rm == null:
+		return ""
+	return String(rm.peer_to_room.get(peer_id, ""))
+
+
+## F3-M3a: the RoomWorld for a peer (or null if they're not in a match).
+## Returns null even if the peer's room exists but hasn't started — only
+## active matches mount a RoomWorld in `room_worlds`.
+func _room_world_for_peer(peer_id: int) -> Node:
+	var rid: String = _room_id_for_peer(peer_id)
+	if rid.is_empty() or not room_worlds.has(rid):
+		return null
+	var rw: Node = room_worlds[rid]
+	return rw if is_instance_valid(rw) else null
+
+
+## F3-M3a: the map Node3D containing `peer_id` — room's map if they're
+## in a match, otherwise GameController.map_root (practice fallback).
+## Returns null only if NO map exists at all, which shouldn't happen on
+## a healthy server but callers should null-check defensively.
+func _map_root_for_peer(peer_id: int) -> Node3D:
+	var rw: Node = _room_world_for_peer(peer_id)
+	if rw != null:
+		var rm_map: Variant = rw.get("map_root")
+		if rm_map != null and is_instance_valid(rm_map):
+			return rm_map
+	return map_root
+
+
+## F3-M3c: audience for an event scoped to a single peer. Returns the
+## peers in the same room (so server_player_died etc. only fan out to
+## that match's clients) or an empty array if `peer_id` isn't in a
+## live room. Callers use the empty case as the signal to fall back to
+## a global `.rpc()` broadcast (legacy / test-suite behavior).
+func _room_scoped_audience(peer_id: int) -> Array:
+	var rid: String = _room_id_for_peer(peer_id)
+	if rid.is_empty():
+		return []
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	if rm == null:
+		return []
+	# Same direct-access pattern as _room_id_for_peer.
+	var rooms: Dictionary = rm.rooms
+	if not rooms.has(rid):
+		return []
+	var room: Variant = rooms[rid]
+	return (room.players as Array).duplicate()
+
+
+## F3-M3a: res:// path of the map containing `peer_id`. Used by
+## _rpc_sync_request to tell each joiner which scene to load locally.
+## Empty if neither a room map nor a global fallback exists.
+func _map_path_for_peer(peer_id: int) -> String:
+	var m: Node3D = _map_root_for_peer(peer_id)
+	if m != null and m.scene_file_path != "":
+		return m.scene_file_path
+	if map_scene != null and not map_scene.resource_path.is_empty():
+		return map_scene.resource_path
+	return ""
+
+
+func _tear_down_match_world(ended_room_id: String = "") -> void:
+	# F3-M5: caller passes the room_id to tear down (concurrent matches —
+	# you need to say which one ended). The empty-default path is kept
+	# for the rare callers that pre-dated concurrency, but in practice
+	# every live call site supplies an explicit room.
 	# F3-M1 + M2: free the RoomWorld. Its match_controller child is a
 	# descendant so queue_free cascades — no separate match_controller
 	# cleanup needed for the MP path. self.match_controller is left alone
@@ -1309,5 +1475,16 @@ func _tear_down_match_world() -> void:
 	if not ended_room_id.is_empty() and room_worlds.has(ended_room_id):
 		var rw: Node = room_worlds[ended_room_id]
 		if is_instance_valid(rw):
+			# F3-M3b: reparent the room's surviving players back to the
+			# global players_root BEFORE the RoomWorld dies — otherwise
+			# queue_free cascades and takes the players with it, which
+			# breaks the post-match lobby flow (their game scenes expect
+			# to receive room_state with their own peer IDs still spawned
+			# server-side, ready to be repositioned for round 2).
+			var room_players_root: Node = rw.get("players_root")
+			if room_players_root != null and is_instance_valid(room_players_root):
+				for child in room_players_root.get_children():
+					if is_instance_valid(child):
+						child.reparent(players_root, false)
 			rw.queue_free()
 		room_worlds.erase(ended_room_id)
