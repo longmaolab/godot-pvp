@@ -316,22 +316,22 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/margin_left = 48
 theme_override_constants/margin_right = 48
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_bottom = 32
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_bottom = 14
 
 [node name="Cols" type="HBoxContainer" parent="Scroll/Center"]
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_constants/separation = 36
+theme_override_constants/separation = 24
 
 [node name="LeftCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(560, 900)
+custom_minimum_size = Vector2(560, 760)
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass")
 
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/LeftCard"]
-theme_override_constants/separation = 18
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
@@ -472,17 +472,17 @@ theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "🛒   商店  /  SHOP"
 
 [node name="RightCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(500, 900)
+custom_minimum_size = Vector2(500, 760)
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass_warm")
 
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/RightCard"]
-theme_override_constants/separation = 18
+theme_override_constants/separation = 10
 
 [node name="StatsRow" type="HBoxContainer" parent="Scroll/Center/Cols/RightCard/V"]
 alignment = 1
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="StatWeapons" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
 theme_override_styles/panel = SubResource("info_pill")
@@ -721,7 +721,7 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -200
+offset_left = -300
 offset_top = -36
 offset_right = -16
 offset_bottom = -8
