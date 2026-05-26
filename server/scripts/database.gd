@@ -44,11 +44,19 @@ func _ready() -> void:
 	print("[Database] ready at %s (WAL mode, foreign_keys=ON)" % db.path)
 
 
-## True for dedicated server boot OR listen-host with multiplayer peer
-## active. NetProtocol exposes the DS sentinel via is_dedicated_server_boot().
+## True for dedicated server boot. Uses NetProtocol's helper (which
+## checks `--server` in cmdline_USER_args; engine args are passed before
+## the `--` separator, --server lives after it). Don't roll our own —
+## get_cmdline_args() returns only engine args, get_cmdline_user_args()
+## returns post-`--` args. NetProtocol.is_dedicated_server_boot wraps
+## the right one.
 func _should_open_db() -> bool:
-	var args: PackedStringArray = OS.get_cmdline_args()
-	return args.has("--server") or OS.has_environment("GODOT_PVP_FORCE_DB")
+	if OS.has_environment("GODOT_PVP_FORCE_DB"):
+		return true
+	var np: Node = get_node_or_null(^"/root/NetProtocol")
+	if np != null and np.has_method(&"is_dedicated_server_boot"):
+		return np.is_dedicated_server_boot()
+	return false
 
 
 func _resolve_db_path() -> String:
