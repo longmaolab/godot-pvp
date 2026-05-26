@@ -189,6 +189,44 @@ func _ready() -> void:
 	stat_modes.text = "◇  %d 模式" % MODES.size()
 	stat_maps.text = "◈  %d 地图" % MAPS.size()
 	status_label.text = "M3 vertical slice · server-authoritative · 9 test suites green"
+	# Invite-link auto-join: if launched in the browser with ?room=AXJ7
+	# in the URL, pre-fill the code field and fire the join flow. Deferred
+	# so the multiplayer signal wiring above is fully in place when the
+	# connect attempt starts.
+	call_deferred("_maybe_auto_join_from_url")
+
+
+## Invite-link entry path. In the web export, the URL query string is the
+## one cross-environment channel a friend can paste into a chat — checking
+## `?room=AXJ7` here lets a shared link land the user straight in the
+## right lobby instead of asking them to retype the code.
+func _maybe_auto_join_from_url() -> void:
+	# Same gate arena-shooter-3d uses for its server-discovery JS bridge:
+	# OS.has_feature("web") is true in the web export, and the singleton
+	# check protects against the rare case where the engine was built
+	# without JavaScript support. Both guards together mean this branch
+	# never runs on native.
+	if not (OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge")):
+		return
+	var qs_v: Variant = JavaScriptBridge.eval("window.location.search", true)
+	if typeof(qs_v) != TYPE_STRING:
+		return
+	var qs: String = qs_v
+	if qs.begins_with("?"):
+		qs = qs.substr(1)
+	if qs.is_empty():
+		return
+	var code: String = ""
+	for pair in qs.split("&", false):
+		var kv: PackedStringArray = pair.split("=", true, 1)
+		if kv.size() == 2 and kv[0].to_lower() == "room":
+			code = kv[1].strip_edges().to_upper()
+			break
+	if code.length() != 4:
+		return
+	room_code_input.text = code
+	status_label.text = "🔗 邀请链接：%s" % code
+	_on_join_by_code_pressed()
 
 
 func _build_modes_from_disk() -> void:
