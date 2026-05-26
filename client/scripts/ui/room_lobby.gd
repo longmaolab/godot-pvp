@@ -24,13 +24,20 @@ const GAME_SCENE := "res://client/scenes/game.tscn"
 @onready var map_label: Label = $Center/Panel/V/MapLabel
 @onready var player_list: ItemList = $Center/Panel/V/PlayerList
 @onready var start_btn: Button = $Center/Panel/V/Buttons/StartButton
+@onready var ready_btn: Button = $Center/Panel/V/Buttons/ReadyButton
 @onready var leave_btn: Button = $Center/Panel/V/Buttons/LeaveButton
 @onready var status_label: Label = $Center/Panel/V/StatusLabel
+
+const SKIN_LETTERS := "ABCDEFGHIJKLMNOPQR"   # mirrors PlayerController
 
 var _room_id: String = ""
 var _host_peer: int = -1
 var _my_peer: int = -1
 var _is_host: bool = false
+# Track our local optimistic ready state separately so the toggle button's
+# pressed visual matches what we just told the server, even before the
+# round-trip room_state broadcast lands. Reset on _ready / scene swap.
+var _my_ready: bool = false
 
 
 func _ready() -> void:
@@ -47,9 +54,11 @@ func _ready() -> void:
 
 	leave_btn.pressed.connect(_on_leave_pressed)
 	start_btn.pressed.connect(_on_start_pressed)
-	# Default — start_btn visibility is controlled by _apply_room_state once
-	# we know who the host is.
+	ready_btn.toggled.connect(_on_ready_toggled)
+	# Default — start_btn/ready_btn visibility is controlled by _apply_room_state
+	# once we know who the host is.
 	start_btn.visible = false
+	ready_btn.visible = false
 
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
@@ -59,11 +68,31 @@ func _ready() -> void:
 	# Connection drops still possible.
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
+	# Push our local identity to the server so other players see our name
+	# + skin instead of "Player <peer_id>". Fire-and-forget — the eventual
+	# server_room_state broadcast will reflect it.
+	_send_my_profile()
+
 	# Render the initial state we were handed.
 	if not initial_state.is_empty():
 		_apply_room_state(initial_state)
 	else:
 		status_label.text = "等待房间数据..."
+
+
+func _send_my_profile() -> void:
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc == null:
+		return
+	var name: String = "Player %d" % _my_peer
+	var skin: int = 0
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		if "player_name" in s and not String(s.player_name).is_empty():
+			name = String(s.player_name)
+		if "skin_index" in s:
+			skin = int(s.skin_index)
+	net_rpc.client_set_lobby_profile.rpc_id(1, name, skin)
 
 
 # ── State updates ────────────────────────────────────────────────────────
@@ -79,20 +108,69 @@ func _apply_room_state(state: Dictionary) -> void:
 	map_label.text = "📍  %s   🎯  %s" % [_short(map_path) if not map_path.is_empty() else "(默认)",
 		_short(mode_path) if not mode_path.is_empty() else "(无模式)"]
 
-	# Refresh player list.
+	# Refresh player list. Each row shows skin letter + name + role badge.
+	# Profiles dict may have int OR string keys depending on serialization
+	# path (RPC layer sometimes coerces); look up via both to be safe.
 	player_list.clear()
 	var players: Array = state.get("players", [])
+	var profiles: Dictionary = state.get("profiles", {})
+	var ready_count: int = 0
+	var joiner_count: int = 0
 	for peer in players:
-		var tag: String = "👑 " if int(peer) == _host_peer else "👤 "
-		# `display_name` not `name` — Node already has a `name` property and
-		# shadowing it spams GDScript::reload warnings.
-		var display_name: String = "你" if int(peer) == _my_peer else "Player %d" % int(peer)
-		player_list.add_item("%s%s" % [tag, display_name])
+		var peer_int: int = int(peer)
+		var prof: Dictionary = _lookup_profile(profiles, peer_int)
+		var skin_idx: int = clampi(int(prof.get("skin", 0)), 0, SKIN_LETTERS.length() - 1)
+		var skin_letter: String = SKIN_LETTERS.substr(skin_idx, 1)
+		var raw_name: String = String(prof.get("name", ""))
+		# `display_name` not `name` — Node has a `name` property; shadowing
+		# it spams GDScript::reload warnings.
+		var display_name: String = raw_name if not raw_name.is_empty() else "Player %d" % peer_int
+		if peer_int == _my_peer:
+			display_name = "%s (你)" % display_name
+		var role_badge: String = ""
+		if peer_int == _host_peer:
+			role_badge = "👑 房主"
+		elif bool(prof.get("ready", false)):
+			role_badge = "✅ READY"
+			ready_count += 1
+		else:
+			role_badge = "⏳ 等待"
+		if peer_int != _host_peer:
+			joiner_count += 1
+		player_list.add_item("[%s]  %-16s  %s" % [skin_letter, display_name, role_badge])
 
 	# START is host-only. Phase 1 = solo START allowed (1 player is OK).
 	start_btn.visible = _is_host
 	start_btn.disabled = false
-	status_label.text = "等房主点 START" if not _is_host else "可以 START 了"
+	# READY toggle is for joiners only. Sync its pressed visual to whatever
+	# the server believes our state is — guards against the room_state
+	# broadcast disagreeing with our local optimistic toggle.
+	ready_btn.visible = not _is_host
+	var my_prof: Dictionary = _lookup_profile(profiles, _my_peer)
+	_my_ready = bool(my_prof.get("ready", false))
+	# set_pressed_no_signal so the toggled signal doesn't re-fire while we
+	# sync the visual state to what the server told us.
+	ready_btn.set_pressed_no_signal(_my_ready)
+	ready_btn.text = "✅  已准备 / READY" if _my_ready else "⏳  READY 我准备好了"
+
+	if _is_host:
+		if joiner_count == 0:
+			status_label.text = "你一个人 — 可以单机 START，或等朋友加入"
+		else:
+			status_label.text = "可以 START · %d/%d 个玩家已准备" % [ready_count, joiner_count]
+	else:
+		status_label.text = "等房主点 START" if _my_ready else "标记 READY 让房主知道你准备好了"
+
+
+## Profile dict may arrive with int OR string keys depending on whether the
+## RPC payload went through JSON coercion. Try both.
+func _lookup_profile(profiles: Dictionary, peer_id: int) -> Dictionary:
+	if profiles.has(peer_id):
+		return profiles[peer_id]
+	var s_key: String = str(peer_id)
+	if profiles.has(s_key):
+		return profiles[s_key]
+	return {"name": "", "skin": 0, "ready": false}
 
 
 func _on_room_state(state: Dictionary) -> void:
@@ -138,6 +216,16 @@ func _on_leave_pressed() -> void:
 	# Move back to browser immediately; if the disconnect lags, the
 	# browser handles its own re-list.
 	get_tree().change_scene_to_file(ROOM_BROWSER_SCENE)
+
+
+func _on_ready_toggled(pressed: bool) -> void:
+	if _is_host:
+		return   # host doesn't have a ready bit — implicit always-ready
+	_my_ready = pressed
+	ready_btn.text = "✅  已准备 / READY" if pressed else "⏳  READY 我准备好了"
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		net_rpc.client_set_ready.rpc_id(1, pressed)
 
 
 func _on_start_pressed() -> void:

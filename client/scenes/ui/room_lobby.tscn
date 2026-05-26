@@ -121,6 +121,15 @@ theme_override_constants/outline_size = 3
 theme_override_styles/normal = SubResource("btn_primary")
 visible = false
 
+[node name="ReadyButton" type="Button" parent="Center/Panel/V/Buttons"]
+custom_minimum_size = Vector2(280, 80)
+text = "⏳  READY 我准备好了"
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_styles/normal = SubResource("btn_secondary")
+toggle_mode = true
+visible = false
+
 [node name="LeaveButton" type="Button" parent="Center/Panel/V/Buttons"]
 custom_minimum_size = Vector2(160, 50)
 text = "← 离开 / LEAVE"

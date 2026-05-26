@@ -64,6 +64,8 @@ func _ready() -> void:
 	net_rpc.client_join_room_received.connect(_on_client_join_room)
 	net_rpc.client_leave_room_received.connect(_on_client_leave_room)
 	net_rpc.client_start_match_received.connect(_on_client_start_match)
+	net_rpc.client_set_lobby_profile_received.connect(_on_client_set_lobby_profile)
+	net_rpc.client_set_ready_received.connect(_on_client_set_ready)
 	# Propagate room mutations out to room members via authority RPCs.
 	room_state_changed.connect(_broadcast_room_state)
 	room_destroyed.connect(_broadcast_room_destroyed)
@@ -230,6 +232,35 @@ func _on_client_leave_room(peer_id: int) -> void:
 	leave_room(peer_id)
 
 
+## Phase 2: peer is announcing their lobby identity. Updates the profile
+## entry on the room they're in (no-op if they're not in one) and triggers
+## a state broadcast so everyone else's lobby UI refreshes.
+func _on_client_set_lobby_profile(peer_id: int, name: String, skin: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var room: Room = get_room_for_peer(peer_id)
+	if room == null:
+		return
+	if room.set_profile(peer_id, name, skin):
+		room_state_changed.emit(room)
+
+
+## Phase 2: peer toggled their READY bit. Same broadcast pattern as
+## set_lobby_profile but only fires when the bit actually flipped.
+func _on_client_set_ready(peer_id: int, ready: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var room: Room = get_room_for_peer(peer_id)
+	if room == null:
+		return
+	# Host's ready bit is implicitly always-true (they own the START button),
+	# so refuse to flip it — keeps the UI consistent regardless of stray RPCs.
+	if peer_id == room.host_peer:
+		return
+	if room.set_ready(peer_id, ready):
+		room_state_changed.emit(room)
+
+
 ## Phase 1 single-active-match coordination: only one room can be in
 ## MATCH state at a time. Other rooms stay in LOBBY (player can still
 ## browse + join + see them in the list, just can't start their own
@@ -281,6 +312,10 @@ func end_match(room_id: String) -> void:
 		return
 	print("[RoomMgr] END_MATCH %s → LOBBY (%d players)" % [room_id, room.players.size()])
 	room.state = Room.STATE_LOBBY
+	# Force everyone to re-ready for round 2 — otherwise stale "ready"
+	# bits from before the match carry over and host sees "all ready"
+	# even though half the table is staring at the end-screen.
+	room.clear_ready_bits()
 	match_finished.emit(room)
 	room_state_changed.emit(room)
 

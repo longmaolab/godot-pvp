@@ -29,6 +29,12 @@ signal client_create_room_received(peer_id: int, map_path: String, mode_def_path
 signal client_join_room_received(peer_id: int, room_id: String)
 signal client_leave_room_received(peer_id: int)
 signal client_start_match_received(peer_id: int)
+## Phase 2: lobby identity + ready toggle. Profile carries name + skin
+## index, so the lobby shows "Anna · Char C" rather than "Player 12345".
+## Ready is its own RPC because it changes much more frequently and we
+## want to broadcast only the bit that flipped, not re-send name/skin.
+signal client_set_lobby_profile_received(peer_id: int, name: String, skin: int)
+signal client_set_ready_received(peer_id: int, ready: bool)
 
 # ── client-side signals (fired when an RPC arrives from the server) ──────
 signal server_welcome_received(your_peer: int, server_tick: int)
@@ -128,6 +134,18 @@ func client_leave_room() -> void:
 func client_start_match() -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_start_match_received.emit(peer)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_set_lobby_profile(name: String, skin: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_set_lobby_profile_received.emit(peer, name, skin)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_set_ready(ready: bool) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_set_ready_received.emit(peer, ready)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
