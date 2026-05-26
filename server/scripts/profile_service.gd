@@ -47,6 +47,15 @@ const WHEEL_REWARDS := [
 ]
 
 
+static func _s(v, default: String = "") -> String:
+	# Null-safe string conversion. sqlite returns null for unset TEXT columns,
+	# and Godot 4's String() constructor errors on null with "Nonexistent
+	# constructor". This is the workaround.
+	if v == null:
+		return default
+	return str(v)
+
+
 func _ready() -> void:
 	# Wire signals on both client + server; the gate inside each handler
 	# means client-side autoload instances just no-op.
@@ -130,15 +139,15 @@ func _push_profile(peer_id: int) -> void:
 	db.db.query_with_bindings("SELECT weapon_id, stat, level FROM weapon_upgrades WHERE account_id = ?", [account_id])
 	var upgrades: Dictionary = {}
 	for row in db.db.query_result:
-		var wid: String = String(row.weapon_id)
+		var wid: String = _s(row.weapon_id)
 		if not upgrades.has(wid):
 			upgrades[wid] = {}
-		upgrades[wid][String(row.stat)] = int(row.level)
+		upgrades[wid][_s(row.stat)] = int(row.level)
 	var profile: Dictionary = {
 		"account_id":  account_id,
-		"player_name": String(acct.get("player_name", "Player")),
+		"player_name": _s(acct.get("player_name"), "Player"),
 		"skin_index":  int(acct.get("skin_index", 0)),
-		"handle":      String(acct.get("handle", "")),
+		"handle":      _s(acct.get("handle"), ""),
 		"credits":     int(econ.get("credits", 0)),
 		"fragments":   int(econ.get("fragments", 0)),
 		"common_chests": int(econ.get("common_chests", 0)),
@@ -376,7 +385,7 @@ func _on_login(peer_id: int, handle: String, password: String) -> void:
 		_ack(peer_id, "login", false, "no such account")
 		return
 	var row: Dictionary = db.db.query_result[0]
-	var stored: String = String(row.get("pass_hash", ""))
+	var stored: String = _s(row.get("pass_hash"), "")
 	if stored.is_empty():
 		_ack(peer_id, "login", false, "account has no password set (anonymous)")
 		return
