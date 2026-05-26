@@ -438,20 +438,37 @@ func _enter_host_mode() -> void:
 
 
 func _on_peer_connected_as_host(new_peer: int) -> void:
-	# Phase 1 lock per .agent/lobby_plan.md: DS keeps the legacy
-	# auto-spawn behavior. Rooms are a UI/metadata layer on top of a
-	# single shared world — when a room's host clicks START, the
-	# room's clients transition into game.tscn and find their already-
-	# spawned players via sync_request. Phase 2 will add per-room World3D
-	# isolation, at which point we DO want to skip auto-spawn on DS.
 	# Do NOT push spawn RPCs to the new peer yet — their game scene isn't
 	# mounted. They'll request a sync via _rpc_sync_request once ready.
 	# Only inform already-ready peers about the new arrival, and instantiate
 	# the new player locally on the host.
 	var pos: Vector3 = _spawn_pos_for(new_peer)
-	for peer in _ready_peers:
-		if peer != multiplayer.get_unique_id() and peer != new_peer:
-			_rpc_spawn.rpc_id(peer, new_peer, pos)
+	# F3 fix: when the room system is active, scope the spawn broadcast.
+	# Without this, a new peer connecting in lobby (no room yet) gets
+	# broadcast to every in-game peer regardless of room — causing
+	# "ghost" players to appear in unrelated rooms' matches. The new
+	# peer's eventual room-mates will see them via the inverse loop in
+	# _rpc_sync_request when they enter the match together.
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	var have_rooms: bool = rm != null and not rm.rooms.is_empty()
+	if have_rooms:
+		var new_peer_room: String = _room_id_for_peer(new_peer)
+		# Lobbyists (not in any room) shouldn't appear in any running
+		# match. Skip the broadcast entirely — same-room visibility is
+		# established later via sync_request when they actually enter
+		# a match together.
+		if not new_peer_room.is_empty():
+			for peer in _ready_peers:
+				if peer == multiplayer.get_unique_id() or peer == new_peer:
+					continue
+				if _room_id_for_peer(peer) == new_peer_room:
+					_rpc_spawn.rpc_id(peer, new_peer, pos)
+	else:
+		# Legacy single-shared-world (tests, pre-lobby setups): broadcast
+		# to every ready peer like before.
+		for peer in _ready_peers:
+			if peer != multiplayer.get_unique_id() and peer != new_peer:
+				_rpc_spawn.rpc_id(peer, new_peer, pos)
 	_local_spawn(new_peer, pos)
 
 
@@ -462,13 +479,12 @@ func _on_peer_disconnected_as_host(peer: int) -> void:
 	# dict entry means _ds_respawn_player's `victim == null` early-return is
 	# the only side effect when it eventually fires.
 	_pending_respawn.erase(peer)
+	# F3 fix: snapshot the leaver's room BEFORE leave_room nukes the
+	# peer_to_room mapping. Used below to scope the despawn broadcast.
+	var leaver_room: String = _room_id_for_peer(peer)
 	# Lobby M2 cleanup: tell RoomManager the peer is gone so room state
 	# doesn't stay stuck (without this, a player who closes the browser
-	# tab mid-match leaves their room in MATCH state forever, blocking
-	# the single-active-match guard for everyone else — exactly the
-	# "start_match for E6Z7 blocked — 5CE4 already in MATCH" bug). If
-	# the leaver was the host, room_destroyed will fire and our handler
-	# tears down the world.
+	# tab mid-match leaves their room in MATCH state forever).
 	var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
 	if room_mgr != null and is_dedicated_server:
 		room_mgr.leave_room(peer)
@@ -485,9 +501,18 @@ func _on_peer_disconnected_as_host(peer: int) -> void:
 	# trying to route an RPC to a path that doesn't exist on their side.
 	# _ready_peers is the set of peers who sent _rpc_sync_request, which
 	# only happens after game.tscn loads.
+	#
+	# F3 fix: scope by room — leavers from room A shouldn't cause room B's
+	# clients to despawn anybody. Legacy fallback for when no rooms exist.
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	var have_rooms: bool = rm != null and not rm.rooms.is_empty()
 	for ready_peer in _ready_peers:
-		if ready_peer != peer:
-			_rpc_despawn.rpc_id(ready_peer, peer)
+		if ready_peer == peer:
+			continue
+		if have_rooms and not leaver_room.is_empty():
+			if _room_id_for_peer(ready_peer) != leaver_room:
+				continue
+		_rpc_despawn.rpc_id(ready_peer, peer)
 	_despawn(peer)
 
 
@@ -780,6 +805,20 @@ func _rpc_sync_request() -> void:
 		if not requester_room.is_empty() and _room_id_for_peer(peer) != requester_room:
 			continue
 		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer))
+	# F3 fix: inverse direction. _on_peer_connected_as_host now SKIPS the
+	# spawn broadcast for lobbyists (the right call — they shouldn't ghost
+	# into other rooms' matches), but that means same-room peers won't
+	# see the requester unless we tell them here, when the requester
+	# actually mounts game.tscn and we know which room they're in.
+	# Sends spawn(requester) to OTHER same-room peers who are already in
+	# game (in _ready_peers).
+	if not requester_room.is_empty():
+		var req_pos: Vector3 = _spawn_pos_for(requester)
+		for peer in _ready_peers:
+			if peer == requester or peer == multiplayer.get_unique_id():
+				continue
+			if _room_id_for_peer(peer) == requester_room:
+				_rpc_spawn.rpc_id(peer, requester, req_pos)
 
 
 # ── Spawn RPCs (server → all clients) ─────────────────────────────────────
