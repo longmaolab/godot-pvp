@@ -307,6 +307,15 @@ func push_feed(text: String, color: Color = Color.WHITE) -> void:
 	label.text = text
 	label.add_theme_color_override(&"font_color", color)
 	label.add_theme_font_size_override(&"font_size", 14)
+	# Runtime-built Labels don't inherit the project default theme, so
+	# CJK / emoji characters fall through to Godot's stock font which
+	# has no glyphs for them and renders tofu boxes (the user saw this
+	# on the "BOT 在你前方 — 5 秒后开始追击" feed line and the spawned-
+	# peer messages). Attach ui_font.tres (RussoOne → NotoSansSC →
+	# NotoEmoji) so Chinese names + emoji icons in the feed render.
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	if ui_font != null:
+		label.add_theme_font_override(&"font", ui_font)
 	pc.add_child(label)
 	feed.add_child(pc)
 	# remove_child takes effect immediately; queue_free alone would not — the
