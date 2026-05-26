@@ -619,11 +619,17 @@ func _on_practice() -> void:
 	# ROOM / BROWSE ROOMS and then backed out without a clean teardown,
 	# `multiplayer.multiplayer_peer` can still be a live WebSocket peer.
 	# Without this cleanup, game_controller's _ready sees _is_networked()
-	# == true and walks the MP enter_host/client path INSTEAD of practice
-	# → ends up showing a lobby-like HUD on an empty world. Drop the peer
-	# so the new game scene boots into _enter_practice_mode.
-	if multiplayer.has_multiplayer_peer():
-		multiplayer.multiplayer_peer.close()
+	# == true and walks the MP enter_host/client path INSTEAD of practice.
+	#
+	# IMPORTANT: gate on a real peer, not `has_multiplayer_peer()`.
+	# Godot's default MultiplayerAPI ships with an OfflineMultiplayerPeer
+	# attached, so has_multiplayer_peer() returns true even when there's
+	# no networking. Calling .close() on the offline peer then errors
+	# silently and _launch_game() is never reached — clicking PRACTICE
+	# does nothing. Inspect the peer type and skip the close for offline.
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer != null and not (peer is OfflineMultiplayerPeer):
+		peer.close()
 		multiplayer.multiplayer_peer = null
 	_launch_game()
 
