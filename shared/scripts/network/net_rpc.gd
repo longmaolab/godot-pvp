@@ -35,6 +35,23 @@ signal client_start_match_received(peer_id: int)
 ## want to broadcast only the bit that flipped, not re-send name/skin.
 signal client_set_lobby_profile_received(peer_id: int, name: String, skin: int)
 signal client_set_ready_received(peer_id: int, ready: bool)
+## Persistence (P-M3+): client identifies itself with a device-local
+## uuid, server replies with the canonical profile + economy snapshot.
+## After bootstrap, mutations go through the typed RPCs below; server
+## echoes the updated row back so the client cache stays in sync.
+signal client_request_profile_received(peer_id: int, device_id: String, local_name: String, local_skin: int)
+signal client_set_player_name_received(peer_id: int, name: String)
+signal client_set_skin_index_received(peer_id: int, skin: int)
+signal client_purchase_weapon_received(peer_id: int, weapon_id: String, price: int)
+signal client_open_chest_received(peer_id: int, kind: String)
+signal client_apply_upgrade_received(peer_id: int, weapon_id: String, stat: String, level: int)
+signal client_spin_wheel_received(peer_id: int)
+signal client_request_leaderboard_received(peer_id: int)
+## P-M7 real accounts: opt-in registration + login. Anonymous tokens stay
+## working for guests; converting to a real account merges the existing
+## anonymous row by passing the device_id alongside the new credentials.
+signal client_register_account_received(peer_id: int, device_id: String, handle: String, password: String)
+signal client_login_received(peer_id: int, handle: String, password: String)
 
 # ── client-side signals (fired when an RPC arrives from the server) ──────
 signal server_welcome_received(your_peer: int, server_tick: int)
@@ -76,6 +93,18 @@ signal server_match_ended_received(room_state: Dictionary)
 ## Fired from the server side whenever a kill flips a room's scores;
 ## scoped to that room's peers. Receiver-side: HUD.scoreboard refreshes.
 signal server_score_update_received(rows: Array)
+## Persistence: server pushes the full profile snapshot (account + economy
+## + owned weapons + upgrades). Client mirrors into Settings autoload.
+signal server_profile_received(profile: Dictionary)
+## Per-action ack. ok=true → mutation applied + snapshot already pushed
+## in a follow-up server_profile broadcast. ok=false → reason string
+## (insufficient credits, already owned, …).
+signal server_action_result_received(action: String, ok: bool, reason: String)
+## Leaderboard top-N (joined with account names, ready to render).
+signal server_leaderboard_received(rows: Array)
+## Reward popup payload — chest open / wheel spin return values that
+## the HUD can animate. Profile snapshot also gets pushed alongside.
+signal server_reward_received(kind: String, reward: Dictionary)
 # DS-M5: server announces respawn so the client can update its view.
 signal server_respawn_received(peer: int, pos: Vector3)
 # C6: explicit server-driven death event. Carries the killer peer so the kill
@@ -151,6 +180,72 @@ func client_set_lobby_profile(name: String, skin: int) -> void:
 func client_set_ready(ready: bool) -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_set_ready_received.emit(peer, ready)
+
+
+# ── Persistence RPCs (P-M3 to P-M7) ──────────────────────────────────────
+# All client→server. Sender's net peer_id is used to look up which DB
+# account it bound to (server tracks peer_id → account_id mapping in
+# game_controller). Mutations return via server_action_result + a fresh
+# server_profile snapshot.
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_request_profile(device_id: String, local_name: String, local_skin: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_request_profile_received.emit(peer, device_id, local_name, local_skin)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_set_player_name(name: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_set_player_name_received.emit(peer, name)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_set_skin_index(skin: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_set_skin_index_received.emit(peer, skin)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_purchase_weapon(weapon_id: String, price: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_purchase_weapon_received.emit(peer, weapon_id, price)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_open_chest(kind: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_open_chest_received.emit(peer, kind)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_apply_upgrade(weapon_id: String, stat: String, level: int) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_apply_upgrade_received.emit(peer, weapon_id, stat, level)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_spin_wheel() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_spin_wheel_received.emit(peer)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_request_leaderboard() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_request_leaderboard_received.emit(peer)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_register_account(device_id: String, handle: String, password: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_register_account_received.emit(peer, device_id, handle, password)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func client_login(handle: String, password: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_login_received.emit(peer, handle, password)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
@@ -276,6 +371,28 @@ func server_match_ended(room_state: Dictionary) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_score_update(rows: Array) -> void:
 	server_score_update_received.emit(rows)
+
+
+# ── Persistence broadcasts (server → one specific client) ───────────────
+
+@rpc("authority", "reliable", "call_remote")
+func server_profile(profile: Dictionary) -> void:
+	server_profile_received.emit(profile)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_action_result(action: String, ok: bool, reason: String) -> void:
+	server_action_result_received.emit(action, ok, reason)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_leaderboard(rows: Array) -> void:
+	server_leaderboard_received.emit(rows)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_reward(kind: String, reward: Dictionary) -> void:
+	server_reward_received.emit(kind, reward)
 
 
 # DS-M5: server-driven respawn announcement. Sent to all clients so they can

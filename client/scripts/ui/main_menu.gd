@@ -802,6 +802,14 @@ func _on_connected_to_host_staging() -> void:
 			if "player_name" in s and not String(s.player_name).is_empty():
 				name_str = s.player_name
 		net_rpc.client_hello.rpc_id(1, name_str)
+	# Persistence sync (P-M3+): grab the canonical profile snapshot from
+	# the DS now that we have a peer. Settings autoload mirrors what
+	# comes back, including any progression earned on this device that
+	# was lost from local cfg (e.g. browser cache cleared, new device).
+	if has_node(^"/root/Settings"):
+		var s2: Node = get_node(^"/root/Settings")
+		if s2.has_method(&"sync_with_server"):
+			s2.call(&"sync_with_server")
 
 
 func _on_connection_failed_staging() -> void:

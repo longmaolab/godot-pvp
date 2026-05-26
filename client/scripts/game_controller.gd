@@ -1170,6 +1170,12 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 	var scoring_mc: Node = _resolve_match_controller_for_peer(victim_peer)
 	if scoring_mc != null:
 		scoring_mc.record_kill(killer_peer, victim_peer)
+	# Persistence (P-M5): tick the cross-match lifetime stats table on the
+	# DS so leaderboards reflect this kill. ProfileService maps peer_id →
+	# account_id internally — bot kills (no account) silently no-op.
+	var ps: Node = get_node_or_null(^"/root/ProfileService")
+	if ps != null and ps.has_method(&"record_death"):
+		ps.call(&"record_death", killer_peer, victim_peer)
 	# Scoreboard counters: always tick the room's K/D dicts so mode-less
 	# (mode_def_path="") rooms still show kill counts in the HUD. The
 	# match_controller path above is for win-condition logic; this is
@@ -1310,6 +1316,23 @@ func _on_match_ended(winner: int, final: Dictionary, room_id: String = "") -> vo
 	# Listen-host / practice: pop up the themed scoreboard (legacy flow).
 	if is_dedicated_server:
 		print("[server] match ended — winner peer %d (room=%s)" % [winner, room_id])
+		# Persistence (P-M5): write match_history + matches_won/lost rows
+		# in the lifetime stats table. ProfileService maps peer_id →
+		# account_id; unbound peers (e.g. host's own practice spawn)
+		# silently no-op.
+		var ps: Node = get_node_or_null(^"/root/ProfileService")
+		if ps != null and ps.has_method(&"record_match_end") and not room_id.is_empty():
+			var rm: Node = get_node_or_null(^"/root/RoomManager")
+			var room_peers: Array = []
+			var map_id: String = ""
+			var mode_id: String = ""
+			if rm != null and rm.rooms.has(room_id):
+				room_peers = (rm.rooms[room_id].players as Array).duplicate()
+				map_id = String(rm.rooms[room_id].map_path)
+				mode_id = String(rm.rooms[room_id].mode_def_path)
+			ps.call(&"record_match_end", room_id, mode_id, map_id,
+				0, int(Time.get_unix_time_from_system() * 1000.0),
+				winner, room_peers, final)
 		# F3-M5: end_match the SPECIFIC room that ended, not "the one
 		# active room" (which is no longer a singleton). Practice / pre-
 		# room path passes "" — fall back to the legacy global self.match_controller

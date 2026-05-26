@@ -48,7 +48,7 @@ if [ ! -f docs/index.pck ] || [ ! -f docs/index.wasm ]; then
   REASON="docs/ 不完整"
 else
   # 找比 docs/index.pck 新的源文件(说明改过代码 / 资源)
-  NEWER=$(find client server shared assets project.godot server.json \
+  NEWER=$(find client server shared assets addons project.godot server.json \
     -newer docs/index.pck 2>/dev/null | head -3)
   if [ -n "$NEWER" ]; then
     NEED_EXPORT=1
