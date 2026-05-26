@@ -382,6 +382,16 @@ func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	bot.weapon_def = weapon
 	bot.target = target
 	bot.player_name = "Bot"
+	# CRITICAL: bots inherit from PlayerController whose @export is_local
+	# default = true. Without this override, the bot's _ready runs
+	# _configure_camera_current() → bot.camera.make_current(), STEALING
+	# the local human's view. The local player sees from inside the bot's
+	# head and the bot's own (unhidden, because is_human_input=false skips
+	# _hide_first_person_obstructions) Visuals mesh fills the screen.
+	# Repro: practice mode → user sees a giant red/pink rectangle (bot's
+	# torso mesh) and can't move because the camera is wrong.
+	bot.is_local = false
+	bot.is_human_input = false
 	add_child(bot)
 	bot.global_position = at
 	bot.head_hitbox.monitoring = true
@@ -869,8 +879,6 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 	# _is_networked() returns true only for a real network peer, which
 	# is what we actually need to differentiate practice vs MP here.
 	var local_id: int = multiplayer.get_unique_id() if _is_networked() else 1
-	print("[DIAG _local_spawn] peer_id=%d local_id=%d is_networked=%s -> is_local=%s" % \
-		[peer_id, local_id, str(_is_networked()), str(peer_id == local_id)])
 	if peer_id == local_id and has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		p.player_name = s.player_name if not s.player_name.is_empty() else "P%d" % peer_id
