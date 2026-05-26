@@ -2,7 +2,8 @@
 
 [ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="1_base"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansSC-Regular.ttf" id="2_cjk"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoEmoji-Subset.ttf" id="3_emoji"]
 
 [resource]
 base_font = ExtResource("1_base")
-fallbacks = Array[Font]([ExtResource("2_cjk")])
+fallbacks = Array[Font]([ExtResource("2_cjk"), ExtResource("3_emoji")])
