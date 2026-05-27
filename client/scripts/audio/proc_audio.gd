@@ -1,85 +1,100 @@
 extends Node
-## Procedural sound effect autoload. Synthesises short tones on demand via
-## AudioStreamGenerator — no .wav assets required, no licensing concerns.
+## Procedural sound effect autoload. Sounds are synthesised ONCE at startup
+## into AudioStreamWAV resources (16-bit PCM, mono), then replayed on
+## demand from a pool of AudioStreamPlayer nodes.
+##
+## Why not AudioStreamGenerator: the generator's playback is filled
+## asynchronously, so the audio mixer thread polls for samples before
+## push_frame() can supply them, producing "is trying to play a sample
+## from a stream that cannot be sampled" warnings on every fire/kill.
+## In a 5-kill match those warnings accumulate to 300+; each carries a
+## long wasm stack trace; Chrome DevTools' log buffer balloons to GB
+## of memory and the entire tab freezes (verified via Chrome's task
+## manager: DevTools alone at 8.7GB / 170% CPU).
+##
+## AudioStreamWAV is "static sampleable" — the mixer reads from a fixed
+## PCM buffer that already exists, so there's no race and no warning.
 ##
 ## Currently exposed:
 ##   play_fire()         — gun thump
 ##   play_hitmarker()    — short high beep, "you hit someone"
 ##   play_take_damage()  — low thud, "you got hit"
 ##   play_kill()         — rising arpeggio, "you killed them"
-##
-## All calls are non-blocking; the generator runs on its own AudioStreamPlayer
-## that auto-frees after the sound finishes.
 
-const SAMPLE_RATE := 22050.0
+const SAMPLE_RATE := 22050
 const MASTER_VOLUME_DB := -6.0
+const POOL_SIZE := 8   # max concurrent SFX before oldest gets stolen
 
 # C7: on the dedicated server every play_*() call is a no-op so headless
-# boot doesn't spin up AudioStreamGenerator nodes with the dummy driver
-# (which emits warnings per call and leaks free-on-finish timers).
+# boot doesn't spin up AudioStreamPlayer nodes with the dummy driver.
 @onready var _muted: bool = NetProtocol.is_dedicated_server_boot()
+
+# Pre-rendered PCM streams, one per sound kind.
+var _streams: Dictionary = {}          # name (String) → AudioStreamWAV
+
+# Reusable player pool — never freed, just retriggered.
+var _pool: Array[AudioStreamPlayer] = []
+var _pool_cursor: int = 0
+
+
+func _ready() -> void:
+	if _muted:
+		return
+	# Bake all four sounds once.
+	_streams["fire"]   = _bake_arpeggio([140.0],                  0.07, "saw",  0.7)
+	_streams["hit"]    = _bake_arpeggio([1200.0],                 0.08, "sine", 0.55)
+	_streams["damage"] = _bake_arpeggio([190.0],                  0.13, "tri",  0.6)
+	_streams["kill"]   = _bake_arpeggio([520.0, 780.0, 1100.0],   0.08, "sine", 0.6)
+	# Spin up the player pool.
+	for i in POOL_SIZE:
+		var p := AudioStreamPlayer.new()
+		p.bus = &"Master"
+		p.volume_db = MASTER_VOLUME_DB
+		add_child(p)
+		_pool.append(p)
 
 
 func play_fire() -> void:
-	if _muted: return
-	# Saw with quick decay — punchy gun thump.
-	_play_segment(140.0, 0.07, "saw", 0.7)
+	_play("fire")
 
 
 func play_hitmarker() -> void:
-	if _muted: return
-	# Bright high beep.
-	_play_segment(1200.0, 0.08, "sine", 0.55)
+	_play("hit")
 
 
 func play_take_damage() -> void:
-	if _muted: return
-	# Low triangle — feels heavier than a sine.
-	_play_segment(190.0, 0.13, "tri", 0.6)
+	_play("damage")
 
 
 func play_kill() -> void:
-	if _muted: return
-	# Quick three-note rising arpeggio.
-	_play_arpeggio([520.0, 780.0, 1100.0], 0.08, 0.6)
+	_play("kill")
 
 
 # ── Internals ─────────────────────────────────────────────────────────────
-func _play_segment(freq: float, duration: float, wave: String, volume: float) -> void:
-	_play_arpeggio_wave([freq], duration, wave, volume)
 
-
-func _play_arpeggio(freqs: Array, note_duration: float, volume: float) -> void:
-	_play_arpeggio_wave(freqs, note_duration, "sine", volume)
-
-
-func _play_arpeggio_wave(freqs: Array, note_duration: float, wave: String, volume: float) -> void:
-	var gen := AudioStreamGenerator.new()
-	gen.mix_rate = SAMPLE_RATE
-	gen.buffer_length = note_duration * float(freqs.size()) + 0.05
-
-	var player := AudioStreamPlayer.new()
-	player.stream = gen
-	player.bus = &"Master"
-	player.volume_db = MASTER_VOLUME_DB + linear_to_db(volume)
-	add_child(player)
-	# Wait one frame so the player's _ready finishes wiring up its stream
-	# playback. Otherwise the audio mixer thread can poll for samples BEFORE
-	# we've pushed any, producing "is trying to play a sample from a stream
-	# that cannot be sampled" warnings on every fire/kill. After 50-300
-	# warnings DevTools's stack-trace retention balloons to GB and the page
-	# appears frozen (Chrome F12 task manager: 8.7GB on DevTools tab).
-	await get_tree().process_frame
-	if not is_instance_valid(player):
+func _play(name: String) -> void:
+	if _muted:
 		return
-	player.play()
-
-	var pb: AudioStreamGeneratorPlayback = player.get_stream_playback()
-	if pb == null:
-		player.queue_free()
+	var stream: AudioStreamWAV = _streams.get(name)
+	if stream == null:
 		return
+	# Round-robin through the pool. If all 8 are still playing, the oldest
+	# slot gets stolen — fine for SFX at this density.
+	var p: AudioStreamPlayer = _pool[_pool_cursor]
+	_pool_cursor = (_pool_cursor + 1) % POOL_SIZE
+	p.stream = stream
+	p.play()
 
+
+## Renders `freqs` (one note per entry, sequential) into an AudioStreamWAV
+## with `note_duration` each. Same envelope shape as the old realtime path.
+func _bake_arpeggio(freqs: Array, note_duration: float, wave: String, volume: float) -> AudioStreamWAV:
 	var samples_per_note: int = int(SAMPLE_RATE * note_duration)
+	var total_samples: int = samples_per_note * freqs.size()
+	var data := PackedByteArray()
+	data.resize(total_samples * 2)   # 16-bit mono → 2 bytes per sample
+
+	var byte_idx: int = 0
 	for note_idx in range(freqs.size()):
 		var freq: float = freqs[note_idx]
 		for i in samples_per_note:
@@ -89,21 +104,19 @@ func _play_arpeggio_wave(freqs: Array, note_duration: float, wave: String, volum
 			# 3ms attack + linear decay to 0 over the note duration.
 			var attack: float = clampf(t_local / 0.003, 0.0, 1.0)
 			var decay: float = clampf(1.0 - t_local / note_duration, 0.0, 1.0)
-			var env: float = attack * decay
-			pb.push_frame(Vector2(s * env, s * env))
+			var env: float = attack * decay * volume
+			var pcm: int = clamp(int(s * env * 32767.0), -32768, 32767)
+			# Little-endian 16-bit.
+			data[byte_idx] = pcm & 0xff
+			data[byte_idx + 1] = (pcm >> 8) & 0xff
+			byte_idx += 2
 
-	# Auto-cleanup after the sound has had time to play out.
-	# test.md Bug C: instance_id capture instead of Node reference — the
-	# AudioStreamPlayer may be freed (scene exit) before the timer fires,
-	# and a Node capture turns into a `null` arg that Godot logs as
-	# "Lambda capture at index 0 was freed".
-	var total: float = note_duration * float(freqs.size()) + 0.1
-	var player_id: int = player.get_instance_id()
-	get_tree().create_timer(total).timeout.connect(
-		func():
-			var node: Object = instance_from_id(player_id)
-			if node != null and is_instance_valid(node):
-				node.queue_free())
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.stereo = false
+	wav.mix_rate = SAMPLE_RATE
+	wav.data = data
+	return wav
 
 
 func _wave_sample(phase: float, wave: String) -> float:
