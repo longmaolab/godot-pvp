@@ -89,6 +89,7 @@ func _ready() -> void:
 	net_rpc.client_request_leaderboard_received.connect(_on_request_leaderboard)
 	net_rpc.client_register_account_received.connect(_on_register_account)
 	net_rpc.client_login_received.connect(_on_login)
+	net_rpc.client_redeem_code_received.connect(_on_redeem_code)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
 
@@ -491,6 +492,69 @@ func _ack(peer_id: int, action: String, ok: bool, reason: String) -> void:
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
 		net_rpc.server_action_result.rpc_id(peer_id, action, ok, reason)
+
+
+# Cheat / unlock code redemption — looks code up in unlock_codes.gd,
+# applies the reward atomically. Server-canonical; client just types
+# the string. Each code can be redeemed once per account.
+const _UNLOCK_CODES := preload("res://client/scripts/data/unlock_codes.gd")
+
+
+func _on_redeem_code(peer_id: int, code: String) -> void:
+	if not _is_authoritative_server() or not _peer_account.has(peer_id):
+		return
+	if not _peer_ok_for_action(peer_id):
+		_ack(peer_id, "redeem_code", false, "rate limited")
+		return
+	var reward: Variant = _UNLOCK_CODES.reward_for(code)
+	if reward == null:
+		_ack(peer_id, "redeem_code", false, "unknown code")
+		return
+	var account_id: int = _peer_account[peer_id]
+	var db: Node = get_node(^"/root/Database")
+	# Idempotency: track redeemed codes per account so the same code can't
+	# be reused. Stored as a TEXT JSON array in accounts.redeemed_codes.
+	# If the column doesn't exist yet, the first redemption ALTER-adds it.
+	if not db.has_method(&"is_code_redeemed") or not db.has_method(&"mark_code_redeemed"):
+		_ack(peer_id, "redeem_code", false, "db schema out of date")
+		return
+	var key: String = code.strip_edges().to_lower()
+	if db.is_code_redeemed(account_id, key):
+		_ack(peer_id, "redeem_code", false, "already redeemed")
+		return
+	# Apply the reward.
+	var r: Dictionary = reward
+	if r.has("weapon"):
+		db.grant_weapon(account_id, String(r["weapon"]))
+	if r.has("credits"):
+		db.award_credits(account_id, int(r["credits"]))
+	if r.has("fragments"):
+		db.award_fragments(account_id, int(r["fragments"]))
+	if r.has("admin_pass"):
+		# Grant ALL weapons (the way pvp-game does it). Walk the weapon
+		# directory + grant each id.
+		var dir := DirAccess.open("res://shared/data/weapons/")
+		if dir != null:
+			dir.list_dir_begin()
+			var fname: String = dir.get_next()
+			while fname != "":
+				if fname.ends_with(".tres") and not fname.begins_with("_"):
+					db.grant_weapon(account_id, fname.replace(".tres", ""))
+				fname = dir.get_next()
+	if r.has("all_weapons_minutes"):
+		# Temporary unlock — same as admin_pass but caller is expected
+		# to enforce expiry. MVP: treat as permanent grant (cheaper).
+		var dir2 := DirAccess.open("res://shared/data/weapons/")
+		if dir2 != null:
+			dir2.list_dir_begin()
+			var fn2: String = dir2.get_next()
+			while fn2 != "":
+				if fn2.ends_with(".tres") and not fn2.begins_with("_"):
+					db.grant_weapon(account_id, fn2.replace(".tres", ""))
+				fn2 = dir2.get_next()
+	db.mark_code_redeemed(account_id, key)
+	_ack(peer_id, "redeem_code", true, "redeemed: " + key)
+	_push_profile(peer_id)
 
 
 # ── Public helpers for other server systems ─────────────────────────────

@@ -26,6 +26,15 @@ var MODES: Array = []
 @onready var loadout_desc: Label = $Scroll/Center/Cols/LeftCard/V/LoadoutDescription
 @onready var weapons_btn: Button = $Scroll/Center/Cols/LeftCard/V/WeaponsButton
 @onready var shop_btn: Button = $Scroll/Center/Cols/LeftCard/V/ShopButton
+@onready var redeem_btn: Button = $Scroll/Center/Cols/LeftCard/V/RedeemButton
+@onready var redeem_dialog: AcceptDialog = $RedeemDialog
+@onready var redeem_input: LineEdit = $RedeemDialog/V/Input
+@onready var redeem_submit: Button = $RedeemDialog/V/SubmitButton
+@onready var redeem_status: Label = $RedeemDialog/V/Status
+@onready var wheel_btn: Button = $Scroll/Center/Cols/LeftCard/V/WheelButton
+@onready var wheel_dialog: AcceptDialog = $WheelDialog
+@onready var wheel_spin: Button = $WheelDialog/V/SpinButton
+@onready var wheel_result: Label = $WheelDialog/V/Result
 @onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
 @onready var create_room_btn: Button = $Scroll/Center/Cols/RightCard/V/CreateRoomButton
 @onready var browse_rooms_btn: Button = $Scroll/Center/Cols/RightCard/V/BrowseRoomsButton
@@ -117,6 +126,20 @@ func _ready() -> void:
 	join_btn.pressed.connect(_on_join)
 	weapons_btn.pressed.connect(_on_show_weapons)
 	shop_btn.pressed.connect(_on_open_shop)
+	redeem_btn.pressed.connect(_on_open_redeem)
+	redeem_submit.pressed.connect(_on_submit_redeem)
+	redeem_input.text_submitted.connect(func(_t): _on_submit_redeem())
+	wheel_btn.pressed.connect(_on_open_wheel)
+	wheel_spin.pressed.connect(_on_submit_spin)
+	# Subscribe to Settings.server_action so we can show success/failure
+	# feedback inside the redeem dialog. Settings emits this for ALL
+	# server-acked actions; we only react when action == "redeem_code".
+	if has_node(^"/root/Settings"):
+		var s: Node = get_node(^"/root/Settings")
+		if "server_action" in s and not s.server_action.is_connected(_on_settings_action):
+			s.server_action.connect(_on_settings_action)
+		if "reward_received" in s and not s.reward_received.is_connected(_on_settings_reward):
+			s.reward_received.connect(_on_settings_reward)
 	# Staging-panel wiring. Hidden by default in the .tscn — _enter_staging
 	# flips it visible. START is host-only; CANCEL tears down whichever
 	# peer (server or client) and returns to the normal menu.
@@ -488,7 +511,58 @@ func _append_weapon_row(wpn: Resource) -> void:
 		desc.add_theme_color_override(&"font_color", Color(0.78, 0.85, 0.95))
 		col.add_child(desc)
 
+	# ── Upgrade row: three "+ Upgrade" buttons (damage / mag / reload).
+	# Each tier costs 5 fragments per level delta; server caps at 10.
+	col.add_child(_make_upgrade_row(String(wpn.id)))
+
 	weapons_list.add_child(card)
+
+
+# Upgrade row added to every weapon card in the catalog. Reads current level
+# from Settings.upgrades and shows "DMG L3/10  cost 5" buttons. Click → fire
+# request_apply_upgrade RPC, server validates ownership + fragment balance,
+# pushes the new profile back, our credits_changed / upgrades_changed signal
+# will refresh the dialog next time it's opened.
+func _make_upgrade_row(weapon_id: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	var upgrades: Dictionary = {}
+	if settings != null and "upgrades" in settings:
+		var all: Dictionary = settings.upgrades
+		upgrades = all.get(weapon_id, {})
+	for stat in ["damage", "mag", "reload"]:
+		var lvl: int = int(upgrades.get(stat, 0))
+		var btn := Button.new()
+		var stat_label: String = {"damage": "DMG", "mag": "MAG", "reload": "RLD"}[stat]
+		if lvl >= 10:
+			btn.text = "%s ★ MAX" % stat_label
+			btn.disabled = true
+		else:
+			btn.text = "%s  L%d/10  +5 碎片" % [stat_label, lvl]
+		btn.custom_minimum_size = Vector2(170, 32)
+		btn.add_theme_font_size_override(&"font_size", 13)
+		btn.add_theme_color_override(&"font_color", Color(0.85, 0.95, 0.55) if lvl < 10 else Color(0.95, 0.7, 0.3))
+		var captured_stat: String = stat
+		var captured_lvl: int = lvl
+		btn.pressed.connect(func(): _on_apply_upgrade(weapon_id, captured_stat, captured_lvl + 1))
+		row.add_child(btn)
+	return row
+
+
+func _on_apply_upgrade(weapon_id: String, stat: String, target_level: int) -> void:
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		# Offline — show a popup hint via WeaponsDialog title; full UI would
+		# need an inline status row but the catalog scrolls a lot already.
+		weapons_dialog.title = "武器图鉴 — 升级需先 CREATE ROOM / BROWSE 连服务器"
+		return
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null or not settings.has_method(&"request_apply_upgrade"):
+		return
+	settings.request_apply_upgrade(weapon_id, stat, target_level)
+	# Re-populate on next open — refresh comes via _on_settings_action ("upgrade").
+	weapons_dialog.title = "武器图鉴 — 升级提交中..."
 
 
 func _make_badge(text: String, color: Color) -> PanelContainer:
@@ -1022,3 +1096,112 @@ func _on_loadout_changed(idx: int) -> void:
 			loadout_desc.text = String(rec.get("desc", ""))
 	if settings.has_method(&"save_to_disk"):
 		settings.save_to_disk()
+
+
+# ── Unlock code redemption ───────────────────────────────────────────────
+
+func _on_open_redeem() -> void:
+	redeem_input.text = ""
+	redeem_status.text = ""
+	redeem_dialog.popup_centered()
+	redeem_input.grab_focus.call_deferred()
+
+
+func _on_submit_redeem() -> void:
+	var code: String = redeem_input.text.strip_edges()
+	if code.is_empty():
+		redeem_status.text = "兑换码不能为空"
+		redeem_status.add_theme_color_override(&"font_color", Color(1, 0.5, 0.5))
+		return
+	# Redeem needs a network peer (server validates). If we're not yet
+	# connected to the DS, prompt the user to CREATE / BROWSE first so the
+	# DS handshake has fired.
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		redeem_status.text = "先点 CREATE ROOM 或 BROWSE 连上服务器,再来兑换"
+		redeem_status.add_theme_color_override(&"font_color", Color(1, 0.7, 0.4))
+		return
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null or not settings.has_method(&"request_redeem_code"):
+		redeem_status.text = "internal error: Settings autoload missing"
+		return
+	settings.request_redeem_code(code)
+	redeem_status.text = "提交中..."
+	redeem_status.add_theme_color_override(&"font_color", Color(0.65, 0.85, 0.95))
+
+
+func _on_settings_action(action: String, ok: bool, reason: String) -> void:
+	# Server emits server_action for every acked mutation (purchase / upgrade
+	# / chest / spin / redeem). Dispatch to whichever dialog is currently
+	# open. Stale acks (dialog closed) are silently dropped.
+	if action == "redeem_code" and redeem_dialog.visible:
+		if ok:
+			redeem_status.text = "✓ %s" % reason
+			redeem_status.add_theme_color_override(&"font_color", Color(0.55, 0.95, 0.55))
+			redeem_input.text = ""
+		else:
+			redeem_status.text = "✗ %s" % reason
+			redeem_status.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
+	elif action == "spin" and wheel_dialog.visible:
+		if ok:
+			wheel_result.text = "✓ 转盘启动!等待奖品..."
+			wheel_result.add_theme_color_override(&"font_color", Color(0.55, 0.95, 0.55))
+			# The actual reward comes via reward_received signal (handled below)
+		else:
+			wheel_result.text = "✗ %s" % reason
+			wheel_result.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
+			wheel_spin.disabled = false
+	elif action == "upgrade" and weapons_dialog.visible:
+		if ok:
+			weapons_dialog.title = "武器图鉴 — ✓ 升级成功"
+			# Refresh the upgrade levels by repopulating the dialog. Server's
+			# profile push has already updated Settings.upgrades.
+			_populate_weapons_dialog()
+		else:
+			weapons_dialog.title = "武器图鉴 — ✗ " + reason
+
+
+# ── Daily wheel ──────────────────────────────────────────────────────────
+
+func _on_open_wheel() -> void:
+	wheel_result.text = "点上面的按钮开始"
+	wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
+	wheel_spin.disabled = false
+	wheel_dialog.popup_centered()
+
+
+func _on_submit_spin() -> void:
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		wheel_result.text = "先点 CREATE ROOM 或 BROWSE 连服务器,再来转盘"
+		wheel_result.add_theme_color_override(&"font_color", Color(1, 0.7, 0.4))
+		return
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null or not settings.has_method(&"request_spin_wheel"):
+		return
+	wheel_spin.disabled = true
+	wheel_result.text = "转盘启动中..."
+	wheel_result.add_theme_color_override(&"font_color", Color(0.65, 0.85, 0.95))
+	settings.request_spin_wheel()
+
+
+func _on_settings_reward(kind: String, reward: Dictionary) -> void:
+	# server_reward fires whenever the server credits a reward (wheel /
+	# chest / etc). For now only the wheel dialog cares.
+	if kind != "wheel" or not wheel_dialog.visible:
+		return
+	var parts: Array[String] = []
+	if reward.has("credits"):
+		parts.append("信用点 +%d" % int(reward.credits))
+	if reward.has("fragments"):
+		parts.append("碎片 +%d" % int(reward.fragments))
+	if reward.has("common_chests"):
+		parts.append("普通宝箱 +%d" % int(reward.common_chests))
+	if reward.has("rare_chests"):
+		parts.append("稀有宝箱 +%d" % int(reward.rare_chests))
+	if parts.is_empty():
+		wheel_result.text = "✓ 转盘已完成"
+	else:
+		wheel_result.text = "★ 中奖: %s" % " / ".join(parts)
+	wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
+	wheel_spin.disabled = true   # consumed for 24h

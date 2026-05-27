@@ -411,6 +411,43 @@ func grant_weapon(account_id: int, weapon_id: String) -> bool:
 	return db.query_with_bindings("INSERT OR IGNORE INTO weapons_owned (account_id, weapon_id) VALUES (?, ?)", [account_id, weapon_id])
 
 
+# ── Unlock code redemption (server-only) ─────────────────────────────────
+# Redeemed codes are tracked in a stand-alone table keyed by (account_id,
+# code). UNIQUE constraint enforces "redeem once per account". Created
+# lazily on first query so deployments without the table get migrated
+# transparently — saves us writing a separate migration script.
+func _ensure_redeemed_codes_table() -> void:
+	if not _ready_for_queries:
+		return
+	db.query("""
+		CREATE TABLE IF NOT EXISTS redeemed_codes (
+			account_id INTEGER NOT NULL,
+			code TEXT NOT NULL,
+			redeemed_at INTEGER NOT NULL,
+			PRIMARY KEY (account_id, code),
+			FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+		)
+	""")
+
+
+func is_code_redeemed(account_id: int, code: String) -> bool:
+	if not _ready_for_queries:
+		return false
+	_ensure_redeemed_codes_table()
+	db.query_with_bindings("SELECT 1 FROM redeemed_codes WHERE account_id = ? AND code = ?", [account_id, code])
+	return not db.query_result.is_empty()
+
+
+func mark_code_redeemed(account_id: int, code: String) -> bool:
+	if not _ready_for_queries:
+		return false
+	_ensure_redeemed_codes_table()
+	var now_ms: int = int(Time.get_unix_time_from_system() * 1000.0)
+	return db.query_with_bindings(
+		"INSERT OR IGNORE INTO redeemed_codes (account_id, code, redeemed_at) VALUES (?, ?, ?)",
+		[account_id, code, now_ms])
+
+
 func get_upgrades(account_id: int, weapon_id: String) -> Dictionary:
 	if not _ready_for_queries:
 		return {}

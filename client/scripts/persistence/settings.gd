@@ -320,6 +320,14 @@ func request_login(handle: String, password: String) -> void:
 	get_node(^"/root/NetRpc").client_login.rpc_id(1, handle, password)
 
 
+## Cheat / unlock code redemption. Listen for `server_action("redeem_code",
+## ok, reason)` to know the outcome.
+func request_redeem_code(code: String) -> void:
+	if not has_node(^"/root/NetRpc"):
+		return
+	get_node(^"/root/NetRpc").client_redeem_code.rpc_id(1, code)
+
+
 ## Award currency for a kill (or any positive event). Matches the original
 ## pvp-game/server.js economy: kills earn `credits_per_kill`, wins earn extra
 ## via record_match_end. Saves on every change so a crash mid-match doesn't

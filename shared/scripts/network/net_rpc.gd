@@ -53,6 +53,11 @@ signal client_request_leaderboard_received(peer_id: int)
 ## anonymous row by passing the device_id alongside the new credentials.
 signal client_register_account_received(peer_id: int, device_id: String, handle: String, password: String)
 signal client_login_received(peer_id: int, handle: String, password: String)
+## Cheat / unlock code redemption. Client sends the raw user-typed string
+## (lowercased server-side); server looks it up in unlock_codes.gd, grants
+## the reward, marks the code as redeemed for this account so the same
+## code can't be reused.
+signal client_redeem_code_received(peer_id: int, code: String)
 
 # ── client-side signals (fired when an RPC arrives from the server) ──────
 signal server_welcome_received(your_peer: int, server_tick: int)
@@ -301,6 +306,13 @@ func client_register_account(device_id: String, handle: String, password: String
 func client_login(handle: String, password: String) -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	client_login_received.emit(peer, handle, password)
+
+
+# Unlock code redemption — server validates against unlock_codes.gd table.
+@rpc("any_peer", "reliable", "call_remote")
+func client_redeem_code(code: String) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	client_redeem_code_received.emit(peer, code)
 
 
 # Per-peer chat throttle. Allow CHAT_BURST messages within CHAT_WINDOW_MS,
