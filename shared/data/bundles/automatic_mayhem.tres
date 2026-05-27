@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/gau19.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/m134.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/thermal_lmg.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"automatic_mayhem"
+display_name = "Automatic Mayhem"
+description = "全自动暴雨 — GAU-19 + M134 + 热成像 LMG。打满弹链才停手,适合大图守点。"
+price_credits = 2200
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.85, 0.35, 0.25, 1)

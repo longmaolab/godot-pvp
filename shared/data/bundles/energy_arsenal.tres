@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/arc_rifle.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/coilgun.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/plasma_carbine.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"energy_arsenal"
+display_name = "Energy Arsenal"
+description = "电能武器库 — Arc Rifle 连锁电流 + Coilgun 高速磁轨 + Plasma Carbine 等离子轻量。"
+price_credits = 1600
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.55, 0.85, 1, 1)

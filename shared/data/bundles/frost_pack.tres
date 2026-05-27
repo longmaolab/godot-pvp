@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/freeze_gun.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/frost_blaster.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/foam_cannon.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"frost_pack"
+display_name = "Frost Pack"
+description = "冰冻控制流 — Freeze Gun + Frost Blaster + Foam Cannon。减速 + 控场 + 把对手钉墙上。"
+price_credits = 1400
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.55, 0.85, 0.95, 1)

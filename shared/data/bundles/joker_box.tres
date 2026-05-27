@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/coin_gun.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/paintball.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/sticker_blaster.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"joker_box"
+display_name = "Joker Box"
+description = "彩蛋盲盒 — 投币枪 + 彩弹枪 + 贴纸炮。打不出伤害但赢了特别炫,送朋友看笑。"
+price_credits = 600
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.95, 0.85, 0.4, 1)

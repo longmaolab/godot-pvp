@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/ak20.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/auto_shotgun.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/srx.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"veteran_meta"
+display_name = "Veteran Meta"
+description = "老玩家配置 — AK20 + 自动霰弹枪 + SR-X。突击 / 近战 / 狙击三段位,排位最稳。"
+price_credits = 1100
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.65, 0.95, 0.65, 1)

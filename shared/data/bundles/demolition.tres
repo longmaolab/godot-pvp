@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/airburst_projector.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/pocket_rocket.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/mortar_rifle.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"demolition"
+display_name = "Demolition"
+description = "爆破套装 — Airburst Projector + Pocket Rocket + 迫击步枪。AoE 范围杀,蹲点神器。"
+price_credits = 1700
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.95, 0.35, 0.25, 1)

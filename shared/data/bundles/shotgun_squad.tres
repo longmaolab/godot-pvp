@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/sg8.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/spas12.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/sawed_off.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"shotgun_squad"
+display_name = "Shotgun Squad"
+description = "散弹小队 — SG8 + SPAS-12 + Sawed-Off。近距离贴脸,房子战神器。"
+price_credits = 900
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.95, 0.65, 0.25, 1)

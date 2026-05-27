@@ -8,6 +8,7 @@ const MC_SCRIPT := preload("res://shared/scripts/match_controller.gd")
 const MODE_FFA := preload("res://shared/data/modes/ffa_kill5.tres")
 const MODE_ELIM := preload("res://shared/data/modes/elim_1v1.tres")
 const MODE_TDM := preload("res://shared/data/modes/tdm_kill10.tres")
+const MODE_GUNGAME := preload("res://shared/data/modes/gungame.tres")
 
 var failed: int = 0
 
@@ -18,6 +19,7 @@ func _ready() -> void:
 	await _test_elim_round_progression()
 	await _test_race_kill_goal()
 	await _test_elim_round_kills_dont_leak()
+	await _test_gungame_tier_progression()
 	print("\n=== result: %s (%d failures) ===" % ["PASS" if failed == 0 else "FAIL", failed])
 	get_tree().quit(0 if failed == 0 else 1)
 
@@ -148,6 +150,48 @@ func _test_elim_round_kills_dont_leak() -> void:
 		mc.queue_free()
 		return
 	print("  [ok] ELIM round 2 zero-kill timeout: no spurious winner from round 1's kills")
+	mc.queue_free()
+
+
+func _test_gungame_tier_progression() -> void:
+	# Gun Game (gungame.tres) sets `rule_script = GunGameRule.gd`. MC
+	# instantiates it as a child; each `kill_recorded` advances the
+	# killer's tier. Tier 6 (GRADUATION_TIER) wins. Weapon swap is
+	# best-effort (it tries to mutate players_by_peer entries) — when
+	# game_controller has no such entry the swap silently no-ops, which
+	# is exactly what we want for this unit test.
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_GUNGAME
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	# Verify the rule_script wired up.
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("Gun Game: rule_script not instantiated under match_controller")
+		mc.queue_free()
+		return
+	# Simulate 6 kills by peer 100 → graduates → match_ended.
+	for i in range(6):
+		mc.record_kill(100, 200)
+		await get_tree().process_frame
+	if not captured["match_ended"]:
+		_fail("Gun Game: match did not end after 6 kills (GRADUATION_TIER)")
+		mc.queue_free()
+		return
+	if captured["winner"] != 100:
+		_fail("Gun Game winner expected 100, got %d" % captured["winner"])
+		mc.queue_free()
+		return
+	# Verify tier counter inside the rule matches.
+	if rule.peer_tiers.get(100, 0) != 6:
+		_fail("Gun Game peer_tiers[100] expected 6, got %d" % rule.peer_tiers.get(100, 0))
+		mc.queue_free()
+		return
+	print("  [ok] Gun Game: 6 kills → tier 6 → match_ended winner=100")
 	mc.queue_free()
 
 

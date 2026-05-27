@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/boombow.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/harpoon_gun.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/throwing_knives.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"trick_shots"
+display_name = "Trick Shots"
+description = "炫技流 — Boombow 爆弓 + 鱼叉枪 + 飞刀。抛物线 + 钉墙 + 投掷,手感不好别买。"
+price_credits = 1500
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.95, 0.45, 0.7, 1)

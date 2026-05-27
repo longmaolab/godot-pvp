@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/lever.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/revolver.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/hand_cannon.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"lever_action"
+display_name = "Lever Action"
+description = "西部牛仔套 — Lever 杠杆步枪 + Revolver 左轮 + Hand Cannon 手炮。一枪一个,慢节奏。"
+price_credits = 1200
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.75, 0.55, 0.35, 1)

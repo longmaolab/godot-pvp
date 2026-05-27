@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/burst.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/an94.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/vector.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"burst_fire"
+display_name = "Burst Fire"
+description = "点射流 — Burst + AN94 + Vector。三发短点,精确度爆表,中距离杀器。"
+price_credits = 1300
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.65, 0.45, 0.85, 1)

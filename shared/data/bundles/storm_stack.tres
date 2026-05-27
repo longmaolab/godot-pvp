@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BundleDef" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://shared/data/bundles/_bundle_def.gd" id="1"]
+[ext_resource type="Resource" path="res://shared/data/weapons/shockwave_launcher.tres" id="2"]
+[ext_resource type="Resource" path="res://shared/data/weapons/gravity_launcher.tres" id="3"]
+[ext_resource type="Resource" path="res://shared/data/weapons/seismic_hammer.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"storm_stack"
+display_name = "Storm Stack"
+description = "高端力场流 — 冲击波发射器 + 引力发射器 + 地震锤。把对手送上天再震晕。"
+price_credits = 2800
+items = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+theme_color = Color(0.4, 0.45, 0.95, 1)
