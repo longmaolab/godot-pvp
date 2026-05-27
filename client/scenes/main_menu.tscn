@@ -223,8 +223,8 @@ corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 content_margin_left = 12
 content_margin_right = 12
-content_margin_top = 6
-content_margin_bottom = 6
+content_margin_top = 3
+content_margin_bottom = 3
 
 [sub_resource type="StyleBoxFlat" id="loadout_chip"]
 bg_color = Color(0.08, 0.14, 0.24, 1)
@@ -239,12 +239,12 @@ corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 content_margin_left = 10
 content_margin_right = 10
-content_margin_top = 6
-content_margin_bottom = 6
+content_margin_top = 3
+content_margin_bottom = 3
 
 [sub_resource type="StyleBoxFlat" id="separator_style"]
-content_margin_top = 6
-content_margin_bottom = 6
+content_margin_top = 3
+content_margin_bottom = 3
 
 [node name="MainMenu" type="Control"]
 anchors_preset = 15
@@ -325,7 +325,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 16
 
 [node name="LeftCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(560, 620)
+custom_minimum_size = Vector2(560, 460)
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass")
@@ -335,25 +335,26 @@ theme_override_constants/separation = 6
 
 [node name="Title" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 68
+theme_override_font_sizes/font_size = 40
 theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
 theme_override_colors/font_outline_color = Color(0.0, 0.45, 0.8, 1)
-theme_override_constants/outline_size = 6
+theme_override_constants/outline_size = 4
 text = "GODOT PVP"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(1, 0.78, 0.35, 1)
 text = "★ SERVER-AUTHORITATIVE ARENA SHOOTER ★"
 horizontal_alignment = 1
+visible = false
 
 [node name="Sep1" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="IdentityHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 text = "▶ 你是谁 / IDENTITY"
 
@@ -363,14 +364,14 @@ theme_override_constants/separation = 14
 [node name="NameLabel" type="Label" parent="Scroll/Center/Cols/LeftCard/V/NameRow"]
 text = "名字"
 custom_minimum_size = Vector2(70, 0)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 1)
 
 [node name="NameInput" type="LineEdit" parent="Scroll/Center/Cols/LeftCard/V/NameRow"]
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(300, 52)
+custom_minimum_size = Vector2(280, 36)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 max_length = 16
 placeholder_text = "Player"
 
@@ -380,133 +381,154 @@ theme_override_constants/separation = 14
 [node name="SkinLabel" type="Label" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
 text = "皮肤"
 custom_minimum_size = Vector2(70, 0)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 1)
 
 [node name="SkinPrev" type="Button" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
-custom_minimum_size = Vector2(60, 52)
+custom_minimum_size = Vector2(48, 36)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 text = "◀"
 
 [node name="SkinName" type="Label" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
 size_flags_horizontal = 3
 horizontal_alignment = 1
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 text = "Character A"
 
 [node name="SkinNext" type="Button" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
-custom_minimum_size = Vector2(60, 52)
+custom_minimum_size = Vector2(48, 36)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 text = "▶"
 
 [node name="Sep1b" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="MapHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 text = "▶ 地图 / MAP"
 
 [node name="MapPicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 42)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("picker_normal")
 theme_override_styles/hover = SubResource("picker_hover")
 theme_override_styles/pressed = SubResource("picker_hover")
 theme_override_styles/focus = SubResource("picker_hover")
 
 [node name="MapDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 64)
 text = ""
-autowrap_mode = 3
-theme_override_font_sizes/font_size = 17
+autowrap_mode = 0
+clip_text = true
+text_overrun_behavior = 3
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
 
 [node name="Sep2" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="ModeHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 text = "▶ 模式 / MODE"
 
 [node name="ModePicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 42)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("picker_normal")
 theme_override_styles/hover = SubResource("picker_hover")
 theme_override_styles/pressed = SubResource("picker_hover")
 theme_override_styles/focus = SubResource("picker_hover")
 
 [node name="ModeDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 84)
 text = ""
-autowrap_mode = 3
-theme_override_font_sizes/font_size = 17
+autowrap_mode = 0
+clip_text = true
+text_overrun_behavior = 3
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
 
 [node name="Sep2b" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="LoadoutHeader" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 text = "▶ 装备 / LOADOUT"
 
 [node name="LoadoutPicker" type="OptionButton" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 42)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("picker_normal")
 theme_override_styles/hover = SubResource("picker_hover")
 theme_override_styles/pressed = SubResource("picker_hover")
 theme_override_styles/focus = SubResource("picker_hover")
 
 [node name="LoadoutDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 72)
 text = ""
-autowrap_mode = 3
-theme_override_font_sizes/font_size = 16
+autowrap_mode = 0
+clip_text = true
+text_overrun_behavior = 3
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
 
 [node name="Sep3" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="WeaponsButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 42)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "武器图鉴 / WEAPON CATALOG"
 
 [node name="ShopButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 42)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "商店 / SHOP"
 
+[node name="RedeemButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "★ 兑换码 / REDEEM CODE"
+
+[node name="WheelButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "◯ 每日转盘 / DAILY WHEEL"
+
 [node name="FunFactSep" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="FunFact" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 32)
 text = "▶ TIP — 加载中..."
 autowrap_mode = 3
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.55, 0.78, 0.92, 0.85)
 
 [node name="RightCard" type="PanelContainer" parent="Scroll/Center/Cols"]
-custom_minimum_size = Vector2(500, 620)
+custom_minimum_size = Vector2(500, 460)
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass_warm")
@@ -523,7 +545,7 @@ theme_override_styles/panel = SubResource("info_pill")
 
 [node name="StatWeaponsLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatWeapons"]
 text = "▣ -- 武器"
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="StatModes" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
@@ -531,7 +553,7 @@ theme_override_styles/panel = SubResource("info_pill")
 
 [node name="StatModesLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatModes"]
 text = "◇ -- 模式"
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="StatMaps" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V/StatsRow"]
@@ -539,12 +561,12 @@ theme_override_styles/panel = SubResource("info_pill")
 
 [node name="StatMapsLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V/StatsRow/StatMaps"]
 text = "◈ -- 地图"
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="ActionHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
 text = "▶ 开始游戏 / PLAY"
 
@@ -557,17 +579,17 @@ theme_override_constants/separation = 18
 
 [node name="SummaryMap" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
 text = "@ --"
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 
 [node name="SummaryMode" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
 text = "* --"
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
 
 [node name="SummarySkin" type="Label" parent="Scroll/Center/Cols/RightCard/V/SelectionSummary/H"]
 text = "--"
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="StagingPanel" type="PanelContainer" parent="Scroll/Center/Cols/RightCard/V"]
@@ -579,7 +601,7 @@ theme_override_constants/separation = 14
 
 [node name="StagingHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 text = "▶ 房间 / LOBBY"
 horizontal_alignment = 1
@@ -587,19 +609,19 @@ horizontal_alignment = 1
 [node name="StagingStatus" type="Label" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
 text = "Hosting on :7777"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
 
 [node name="StagingCount" type="Label" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
 text = "Connected: 1 (you)"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
 
 [node name="StartButton" type="Button" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
-custom_minimum_size = Vector2(0, 96)
+custom_minimum_size = Vector2(0, 52)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
 theme_override_constants/outline_size = 3
@@ -609,18 +631,18 @@ theme_override_styles/pressed = SubResource("btn_primary_pressed")
 text = "▶ START MATCH"
 
 [node name="CancelButton" type="Button" parent="Scroll/Center/Cols/RightCard/V/StagingPanel/V"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 40)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "× 取消 / Cancel"
 
 [node name="PracticeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 96)
+custom_minimum_size = Vector2(0, 60)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 26
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
 theme_override_constants/outline_size = 3
@@ -632,27 +654,27 @@ text = "▶ PRACTICE"
 [node name="PracticeHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 text = "单机模式 · 对战 AI bot + 假人 · 死后自动重生"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 12
 theme_override_colors/font_color = Color(0.65, 0.78, 0.92, 1)
 
 [node name="Sep1" type="HSeparator" parent="Scroll/Center/Cols/RightCard/V"]
 
 [node name="PublicHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.55, 0.95, 0.55, 1)
 text = "▶ 公网房间 / PUBLIC ARENA"
 
 [node name="PublicHint" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 text = "在线匹配 — CREATE 用上面选的 MAP/MODE 直接开房"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
 
 [node name="CreateRoomButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 88)
+custom_minimum_size = Vector2(0, 52)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
 theme_override_constants/outline_size = 3
@@ -662,9 +684,9 @@ theme_override_styles/pressed = SubResource("btn_primary_pressed")
 text = "➕ CREATE ROOM"
 
 [node name="BrowseRoomsButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 56)
+custom_minimum_size = Vector2(0, 40)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
@@ -674,10 +696,10 @@ text = "BROWSE ROOMS · 看别人的房间"
 theme_override_constants/separation = 6
 
 [node name="RoomCodeInput" type="LineEdit" parent="Scroll/Center/Cols/RightCard/V/RoomCodeRow"]
-custom_minimum_size = Vector2(0, 50)
+custom_minimum_size = Vector2(0, 40)
 size_flags_horizontal = 3
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 theme_override_colors/font_placeholder_color = Color(0.5, 0.65, 0.82, 1)
 theme_override_colors/caret_color = Color(0.4, 0.85, 1, 1)
@@ -688,9 +710,9 @@ alignment = 1
 max_length = 4
 
 [node name="JoinByCodeButton" type="Button" parent="Scroll/Center/Cols/RightCard/V/RoomCodeRow"]
-custom_minimum_size = Vector2(140, 50)
+custom_minimum_size = Vector2(120, 40)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
@@ -700,14 +722,14 @@ text = "JOIN"
 
 [node name="LanHeader" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.85)
 text = "▶ 局域网 / LAN (同 WiFi 直连)"
 
 [node name="HostButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 40)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
@@ -715,7 +737,7 @@ text = "HOST LAN · 开服 :7777"
 
 [node name="JoinAddrLabel" type="Label" parent="Scroll/Center/Cols/RightCard/V"]
 text = "服务器地址 / SERVER ADDRESS"
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.7)
 
 [node name="JoinAddress" type="LineEdit" parent="Scroll/Center/Cols/RightCard/V"]
@@ -730,9 +752,9 @@ theme_override_styles/focus = SubResource("lineedit_style")
 placeholder_text = "ws://127.0.0.1:7777"
 
 [node name="JoinButton" type="Button" parent="Scroll/Center/Cols/RightCard/V"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 40)
 theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 11
 theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
@@ -770,6 +792,78 @@ title = "武器图鉴 / WEAPON CATALOG"
 size = Vector2i(760, 600)
 theme = ExtResource("2_theme")
 ok_button_text = "关闭"
+
+[node name="WheelDialog" type="AcceptDialog" parent="."]
+title = "每日转盘 / DAILY WHEEL"
+size = Vector2i(500, 280)
+theme = ExtResource("2_theme")
+ok_button_text = "关闭"
+
+[node name="V" type="VBoxContainer" parent="WheelDialog"]
+custom_minimum_size = Vector2(460, 220)
+anchors_preset = 15
+theme_override_constants/separation = 12
+
+[node name="Hint" type="Label" parent="WheelDialog/V"]
+text = "每 24 小时免费转一次,奖品随机:信用点 50-1000、碎片 5-15、宝箱、终极大奖。"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+autowrap_mode = 3
+
+[node name="SpinButton" type="Button" parent="WheelDialog/V"]
+custom_minimum_size = Vector2(0, 56)
+text = "▶ 抽奖 / SPIN"
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="Result" type="Label" parent="WheelDialog/V"]
+text = "点上面的按钮开始"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.95, 0.85, 0.45, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="RedeemDialog" type="AcceptDialog" parent="."]
+title = "兑换码 / REDEEM CODE"
+size = Vector2i(500, 240)
+theme = ExtResource("2_theme")
+ok_button_text = "关闭"
+
+[node name="V" type="VBoxContainer" parent="RedeemDialog"]
+custom_minimum_size = Vector2(460, 180)
+anchors_preset = 15
+theme_override_constants/separation = 12
+
+[node name="Hint" type="Label" parent="RedeemDialog/V"]
+text = "输入 18 字符以内的兑换码,服务器验证后立即生效。"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+autowrap_mode = 3
+
+[node name="Input" type="LineEdit" parent="RedeemDialog/V"]
+custom_minimum_size = Vector2(0, 36)
+placeholder_text = "kakaroto / goku / adminpass / ..."
+max_length = 32
+theme_override_styles/normal = SubResource("lineedit_style")
+theme_override_font_sizes/font_size = 18
+
+[node name="SubmitButton" type="Button" parent="RedeemDialog/V"]
+custom_minimum_size = Vector2(0, 44)
+text = "兑换 / REDEEM"
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+theme_override_font_sizes/font_size = 18
+
+[node name="Status" type="Label" parent="RedeemDialog/V"]
+text = ""
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.55, 0.85, 0.55, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="Scroll" type="ScrollContainer" parent="WeaponsDialog"]
 custom_minimum_size = Vector2(720, 520)
