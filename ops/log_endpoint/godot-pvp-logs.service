@@ -8,7 +8,10 @@ After=network.target
 # Same value must be passed to the routine that curls /_logs.
 Environment=LOG_TOKEN=PASTE_TOKEN_HERE
 Environment=LOG_UNIT=godot-pvp-game
-Environment=LOG_SINCE=24 hours ago
+# Quote values with spaces — systemd splits unquoted Environment= lines on
+# whitespace and silently drops the trailing words (logs: "Invalid environment
+# assignment, ignoring: hours").
+Environment="LOG_SINCE=24 hours ago"
 Environment=LOG_PORT=7779
 
 ExecStart=/usr/bin/python3 /opt/games/godot-pvp/ops/log_endpoint/server.py
