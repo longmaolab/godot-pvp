@@ -73,7 +73,7 @@ func _ready() -> void:
 		# type something just to play.
 		player_name = _pick_random_default_name()
 		skin_index = randi() % 18
-		save_to_disk()
+		flush_now()   # identity bootstrap must persist even if user quits in 1s
 
 
 func load_from_disk() -> void:
@@ -82,7 +82,7 @@ func load_from_disk() -> void:
 		# Brand-new install — generate device_id so this run can bind to
 		# a fresh server account on first sync.
 		device_id = _generate_device_id()
-		save_to_disk()
+		flush_now()   # identity bootstrap must persist even if user quits in 1s
 		return
 	device_id = cfg.get_value("identity", "device_id", "")
 	if device_id.is_empty():
@@ -99,7 +99,43 @@ func load_from_disk() -> void:
 	last_free_spin_iso = cfg.get_value("economy", "last_free_spin", last_free_spin_iso)
 
 
+# Debounce window for save_to_disk(). Rapid mutations (e.g. award_credits
+# fires on every kill in a 5-second engagement) are coalesced into ONE
+# disk write at the trailing edge of this window. On web, user:// is
+# IndexedDB; a sync write costs 5-50ms, so 30 kills uncoalesced ≈ 1.5s
+# of stuttering. With coalescing it's a single write per burst.
+const SAVE_DEBOUNCE_S := 1.0
+var _save_pending: bool = false
+
+
 func save_to_disk() -> void:
+	# Coalesce rapid calls. The trailing flush sees the LATEST field
+	# values, since we read straight from `self` at flush time.
+	if _save_pending:
+		return
+	_save_pending = true
+	var t: SceneTreeTimer = get_tree().create_timer(SAVE_DEBOUNCE_S)
+	# Capture instance_id (not `self` reference) so the timer doesn't
+	# keep the autoload alive past project teardown. Mirrors the
+	# proc_audio cleanup pattern.
+	var node_id: int = get_instance_id()
+	t.timeout.connect(
+		func():
+			var n: Object = instance_from_id(node_id)
+			if n != null and is_instance_valid(n):
+				n._flush_to_disk()
+	)
+
+
+## Immediate disk write — bypasses debounce. Use for one-shot situations
+## like initial device_id generation or settings-page changes where the
+## user expects "saved" to mean saved.
+func flush_now() -> void:
+	_flush_to_disk()
+
+
+func _flush_to_disk() -> void:
+	_save_pending = false
 	var cfg := ConfigFile.new()
 	cfg.set_value("identity", "device_id", device_id)
 	cfg.set_value("player", "name", player_name)
