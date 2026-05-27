@@ -61,6 +61,7 @@ func _ready() -> void:
 	# once we know who the host is.
 	start_btn.visible = false
 	ready_btn.visible = false
+	_wire_fun_facts()
 
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
@@ -280,3 +281,24 @@ func _mode_info(path: String) -> Dictionary:
 	if "description" in res:
 		desc_text = String(res.description)
 	return {"name": name_text, "desc": desc_text}
+
+
+# Same rotating-tip widget as main menu's FunFact — gives lobby waiters
+# something to read while the host configures the room.
+const _FUN_FACTS := preload("res://client/scripts/data/fun_facts.gd")
+
+
+func _wire_fun_facts() -> void:
+	var fun_label: Label = get_node_or_null(^"Center/Panel/V/FunFact")
+	if fun_label == null:
+		return
+	fun_label.text = "▶ TIP — " + _FUN_FACTS.random()
+	var tip_timer := Timer.new()
+	tip_timer.wait_time = 8.0
+	tip_timer.autostart = true
+	tip_timer.timeout.connect(
+		func():
+			if is_instance_valid(fun_label):
+				fun_label.text = "▶ TIP — " + _FUN_FACTS.random()
+	)
+	add_child(tip_timer)

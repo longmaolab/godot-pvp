@@ -22,6 +22,8 @@ var MODES: Array = []
 @onready var mode_picker: OptionButton = $Scroll/Center/Cols/LeftCard/V/ModePicker
 @onready var map_desc: Label = $Scroll/Center/Cols/LeftCard/V/MapDescription
 @onready var mode_desc: Label = $Scroll/Center/Cols/LeftCard/V/ModeDescription
+@onready var loadout_picker: OptionButton = $Scroll/Center/Cols/LeftCard/V/LoadoutPicker
+@onready var loadout_desc: Label = $Scroll/Center/Cols/LeftCard/V/LoadoutDescription
 @onready var weapons_btn: Button = $Scroll/Center/Cols/LeftCard/V/WeaponsButton
 @onready var shop_btn: Button = $Scroll/Center/Cols/LeftCard/V/ShopButton
 @onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
@@ -102,6 +104,8 @@ func _ready() -> void:
 	if vlabel != null:
 		var bi := preload("res://client/scripts/build_info.gd")
 		vlabel.text = "build %s · godot 4.6" % bi.VERSION
+	_wire_fun_facts()
+	_wire_loadout_picker()
 	_build_modes_from_disk()
 	practice_btn.pressed.connect(_on_practice)
 	create_room_btn.pressed.connect(_on_create_room_pressed)
@@ -935,3 +939,81 @@ func _bump_buffers(peer: WebSocketMultiplayerPeer) -> void:
 	peer.outbound_buffer_size = 1 << 20
 	peer.inbound_buffer_size = 1 << 20
 	peer.max_queued_packets = 8192
+
+
+# Random gameplay tip in the LeftCard; cycles every 8s. Pure cosmetic /
+# onboarding aid — no game-state effect. Safe to skip silently if the
+# scene didn't include the FunFact label (older .tscn versions).
+const _FUN_FACTS := preload("res://client/scripts/data/fun_facts.gd")
+const _BEST_LOADOUTS := preload("res://client/scripts/data/best_loadouts.gd")
+
+
+func _wire_fun_facts() -> void:
+	var fun_label: Label = get_node_or_null(^"Scroll/Center/Cols/LeftCard/V/FunFact")
+	if fun_label == null:
+		return
+	fun_label.text = "▶ TIP — " + _FUN_FACTS.random()
+	var tip_timer := Timer.new()
+	tip_timer.wait_time = 8.0
+	tip_timer.autostart = true
+	tip_timer.timeout.connect(
+		func():
+			if is_instance_valid(fun_label):
+				fun_label.text = "▶ TIP — " + _FUN_FACTS.random()
+	)
+	add_child(tip_timer)
+
+
+# Build the Loadout dropdown from best_loadouts.gd recipes. Idx 0 is
+# always "默认 / DEFAULT" which clears Settings.loadout_ids; recipes
+# follow. Pre-selects whatever the user picked last session (stored as
+# Settings.loadout_ids — we match by id).
+func _wire_loadout_picker() -> void:
+	if loadout_picker == null:
+		return
+	loadout_picker.clear()
+	loadout_picker.add_item("默认 / DEFAULT (AK20 · SG8 · SRX · RAILGUN)")
+	loadout_picker.set_item_metadata(0, "")   # empty id = use DEFAULT_LOADOUT
+	for i in _BEST_LOADOUTS.LOADOUTS.size():
+		var rec: Dictionary = _BEST_LOADOUTS.LOADOUTS[i]
+		loadout_picker.add_item(String(rec.get("name", rec.get("id", "?"))))
+		loadout_picker.set_item_metadata(i + 1, String(rec.get("id", "")))
+	loadout_picker.item_selected.connect(_on_loadout_changed)
+	# Restore prior pick. We can't match by exact slot order against the
+	# unordered list of recipes, but we DO save the recipe id below — pull
+	# it from Settings.meta. Falls through to "default" on miss.
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings != null and "loadout_ids" in settings and not Array(settings.loadout_ids).is_empty():
+		var saved_ids: Array = settings.loadout_ids
+		# Find the recipe whose slots match saved_ids.
+		for i in _BEST_LOADOUTS.LOADOUTS.size():
+			var rec: Dictionary = _BEST_LOADOUTS.LOADOUTS[i]
+			if Array(rec.get("slots", [])) == saved_ids:
+				loadout_picker.select(i + 1)
+				_on_loadout_changed(i + 1)
+				return
+	# No prior pick or no match — default.
+	loadout_picker.select(0)
+	_on_loadout_changed(0)
+
+
+func _on_loadout_changed(idx: int) -> void:
+	if loadout_picker == null:
+		return
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null:
+		return
+	if idx == 0:
+		settings.loadout_ids = []
+		if loadout_desc != null:
+			loadout_desc.text = "万金油默认配置 — 突击 · 散弹 · 狙击 · 重火。"
+	else:
+		var rec_idx: int = idx - 1
+		if rec_idx < 0 or rec_idx >= _BEST_LOADOUTS.LOADOUTS.size():
+			return
+		var rec: Dictionary = _BEST_LOADOUTS.LOADOUTS[rec_idx]
+		settings.loadout_ids = Array(rec.get("slots", []))
+		if loadout_desc != null:
+			loadout_desc.text = String(rec.get("desc", ""))
+	if settings.has_method(&"save_to_disk"):
+		settings.save_to_disk()

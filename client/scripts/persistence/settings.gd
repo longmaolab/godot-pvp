@@ -23,6 +23,10 @@ var master_volume: float = 0.8   # 0..1 linear (device-local, never server-side)
 var credits: int = 500           # in-game currency, starter grant
 var fragments: int = 0           # weapon-unlock currency
 var purchased: Array = []        # weapon IDs the player owns (besides free starters)
+# Active 4-weapon loadout (slot 1/2/3/4). Strings of weapon ids matching
+# shared/data/weapons/*.tres filenames. Empty = use GameController's
+# DEFAULT_LOADOUT. Picked in menu via the Best Loadouts dropdown.
+var loadout_ids: Array = []
 var common_chests: int = 0       # owned but unopened chests
 var rare_chests: int = 0
 # weapon_id → {dmg_lvl, mag_lvl, reload_lvl} — 0..10 per stat (P-M4 raised cap)
@@ -99,6 +103,7 @@ func load_from_disk() -> void:
 	credits = cfg.get_value("economy", "credits", credits)
 	fragments = cfg.get_value("economy", "fragments", fragments)
 	purchased = cfg.get_value("economy", "purchased", purchased)
+	loadout_ids = cfg.get_value("player", "loadout_ids", loadout_ids)
 	common_chests = cfg.get_value("economy", "common_chests", common_chests)
 	rare_chests = cfg.get_value("economy", "rare_chests", rare_chests)
 	upgrades = cfg.get_value("economy", "upgrades", upgrades)
@@ -163,6 +168,7 @@ func _flush_to_disk() -> void:
 	cfg.set_value("economy", "credits", credits)
 	cfg.set_value("economy", "fragments", fragments)
 	cfg.set_value("economy", "purchased", purchased)
+	cfg.set_value("player", "loadout_ids", loadout_ids)
 	cfg.set_value("economy", "common_chests", common_chests)
 	cfg.set_value("economy", "rare_chests", rare_chests)
 	cfg.set_value("economy", "upgrades", upgrades)

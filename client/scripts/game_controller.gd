@@ -946,7 +946,13 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 	var p: Node = PLAYER_SCENE.instantiate()
 	p.name = "Player_%d" % peer_id
 	p.weapon_def = AK20
-	p.loadout = DEFAULT_LOADOUT
+	# Local player can override the default loadout via Best Loadouts picker
+	# in main menu — Settings.loadout_ids is a list of weapon ids (strings)
+	# matching .tres filenames. Empty = use DEFAULT_LOADOUT. Remote peers
+	# still get DEFAULT_LOADOUT here; the actual server-authoritative
+	# per-peer loadout work is the "Server-authoritative current weapon"
+	# todo from .agent/todo.md and not done yet.
+	p.loadout = _resolve_loadout_for(peer_id)
 	# Pull persisted name + skin if this is the local user; remote peers
 	# get a default skin keyed off their peer_id (M4 will sync real skins).
 	# Practice (no real networking) spawns with the synthetic peer_id=1
@@ -1792,3 +1798,34 @@ func _tear_down_match_world(ended_room_id: String = "") -> void:
 						child.reparent(players_root, false)
 			rw.queue_free()
 		room_worlds.erase(ended_room_id)
+
+
+# Returns the 4-weapon Resource array to use for `peer_id`. If this is
+# our local peer AND the player picked a Best Loadout in menu, we
+# resolve the saved weapon-id strings to .tres Resources. Falls back to
+# DEFAULT_LOADOUT on any miss (unknown id, autoload missing, remote peer).
+func _resolve_loadout_for(peer_id: int) -> Array[Resource]:
+	if not _is_networked() and peer_id != 1:
+		return DEFAULT_LOADOUT
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null:
+		return DEFAULT_LOADOUT
+	# Remote peers don't share their pick over the wire yet — only override
+	# OUR local spawn.
+	var local_id: int = multiplayer.get_unique_id() if _is_networked() else 1
+	if peer_id != local_id:
+		return DEFAULT_LOADOUT
+	var ids: Array = settings.loadout_ids if "loadout_ids" in settings else []
+	if ids.is_empty():
+		return DEFAULT_LOADOUT
+	var out: Array[Resource] = []
+	for wid in ids:
+		var path: String = "res://shared/data/weapons/%s.tres" % String(wid)
+		if not ResourceLoader.exists(path):
+			continue
+		var w: Resource = load(path)
+		if w != null:
+			out.append(w)
+	if out.is_empty():
+		return DEFAULT_LOADOUT
+	return out
