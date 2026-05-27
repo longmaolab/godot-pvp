@@ -885,6 +885,14 @@ func respawn(at: Vector3) -> void:
 	hp = max_hp
 	is_reloading = false
 	time_until_next_shot = 0.0
+	# Reset remote-input tick baseline so a client that just reconnected
+	# (re-entered the game scene after match-end / Play Again) gets a fresh
+	# input stream accepted. Without this, push_remote_input rejects all the
+	# new client's tick=1,2,3 frames as "tick <= last_seen (~1500)" and the
+	# server-simulated player ignores every fire/move bit forever.
+	_remote_input_tick = -1
+	_remote_input_bits = 0
+	_remote_input_just_pressed = 0
 	# Reset camera state — kick zeroed, base angles re-pulled from transform.
 	_camera_kick = Vector2.ZERO
 	if is_local:
