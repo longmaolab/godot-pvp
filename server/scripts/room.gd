@@ -37,6 +37,14 @@ var profiles: Dictionary = {}
 var kills: Dictionary = {}    # peer_id (int) → int
 var deaths: Dictionary = {}   # peer_id (int) → int
 
+# Snapshot of the most recent finished match — captured by end_match()
+# before clear_scores() wipes the live kills/deaths so the match-end
+# broadcast can carry winner + final tally to clients. Stays populated
+# across re-lobby until the next end_match overwrites or clear_match_result
+# explicitly clears it.
+var last_winner: int = 0
+var last_scores: Dictionary = {}
+
 
 ## Serialize to a plain Dictionary for RPC payload + browser display.
 ## Caller decides which fields to include in the wire format.
@@ -57,6 +65,8 @@ func to_dict() -> Dictionary:
 		"state":  state,
 		"max":    max_players,
 		"profiles": profiles_copy,
+		"last_winner": last_winner,
+		"last_scores": last_scores.duplicate(true),
 	}
 
 

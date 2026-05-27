@@ -297,11 +297,18 @@ func start_match(room_id: String) -> void:
 ## Called by GameController after the match controller's match_ended
 ## signal fires. Flips room back to LOBBY + broadcasts so all room
 ## players' game scenes return to room_lobby.tscn.
-func end_match(room_id: String) -> void:
+##
+## winner_peer + final_scores are stashed on the Room BEFORE clear_scores
+## wipes the live counters so the match-end broadcast can carry them to
+## clients (DS client needs them to render the end-of-match summary).
+func end_match(room_id: String, winner_peer: int = 0, final_scores: Dictionary = {}) -> void:
 	var room: Room = rooms.get(room_id, null)
 	if room == null:
 		return
-	print("[RoomMgr] END_MATCH %s → LOBBY (%d players)" % [room_id, room.players.size()])
+	print("[RoomMgr] END_MATCH %s → LOBBY (%d players, winner=%d)" % [room_id, room.players.size(), winner_peer])
+	# Capture the result snapshot BEFORE clear_scores() wipes the live K/D.
+	room.last_winner = winner_peer
+	room.last_scores = final_scores.duplicate(true)
 	room.state = Room.STATE_LOBBY
 	# Force everyone to re-ready for round 2 — otherwise stale "ready"
 	# bits from before the match carry over and host sees "all ready"

@@ -22,6 +22,8 @@ const GAME_SCENE := "res://client/scenes/game.tscn"
 
 @onready var room_id_label: Label = $Center/Panel/V/RoomIdLabel
 @onready var map_label: Label = $Center/Panel/V/MapLabel
+@onready var map_desc_label: Label = $Center/Panel/V/MapDescLabel
+@onready var mode_desc_label: Label = $Center/Panel/V/ModeDescLabel
 @onready var player_list: ItemList = $Center/Panel/V/PlayerList
 @onready var start_btn: Button = $Center/Panel/V/Buttons/StartButton
 @onready var ready_btn: Button = $Center/Panel/V/Buttons/ReadyButton
@@ -105,8 +107,14 @@ func _apply_room_state(state: Dictionary) -> void:
 	room_id_label.text = "房间 %s" % _room_id
 	var map_path: String = state.get("map", "")
 	var mode_path: String = state.get("mode", "")
-	map_label.text = "@ %s * %s" % [_short(map_path) if not map_path.is_empty() else "(默认)",
-		_short(mode_path) if not mode_path.is_empty() else "(无模式)"]
+	# Map / mode names + descriptions so a joiner knows the rules before
+	# the host hits START. Map description comes from MapRegistry, mode
+	# description from the .tres's exported `description` field.
+	var map_info: Dictionary = MapRegistry.info_for(map_path) if not map_path.is_empty() else {"name": "(默认)", "desc": ""}
+	var mode_info: Dictionary = _mode_info(mode_path)
+	map_label.text = "@ %s   *   %s" % [map_info.name, mode_info.name]
+	map_desc_label.text = ("@ " + map_info.desc) if not String(map_info.desc).is_empty() else ""
+	mode_desc_label.text = ("* " + mode_info.desc) if not String(mode_info.desc).is_empty() else ""
 
 	# Refresh player list. Each row shows skin letter + name + role badge.
 	# Profiles dict may have int OR string keys depending on serialization
@@ -248,3 +256,27 @@ func _on_start_pressed() -> void:
 
 func _short(path: String) -> String:
 	return path.get_file().get_basename()
+
+
+## Load a mode .tres and return its display name + description. Falls back
+## to {name = file basename, desc = ""} if the resource doesn't load or
+## doesn't have the expected exports.
+func _mode_info(path: String) -> Dictionary:
+	if path.is_empty():
+		return {"name": "(无模式)", "desc": ""}
+	if not ResourceLoader.exists(path):
+		return {"name": _short(path), "desc": ""}
+	var res: Resource = load(path)
+	if res == null:
+		return {"name": _short(path), "desc": ""}
+	var name_text: String = ""
+	if "display_name" in res and not String(res.display_name).is_empty():
+		name_text = String(res.display_name)
+	elif "name" in res and not String(res.name).is_empty():
+		name_text = String(res.name)
+	else:
+		name_text = _short(path)
+	var desc_text: String = ""
+	if "description" in res:
+		desc_text = String(res.description)
+	return {"name": name_text, "desc": desc_text}

@@ -11,6 +11,11 @@ const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
 
 var local_peer: int = 1   # set from game_controller before show_for()
 var current_scene_path: String = "res://client/scenes/game.tscn"
+# Where Return / Play Again actually go. Default = main menu (legacy
+# listen-host path). DS-client overrides via set_return_target() to
+# bounce back to the room lobby so the player can re-ready for round 2.
+var _return_scene_path: String = MAIN_MENU_PATH
+var _play_again_scene_path: String = ""   # "" = reload current scene
 
 
 func _ready() -> void:
@@ -124,10 +129,26 @@ func _make_row(name_txt: String, k: String, d: String, rw: String,
 	return pc
 
 
+## DS-client calls this to redirect both buttons to the room lobby instead
+## of the main menu — the room still exists after a match ends, so going
+## back to lobby (where the host can hit START again) is the natural flow.
+## Pass play_again_path = same as return_path so "Play Again" also goes
+## to the lobby (the host re-clicks START there to restart the match).
+func set_return_target(return_path: String, play_again_label: String = "Play Again",
+		play_again_path: String = "") -> void:
+	_return_scene_path = return_path
+	_play_again_scene_path = play_again_path
+	if play_again_btn != null:
+		play_again_btn.text = play_again_label
+
+
 func _on_return() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_PATH)
+	get_tree().change_scene_to_file(_return_scene_path)
 
 
 func _on_play_again() -> void:
-	# Reload the current scene fresh.
-	get_tree().reload_current_scene()
+	if _play_again_scene_path.is_empty():
+		# Legacy listen-host: reload the current game scene fresh.
+		get_tree().reload_current_scene()
+	else:
+		get_tree().change_scene_to_file(_play_again_scene_path)

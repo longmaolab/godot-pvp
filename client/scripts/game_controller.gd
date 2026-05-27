@@ -658,15 +658,28 @@ func _on_server_match_ended(room_state: Dictionary) -> void:
 		# Room is gone — bounce to browser.
 		get_tree().change_scene_to_file(ROOM_BROWSER_SCENE_CLIENT)
 		return
-	# Hand off the room state via the Settings autoload — the lobby scene
-	# reads `pending_room_state` in its _ready (same channel room_browser
-	# uses on Create/Join). This is the only place this client receives
-	# room_state during a match-ended transition because the game scene
-	# doesn't subscribe to server_room_state_received.
+	# Stash room state for the lobby's _ready — same Settings channel
+	# room_browser uses on Create/Join. The game scene doesn't subscribe
+	# to server_room_state_received, so this is the only place this
+	# client receives the post-match snapshot.
 	if has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		if "pending_room_state" in s:
 			s.pending_room_state = room_state.duplicate()
+	# Show end-of-match summary OVER the game scene so the player sees
+	# winner + scores before transitioning. Skip if no winner data made
+	# it across (early-leave / abrupt match end), just go to lobby.
+	var winner: int = int(room_state.get("last_winner", 0))
+	var final: Dictionary = room_state.get("last_scores", {})
+	if winner > 0 or not final.is_empty():
+		var screen: Node = MATCH_END_SCENE.instantiate()
+		add_child(screen)
+		var my_id: int = multiplayer.get_unique_id() if _is_networked() else 1
+		screen.show_for(winner, final, my_id)
+		screen.set_return_target(ROOM_LOBBY_SCENE, "Back to Lobby", ROOM_LOBBY_SCENE)
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	# No usable result data — straight to lobby.
 	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
 
 
@@ -1340,7 +1353,10 @@ func _on_match_ended(winner: int, final: Dictionary, room_id: String = "") -> vo
 		if not room_id.is_empty():
 			var room_mgr: Node = get_node_or_null(^"/root/RoomManager")
 			if room_mgr != null:
-				room_mgr.end_match(room_id)
+				# Pass winner + final scores so room_mgr stashes them on the
+				# Room before clearing live K/D, letting _broadcast_match_ended
+				# carry them out to DS clients for the end-of-match summary.
+				room_mgr.end_match(room_id, winner, final)
 		return
 	# Pop up the themed end-of-match scoreboard.
 	var screen: Node = MATCH_END_SCENE.instantiate()
