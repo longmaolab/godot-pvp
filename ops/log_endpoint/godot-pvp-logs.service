@@ -1,0 +1,32 @@
+[Unit]
+Description=Godot PvP read-only journalctl HTTP endpoint
+After=network.target
+
+[Service]
+# REPLACE the placeholder token below with the real one before enabling.
+# Generate: openssl rand -hex 32
+# Same value must be passed to the routine that curls /_logs.
+Environment=LOG_TOKEN=PASTE_TOKEN_HERE
+Environment=LOG_UNIT=godot-pvp-game
+Environment=LOG_SINCE=24 hours ago
+Environment=LOG_PORT=7779
+
+ExecStart=/usr/bin/python3 /opt/games/godot-pvp/ops/log_endpoint/server.py
+
+# Hardening — endpoint is read-only by design, lock it down further:
+# Run as nobody (no shell access if exploited).
+# Allow reading journalctl (needs adm group or root). Since journalctl
+# can be run by non-root members of `adm` or `systemd-journal`, add
+# user `nobody` to systemd-journal or just run as root with the
+# restrictions below. Easier: run as root + ProtectSystem.
+User=root
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

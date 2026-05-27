@@ -1,0 +1,3 @@
+# If you ever save the real token locally — never commit it.
+TOKEN.txt
+*.token
