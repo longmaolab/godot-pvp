@@ -37,6 +37,27 @@ const SLOT_SUPPORT   := &"support"
 @export var bullet_speed: float = 120.0    # 0 = hitscan
 @export_range(5.0, 120.0) var ads_zoom_fov: float = 45.0
 
+@export_group("Throwable / AoE")
+## When true, this weapon spawns a parabolic projectile (server-simulated)
+## that explodes on contact OR when fuse_seconds elapses, dealing damage
+## to all players inside `explode_radius` with linear distance falloff.
+## Bypasses the hitscan raycast path in fire_resolver.
+@export var is_throwable: bool = false
+## Initial velocity magnitude (m/s) when the projectile leaves the hand.
+@export var throw_speed: float = 18.0
+## Extra upward pitch added to the aim direction so a flat throw still
+## arcs nicely. Radians.
+@export_range(0.0, 1.0) var throw_arc_pitch: float = 0.18
+## 0 = explode on contact (impact grenade). >0 = explode after this many
+## seconds OR on contact, whichever comes first (timed grenade).
+@export_range(0.0, 10.0) var fuse_seconds: float = 1.5
+## AoE radius in meters at explosion time. Players inside take damage
+## with linear distance falloff (full at center, 0 at the edge).
+@export var explode_radius: float = 4.0
+## Max damage at center of explosion. Falls off to 0 at `explode_radius`.
+## Headshot multiplier does NOT apply.
+@export var explode_damage: float = 80.0
+
 @export_group("Economy")
 @export var price_credits: int = 0
 @export var fragment_unlock_cost: int = 100

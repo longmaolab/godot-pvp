@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"grenade"
+display_name = "Grenade"
+type_label = "Throwable"
+slot = &"support"
+description = "投掷手雷。抛物线轨迹,接触 OR 1.5 秒引信任一触发爆炸,4 米范围 80 伤害线性衰减。"
+damage = 0.0
+headshot_multiplier = 1.0
+magazine = 1
+reserve = 4
+fire_interval_ms = 800
+reload_time_ms = 2000
+auto = false
+pellets = 1
+spread = 0.0
+bullet_speed = 0.0
+is_throwable = true
+throw_speed = 18.0
+throw_arc_pitch = 0.18
+fuse_seconds = 1.5
+explode_radius = 4.0
+explode_damage = 80.0
+price_credits = 200
+bullet_color = Color(0.8, 0.7, 0.3, 1)

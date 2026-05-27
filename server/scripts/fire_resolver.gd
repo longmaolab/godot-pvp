@@ -136,6 +136,12 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 	shooter.ammo_in_mag -= 1
 	shooter.time_until_next_shot = weapon.fire_interval_seconds()
 	shooter.ammo_changed.emit(shooter.ammo_in_mag, shooter.ammo_reserve)
+	# Throwable branch: spawn a server-simulated projectile and let it handle
+	# its own arc + contact + fuse + AoE damage. Bypasses the hitscan ray
+	# below entirely.
+	if "is_throwable" in weapon and weapon.is_throwable:
+		_spawn_throwable(host, shooter, weapon, fire_yaw, fire_pitch)
+		return
 	# If the client sent aim, snap the shooter's body/head to that direction
 	# BEFORE the raycast so the ray comes out of the camera in the right line.
 	# We restore the interpolated state in the saved_positions loop below.
@@ -331,3 +337,42 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		var is_head_d: bool = collider.name == &"HeadHitbox" or collider.get_meta(&"is_head", false)
 		collider.take_hit(weapon, is_head_d, shooter)
 		return
+
+
+## Throwable spawn — called by the is_throwable branch above. Builds the
+## projectile node, gives it an initial velocity derived from aim + the
+## weapon's throw_arc_pitch, parents it under the shooter's room (or game
+## controller for practice), and lets its own _physics_process drive the
+## arc + contact + fuse + AoE damage logic.
+static func _spawn_throwable(host: Node, shooter: Node, weapon: Resource, fire_yaw: float, fire_pitch: float) -> void:
+	var proj_script = load("res://server/scripts/throwable_projectile.gd")
+	var proj: Node3D = Node3D.new()
+	proj.set_script(proj_script)
+	proj.weapon = weapon
+	proj.shooter = shooter
+	# Start at the shooter's camera so the throw feels first-person.
+	var origin: Vector3 = shooter.camera.global_position if shooter.camera != null else shooter.global_position + Vector3(0, 1, 0)
+	proj.global_position = origin
+	# Derive throw direction from explicit aim if provided, else use the
+	# shooter's transform basis.
+	var yaw: float = fire_yaw if fire_yaw != INF else shooter.rotation.y
+	var pitch: float = fire_pitch if fire_pitch != INF else (shooter.head.rotation.x if shooter.has_node(^"Head") else 0.0)
+	# Add the weapon-specific arc lift so flat aim still produces a curve.
+	pitch = clampf(pitch + weapon.throw_arc_pitch, -PI * 0.49, PI * 0.49)
+	var dir: Vector3 = Vector3(
+		-sin(yaw) * cos(pitch),
+		sin(pitch),
+		-cos(yaw) * cos(pitch)
+	)
+	proj.velocity = dir.normalized() * weapon.throw_speed
+	# Parent under the shooter's RoomWorld (MP) or game controller (practice)
+	# so World3D lookup in _resolve_space() finds the right physics space.
+	var room_world: Node = null
+	if "_room_id_for_peer" in host:
+		var rid: String = host._room_id_for_peer(shooter.get_multiplayer_authority())
+		if not rid.is_empty() and host.room_worlds.has(rid):
+			room_world = host.room_worlds[rid]
+	if room_world != null:
+		room_world.add_child(proj)
+	else:
+		host.add_child(proj)
