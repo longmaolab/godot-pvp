@@ -17,7 +17,11 @@ const SG8: Resource = preload("res://shared/data/weapons/sg8.tres")
 const SRX: Resource = preload("res://shared/data/weapons/srx.tres")
 const RAILGUN: Resource = preload("res://shared/data/weapons/railgun.tres")
 const CROSSBOW: Resource = preload("res://shared/data/weapons/crossbow.tres")
+const GRENADE: Resource = preload("res://shared/data/weapons/grenade.tres")
 const DEFAULT_LOADOUT: Array[Resource] = [AK20, SG8, SRX, RAILGUN]
+# Bots get a 2-weapon loadout: primary (AK20) + grenade in slot 2 so bot_brain
+# can pick the throwable occasionally for variety.
+const BOT_LOADOUT: Array[Resource] = [AK20, GRENADE]
 
 const _WEAPON_REGISTRY := preload("res://shared/scripts/weapon_registry.gd")
 const _BOT_SPEECH := preload("res://client/scripts/data/bot_speech.gd")
@@ -392,6 +396,7 @@ var _next_bot_peer_id: int = -1000
 func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	var bot: Node = BOT_SCENE.instantiate()
 	bot.weapon_def = weapon
+	bot.loadout = BOT_LOADOUT   # primary + grenade for occasional toss
 	bot.target = target
 	bot.player_name = "Bot"
 	# CRITICAL: bots inherit from PlayerController whose @export is_local
@@ -1658,6 +1663,7 @@ func _spawn_room_bots(room, room_world: Node) -> void:
 		var bot_peer_id: int = _next_bot_peer_id
 		var bot: Node = BOT_SCENE.instantiate()
 		bot.weapon_def = AK20
+		bot.loadout = BOT_LOADOUT   # primary + grenade
 		bot.target = first_human
 		bot.player_name = "Bot-%d" % (i + 1)
 		bot.is_local = false

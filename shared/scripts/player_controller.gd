@@ -749,10 +749,43 @@ func try_fire() -> bool:
 			else:
 				net_rpc.client_fire.rpc_id(1, weapon_def.id, _aim_yaw, _aim_pitch)
 		# Local hit-feedback only — actual HP change waits for server broadcast.
+	elif "is_throwable" in weapon_def and weapon_def.is_throwable:
+		# Practice / offline throwable: server isn't running, so spawn the
+		# projectile locally. Re-uses the server's throwable_projectile.gd
+		# (it falls back to the main scene's world when no shooter-specific
+		# room exists) — same arc / AoE / fuse logic as MP.
+		_spawn_local_throwable()
 	elif not hit_info.is_empty():
 		# Practice / offline mode: apply hit immediately.
 		_apply_local_hit(hit_info)
 	return true
+
+
+# Practice-mode equivalent of fire_resolver._spawn_throwable. The server
+# code path requires multiplayer.is_server() so it doesn't run in pure
+# offline; this mirrors that logic so practice players can throw grenades.
+# The same throwable_projectile.gd script runs the simulation + AoE
+# damage; the only difference is no spawn / explode RPC broadcasts (no
+# clients to broadcast to).
+func _spawn_local_throwable() -> void:
+	var proj_script = load("res://server/scripts/throwable_projectile.gd")
+	var proj: Node3D = Node3D.new()
+	proj.set_script(proj_script)
+	proj.weapon = weapon_def
+	proj.shooter = self
+	var origin: Vector3 = camera.global_position if camera != null else global_position + Vector3(0, 1, 0)
+	proj.global_position = origin
+	var pitch: float = _aim_pitch + weapon_def.throw_arc_pitch
+	pitch = clampf(pitch, -PI * 0.49, PI * 0.49)
+	var dir := Vector3(-sin(_aim_yaw) * cos(pitch), sin(pitch), -cos(_aim_yaw) * cos(pitch))
+	proj.velocity = dir.normalized() * weapon_def.throw_speed
+	# Use the game controller as parent so the projectile lives in the
+	# main scene's world (matches where players are).
+	var game: Node = get_tree().root.get_node_or_null(^"Game")
+	if game != null:
+		game.add_child(proj)
+	else:
+		get_tree().root.add_child(proj)
 
 
 ## True when a real network transport is active. Discriminates against

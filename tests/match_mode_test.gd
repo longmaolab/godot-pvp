@@ -9,8 +9,18 @@ const MODE_FFA := preload("res://shared/data/modes/ffa_kill5.tres")
 const MODE_ELIM := preload("res://shared/data/modes/elim_1v1.tres")
 const MODE_TDM := preload("res://shared/data/modes/tdm_kill10.tres")
 const MODE_GUNGAME := preload("res://shared/data/modes/gungame.tres")
+const MODE_INFECTION := preload("res://shared/data/modes/infection.tres")
+const MODE_OITC := preload("res://shared/data/modes/oitc.tres")
+const MODE_KOTH := preload("res://shared/data/modes/koth.tres")
+const AK20 := preload("res://shared/data/weapons/ak20.tres")
 
 var failed: int = 0
+
+# Exposed to rule_scripts via match_controller's `rule.game_controller =
+# get_parent()` wiring. Each arcade-mode test populates this with fake
+# player nodes before adding MC; rule scripts read it as their world view.
+var players_by_peer: Dictionary = {}
+var map_root: Node = null   # KOTH rule needs a map with HillZone marker
 
 
 func _ready() -> void:
@@ -20,6 +30,9 @@ func _ready() -> void:
 	await _test_race_kill_goal()
 	await _test_elim_round_kills_dont_leak()
 	await _test_gungame_tier_progression()
+	await _test_infection_propagation()
+	await _test_oitc_ammo_refund()
+	await _test_koth_hold_advances()
 	print("\n=== result: %s (%d failures) ===" % ["PASS" if failed == 0 else "FAIL", failed])
 	get_tree().quit(0 if failed == 0 else 1)
 
@@ -193,6 +206,188 @@ func _test_gungame_tier_progression() -> void:
 		return
 	print("  [ok] Gun Game: 6 kills → tier 6 → match_ended winner=100")
 	mc.queue_free()
+
+
+# ── Infection ────────────────────────────────────────────────────────────
+# Patient zero gets picked after START_DELAY_SEC. When the infected kills
+# a survivor, the survivor flips. When everyone is infected, match_ended
+# fires with patient zero as nominal winner.
+func _test_infection_propagation() -> void:
+	# Set up 3 fake players in our parent's players_by_peer (the rule reads
+	# from get_parent(), which is this test node).
+	var p100: Node = _make_fake_player()
+	var p200: Node = _make_fake_player()
+	var p300: Node = _make_fake_player()
+	players_by_peer = {100: p100, 200: p200, 300: p300}
+	add_child(p100); add_child(p200); add_child(p300)
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_INFECTION
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("Infection: rule_script not instantiated")
+		_cleanup_infection_test(mc, [p100, p200, p300])
+		return
+	# Force patient zero pick by short-circuiting the start delay.
+	rule._start_time_ms = Time.get_ticks_msec() - 10_000
+	# Advance two frames to let _process pick patient zero.
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# Whichever player got patient zero, we'll have them kill everyone else.
+	var pz_peer: int = 0
+	for peer in players_by_peer.keys():
+		var p: Node = players_by_peer[peer]
+		if p.has_meta(&"infected") and p.get_meta(&"infected"):
+			pz_peer = peer
+			break
+	if pz_peer == 0:
+		_fail("Infection: no patient zero picked after process tick")
+		_cleanup_infection_test(mc, [p100, p200, p300])
+		return
+	# Kill the other 2 survivors.
+	for peer in [100, 200, 300]:
+		if peer == pz_peer:
+			continue
+		mc.record_kill(pz_peer, peer)
+	await get_tree().process_frame
+
+	if not captured["match_ended"]:
+		_fail("Infection: match did not end after all converted")
+	# Rule picks "first infected in dict iter order" as nominal winner, not
+	# necessarily patient zero. Just check that A winner exists and is one
+	# of our infected players.
+	elif not captured["winner"] in players_by_peer:
+		_fail("Infection winner not in players_by_peer: %d" % captured["winner"])
+	else:
+		print("  [ok] Infection: patient zero %d converts all → match_ended winner=%d" % [pz_peer, captured["winner"]])
+	_cleanup_infection_test(mc, [p100, p200, p300])
+
+
+func _cleanup_infection_test(mc: Node, players: Array) -> void:
+	players_by_peer = {}
+	mc.queue_free()
+	for p in players:
+		p.queue_free()
+
+
+# ── OITC ──────────────────────────────────────────────────────────────────
+# Every player gets 1 bullet, no reserve. Kills refund 1 bullet.
+func _test_oitc_ammo_refund() -> void:
+	var p100: Node = _make_fake_player()
+	p100.weapon_def = AK20
+	p100.loadout = [AK20] as Array[Resource]
+	if p100.has_method(&"_sync_ammo_from_state"):
+		# Pre-populate _ammo_state so the loop doesn't trip on missing entry.
+		p100._ammo_state[AK20.id] = {"in_mag": 30, "reserve": 90}
+	players_by_peer = {100: p100}
+	add_child(p100)
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_OITC
+	add_child(mc)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("OITC: rule_script not instantiated")
+		_cleanup_oitc_test(mc, [p100])
+		return
+	# First _process tick should clamp ammo to 1.
+	await get_tree().process_frame
+	if p100.ammo_in_mag != 1:
+		_fail("OITC: ammo not clamped to 1 (got %d)" % p100.ammo_in_mag)
+		_cleanup_oitc_test(mc, [p100])
+		return
+	# Simulate firing → 0 ammo → kill → expect refund to 1.
+	p100.ammo_in_mag = 0
+	mc.record_kill(100, 0)   # victim_peer=0 (dummy), killer=100
+	if p100.ammo_in_mag != 1:
+		_fail("OITC: ammo not refunded to 1 after kill (got %d)" % p100.ammo_in_mag)
+	else:
+		print("  [ok] OITC: starting ammo=1 + kill refunds 1")
+	_cleanup_oitc_test(mc, [p100])
+
+
+func _cleanup_oitc_test(mc: Node, players: Array) -> void:
+	players_by_peer = {}
+	mc.queue_free()
+	for p in players:
+		p.queue_free()
+
+
+# ── KOTH ──────────────────────────────────────────────────────────────────
+# Living player inside HILL_RADIUS accumulates seconds on the hill. First
+# to HOLD_GOAL_SEC ends the match. We can't easily wait 30 real seconds in
+# a test, so we directly mutate hold_times to verify the end-condition
+# branch.
+func _test_koth_hold_advances() -> void:
+	var p100: Node = _make_fake_player()
+	players_by_peer = {100: p100}
+	add_child(p100)
+	# global_position only valid AFTER add_child (Node3D needs to be in tree).
+	p100.global_position = Vector3.ZERO
+	# Build a stand-in map with a HillZone marker at origin.
+	var hill_map: Node3D = Node3D.new()
+	hill_map.name = "FakeMap"
+	var hill_marker: Marker3D = Marker3D.new()
+	hill_marker.name = "HillZone"
+	hill_map.add_child(hill_marker)
+	add_child(hill_map)
+	map_root = hill_map
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_KOTH
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("KOTH: rule_script not instantiated")
+		_cleanup_koth_test(mc, [p100], hill_map)
+		return
+	# Inject a hold time just below the goal, then drive _process directly
+	# with a synthetic delta. Calling rule._process(delta) is more reliable
+	# than awaiting process_frame for unit tests — frame ticks in headless
+	# mode are inconsistent, and the rule body is pure GDScript.
+	rule.hold_times[100] = rule.HOLD_GOAL_SEC - 0.05
+	rule._process(0.1)   # 0.1 > 0.05 gap → hold_times >= HOLD_GOAL_SEC
+	if not captured["match_ended"]:
+		_fail("KOTH: match did not end after hold goal reached")
+	elif captured["winner"] != 100:
+		_fail("KOTH winner expected 100, got %d" % captured["winner"])
+	else:
+		print("  [ok] KOTH: hold ≥ HOLD_GOAL_SEC → match_ended winner=100")
+	_cleanup_koth_test(mc, [p100], hill_map)
+
+
+func _cleanup_koth_test(mc: Node, players: Array, hill_map: Node) -> void:
+	players_by_peer = {}
+	map_root = null
+	mc.queue_free()
+	for p in players:
+		p.queue_free()
+	hill_map.queue_free()
+
+
+const _FAKE_PLAYER := preload("res://tests/_fake_player.gd")
+
+
+# Build a minimal stand-in for PlayerController — just enough fields the
+# arcade-rule scripts read. See _fake_player.gd for the field surface.
+func _make_fake_player() -> Node3D:
+	var n := Node3D.new()
+	n.set_script(_FAKE_PLAYER)
+	return n
 
 
 func _fail(msg: String) -> void:

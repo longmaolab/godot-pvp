@@ -90,19 +90,29 @@ func _explode() -> void:
 	var max_dmg: float = weapon.explode_damage
 	var net_rpc: Node = get_tree().root.get_node_or_null(^"NetRpc")
 	# Broadcast explosion so every client can spawn VFX + free their proxy.
-	if net_rpc != null and proj_id > 0:
+	# In practice (offline) proj_id stays -1 so this RPC is skipped — the
+	# local player's PRACTICE doesn't have peers anyway.
+	if net_rpc != null and proj_id > 0 and multiplayer.is_server():
 		net_rpc.server_throwable_explode.rpc(proj_id, center)
-	# Find every player in radius and apply damage with linear falloff.
-	# Player lookup via the game_controller's players_by_peer (queried
-	# by walking up the tree to find /root/Game).
+	# Find every player + bot in radius and apply damage with linear falloff.
+	# Player lookup via the game_controller's players_by_peer; in practice
+	# mode bots aren't in that dict, so we also scan game.bots as a
+	# fallback. Same falloff math applies to both pools.
 	var game: Node = get_tree().root.get_node_or_null(^"Game")
-	if game == null or not "players_by_peer" in game:
+	if game == null:
 		queue_free()
 		return
-	for peer in game.players_by_peer.keys():
-		var victim: Node = game.players_by_peer[peer]
-		if victim == null or not is_instance_valid(victim):
-			continue
+	var victims_seen: Array = []
+	if "players_by_peer" in game:
+		for peer in game.players_by_peer.keys():
+			var v: Node = game.players_by_peer[peer]
+			if v != null and is_instance_valid(v) and not v in victims_seen:
+				victims_seen.append(v)
+	if "bots" in game:
+		for b in game.bots:
+			if b != null and is_instance_valid(b) and not b in victims_seen:
+				victims_seen.append(b)
+	for victim in victims_seen:
 		if "is_dead" in victim and victim.is_dead:
 			continue
 		var dist: float = victim.global_position.distance_to(center)
@@ -115,8 +125,9 @@ func _explode() -> void:
 		if victim.has_method(&"apply_damage"):
 			victim.apply_damage(dmg, shooter)
 		# Broadcast feed line via existing damage broadcast so each client
-		# sees the AoE outcome and updates HP locally.
-		if net_rpc != null and "server_apply_damage" in net_rpc:
+		# sees the AoE outcome and updates HP locally. Skip in practice
+		# (no clients to broadcast to + .rpc() with no peers can error).
+		if net_rpc != null and "server_apply_damage" in net_rpc and multiplayer.is_server():
 			var victim_peer: int = victim.get_multiplayer_authority()
 			var src_peer: int = shooter.get_multiplayer_authority() if shooter != null and is_instance_valid(shooter) else 0
 			net_rpc.server_apply_damage.rpc(victim_peer, victim.hp, src_peer,

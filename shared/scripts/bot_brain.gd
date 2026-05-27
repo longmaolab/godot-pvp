@@ -50,6 +50,12 @@ var _aim_smoothing: float = 8.0
 var _extra_fire_cooldown: float = 0.0
 var _next_fire_after: float = 0.0
 var _miss_chance: float = 0.25
+# Throwable cadence — every THROWABLE_INTERVAL seconds we try a one-shot
+# toss with the first throwable in loadout. Randomized initial value so
+# multiple bots don't all throw on the same frame.
+const THROWABLE_INTERVAL_MIN := 8.0
+const THROWABLE_INTERVAL_MAX := 18.0
+var _next_throwable_at: float = 0.0
 
 
 func _ready() -> void:
@@ -178,8 +184,62 @@ func _step_weapon(delta: float) -> void:
 	var now_s: float = Time.get_ticks_msec() / 1000.0
 	if now_s < _next_fire_after:
 		return
+	# Occasional throwable toss — see _maybe_throw_grenade for the logic.
+	# Runs BEFORE try_fire so a successful throw consumes the tick.
+	if _maybe_throw_grenade(now_s):
+		_next_fire_after = now_s + _extra_fire_cooldown
+		return
 	if try_fire():
 		_next_fire_after = now_s + _extra_fire_cooldown
+
+
+# Periodically swap to a throwable in loadout, fire it, swap back. Returns
+# true iff a throw was actually attempted (cooldown reached + throwable
+# present + target within practical AoE range). The caller treats a true
+# return like a regular fire — arms _next_fire_after etc.
+func _maybe_throw_grenade(now_s: float) -> bool:
+	if now_s < _next_throwable_at:
+		return false
+	if loadout.size() < 2:
+		return false
+	# Find first throwable in loadout.
+	var thrown: Resource = null
+	var thrown_idx: int = -1
+	for i in loadout.size():
+		var w: Resource = loadout[i]
+		if w == null:
+			continue
+		if "is_throwable" in w and w.is_throwable:
+			thrown = w
+			thrown_idx = i
+			break
+	if thrown == null:
+		return false
+	# Reschedule regardless of throw success — don't spam if conditions
+	# aren't met right now.
+	_next_throwable_at = now_s + randf_range(THROWABLE_INTERVAL_MIN, THROWABLE_INTERVAL_MAX)
+	if target == null or not is_instance_valid(target):
+		return false
+	var dist: float = global_position.distance_to(target.global_position)
+	# Only throw at mid-range — too close = self-damage, too far = wasted.
+	if dist < thrown.explode_radius * 1.5 or dist > 30.0:
+		return false
+	# Swap to throwable, fire, swap back. equip_by_id mirrors what a
+	# human player would do via slot keys.
+	var saved_id: StringName = weapon_def.id if weapon_def != null else &""
+	if not has_method(&"equip_by_id"):
+		return false
+	equip_by_id(thrown.id)
+	# Refill the throwable's mag in case prior throws emptied it — bots
+	# don't carry reload UX, just always have one ready.
+	_ammo_state[thrown.id] = {"in_mag": thrown.magazine, "reserve": thrown.reserve}
+	if has_method(&"_sync_ammo_from_state"):
+		_sync_ammo_from_state()
+	var fired_ok: bool = try_fire()
+	# Always swap back so the bot resumes shooting its primary.
+	if not saved_id.is_empty() and saved_id != thrown.id:
+		equip_by_id(saved_id)
+	return fired_ok
 
 
 ## Raycast from camera to target. World-only mask: we just want to know if a
