@@ -368,6 +368,11 @@ func _populate_weapons_dialog() -> void:
 		var fname: String = dir.get_next()
 		if fname == "":
 			break
+		# Web export rewrites .tres → .tres.remap (path indirection). Without
+		# stripping the suffix the suffix check below rejects everything and
+		# the dialog ends up empty on web. Matches weapon_registry.gd:42.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
 		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
 			continue
 		var wpn: Resource = load("res://shared/data/weapons/" + fname)
