@@ -73,7 +73,7 @@ func _render_scoreboard(scores: Dictionary, winner_peer: int) -> void:
 		var is_self: bool = (p == local_peer)
 		var label_name: String = "You (peer %d)" % p if is_self else "Peer %d" % p
 		if p == winner_peer:
-			label_name = "🏆 " + label_name
+			label_name = "[W]" + label_name
 		var row := _make_row(
 			label_name,
 			str(int(kills.get(p, 0))),

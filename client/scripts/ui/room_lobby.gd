@@ -105,7 +105,7 @@ func _apply_room_state(state: Dictionary) -> void:
 	room_id_label.text = "房间 %s" % _room_id
 	var map_path: String = state.get("map", "")
 	var mode_path: String = state.get("mode", "")
-	map_label.text = "📍  %s   🎯  %s" % [_short(map_path) if not map_path.is_empty() else "(默认)",
+	map_label.text = "@ %s * %s" % [_short(map_path) if not map_path.is_empty() else "(默认)",
 		_short(mode_path) if not mode_path.is_empty() else "(无模式)"]
 
 	# Refresh player list. Each row shows skin letter + name + role badge.
@@ -129,7 +129,7 @@ func _apply_room_state(state: Dictionary) -> void:
 			display_name = "%s (你)" % display_name
 		var role_badge: String = ""
 		if peer_int == _host_peer:
-			role_badge = "👑 房主"
+			role_badge = "[K] 房主"
 		elif bool(prof.get("ready", false)):
 			role_badge = "✅ READY"
 			ready_count += 1
@@ -137,7 +137,7 @@ func _apply_room_state(state: Dictionary) -> void:
 			role_badge = "⏳ 等待"
 		if peer_int != _host_peer:
 			joiner_count += 1
-		player_list.add_item("[%s]  %-16s  %s" % [skin_letter, display_name, role_badge])
+		player_list.add_item("[%s] %-16s %s" % [skin_letter, display_name, role_badge])
 
 	# START is host-only. Phase 1 = solo START allowed (1 player is OK).
 	start_btn.visible = _is_host
@@ -151,7 +151,7 @@ func _apply_room_state(state: Dictionary) -> void:
 	# set_pressed_no_signal so the toggled signal doesn't re-fire while we
 	# sync the visual state to what the server told us.
 	ready_btn.set_pressed_no_signal(_my_ready)
-	ready_btn.text = "✅  已准备 / READY" if _my_ready else "⏳  READY 我准备好了"
+	ready_btn.text = "✅ 已准备 / READY" if _my_ready else "⏳ READY 我准备好了"
 
 	if _is_host:
 		if joiner_count == 0:
@@ -222,7 +222,7 @@ func _on_ready_toggled(pressed: bool) -> void:
 	if _is_host:
 		return   # host doesn't have a ready bit — implicit always-ready
 	_my_ready = pressed
-	ready_btn.text = "✅  已准备 / READY" if pressed else "⏳  READY 我准备好了"
+	ready_btn.text = "✅ 已准备 / READY" if pressed else "⏳ READY 我准备好了"
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
 		net_rpc.client_set_ready.rpc_id(1, pressed)

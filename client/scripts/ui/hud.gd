@@ -131,7 +131,7 @@ func _build_scoreboard() -> void:
 	panel.add_child(v)
 
 	var title := Label.new()
-	title.text = "▣  战绩"
+	title.text = "▣ 战绩"
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", Color(0.55, 0.78, 0.95, 1))
 	v.add_child(title)
@@ -194,7 +194,7 @@ func _render_scoreboard() -> void:
 		hb.add_child(letter)
 		# Name — fills remaining width.
 		var name_lbl := Label.new()
-		name_lbl.text = "%s%s" % [name_text, "  ★" if is_me else ""]
+		name_lbl.text = "%s%s" % [name_text, "★" if is_me else ""]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.add_theme_font_size_override("font_size", 15)
 		name_lbl.add_theme_color_override("font_color", row_color)
@@ -230,7 +230,7 @@ func bind_player(player: Node) -> void:
 func _on_weapon_switched(new_weapon: Resource) -> void:
 	if new_weapon == null:
 		return
-	weapon_name_label.text = "%s   ·   %s" % [new_weapon.display_name, new_weapon.type_label]
+	weapon_name_label.text = "%s · %s" % [new_weapon.display_name, new_weapon.type_label]
 	push_feed("equipped %s" % new_weapon.display_name, Color(0.6, 0.95, 1.0))
 
 
@@ -364,7 +364,7 @@ func set_mode_badge(text: String) -> void:
 
 func _update_credits(new_total: int) -> void:
 	if credits_pill != null:
-		credits_pill.text = "💰 %d" % new_total
+		credits_pill.text = "$ %d" % new_total
 
 
 ## Ability cooldown bar — polled each frame.
@@ -387,11 +387,11 @@ func _process(_delta: float) -> void:
 		var until: float = _ability_player._ability_cooldown_until
 		if until <= now_s:
 			ability_bar.value = 1.0
-			ability_label.text = "Q · %s  READY" % a.name
+			ability_label.text = "Q · %s READY" % a.name
 		else:
 			var remaining: float = until - now_s
 			ability_bar.value = clampf(1.0 - remaining / cd_total, 0.0, 1.0)
-			ability_label.text = "Q · %s  %.1fs" % [a.name, remaining]
+			ability_label.text = "Q · %s %.1fs" % [a.name, remaining]
 
 
 ## Tiered kill-streak announcer. Each successive kill within STREAK_RESET_SEC
@@ -442,7 +442,7 @@ func show_kill_confirm(victim_name: String) -> void:
 	t.tween_property(kill_confirm, "modulate:a", 1.0, 0.05)
 	t.chain().tween_interval(0.55)
 	t.chain().tween_property(kill_confirm, "modulate:a", 0.0, 0.25)
-	push_feed("[X]  killed %s%s" % [victim_name, "" if streak_label == "" else "  -  " + streak_label],
+	push_feed("[X] killed %s%s" % [victim_name, "" if streak_label == "" else "-" + streak_label],
 		Color(1, 0.6, 0.4))
 	_play_audio(&"play_kill")
 

@@ -6,27 +6,27 @@ class_name CommsWheel
 ## net via NetRpc.client_chat_line and locally pushed to the HUD feed.
 
 const TACTICAL := [
-	{"text": "RUN!",                 "color": Color(1, 0.4, 0.4),   "emoji": "🏃"},
-	{"text": "CHARGE!",              "color": Color(1, 0.4, 0.4),   "emoji": "⚔️"},
-	{"text": "Cover me!",            "color": Color(1, 0.85, 0.3),  "emoji": "🛡️"},
-	{"text": "Enemy spotted!",       "color": Color(1, 0.4, 0.4),   "emoji": "👁️"},
-	{"text": "Push together!",       "color": Color(0.5, 0.95, 0.5),"emoji": "👊"},
-	{"text": "Fall back!",           "color": Color(1, 0.5, 0.4),   "emoji": "⬅️"},
-	{"text": "Sorry!",               "color": Color(0.55, 0.8, 1),  "emoji": "🙏"},
-	{"text": "Nice shot!",           "color": Color(0.55, 0.85, 1), "emoji": "👍"},
-	{"text": "Scatter!",             "color": Color(1, 0.65, 0.3),  "emoji": "💨"},
+	{"text": "RUN!",                 "color": Color(1, 0.4, 0.4),   "emoji": ""},
+	{"text": "CHARGE!",              "color": Color(1, 0.4, 0.4),   "emoji": "⚔"},
+	{"text": "Cover me!",            "color": Color(1, 0.85, 0.3),  "emoji": ""},
+	{"text": "Enemy spotted!",       "color": Color(1, 0.4, 0.4),   "emoji": ""},
+	{"text": "Push together!",       "color": Color(0.5, 0.95, 0.5),"emoji": ""},
+	{"text": "Fall back!",           "color": Color(1, 0.5, 0.4),   "emoji": "⬅"},
+	{"text": "Sorry!",               "color": Color(0.55, 0.8, 1),  "emoji": ""},
+	{"text": "Nice shot!",           "color": Color(0.55, 0.85, 1), "emoji": ""},
+	{"text": "Scatter!",             "color": Color(1, 0.65, 0.3),  "emoji": ""},
 ]
 
 const SOCIAL := [
-	{"text": "Let's break this deadlock!", "color": Color(1, 0.55, 0.8),  "emoji": "🤔"},
-	{"text": "Hold position!",             "color": Color(1, 0.55, 0.3),  "emoji": "🛑"},
-	{"text": "Regroup on me!",             "color": Color(0.55, 0.85, 1), "emoji": "🎯"},
-	{"text": "Sniper!",                    "color": Color(1, 0.4, 0.4),   "emoji": "🔭"},
-	{"text": "Watch your flank!",          "color": Color(1, 0.85, 0.3),  "emoji": "⚠️"},
-	{"text": "Low HP!",                    "color": Color(1, 0.4, 0.4),   "emoji": "❤️"},
-	{"text": "Thanks!",                    "color": Color(0.55, 0.95, 0.55),"emoji": "🙌"},
-	{"text": "GG!",                        "color": Color(0.85, 0.55, 1), "emoji": "🏆"},
-	{"text": "Distract them!",             "color": Color(1, 0.55, 0.8),  "emoji": "🎭"},
+	{"text": "Let's break this deadlock!", "color": Color(1, 0.55, 0.8),  "emoji": ""},
+	{"text": "Hold position!",             "color": Color(1, 0.55, 0.3),  "emoji": "[!]"},
+	{"text": "Regroup on me!",             "color": Color(0.55, 0.85, 1), "emoji": "*"},
+	{"text": "Sniper!",                    "color": Color(1, 0.4, 0.4),   "emoji": ""},
+	{"text": "Watch your flank!",          "color": Color(1, 0.85, 0.3),  "emoji": "⚠"},
+	{"text": "Low HP!",                    "color": Color(1, 0.4, 0.4),   "emoji": "❤"},
+	{"text": "Thanks!",                    "color": Color(0.55, 0.95, 0.55),"emoji": ""},
+	{"text": "GG!",                        "color": Color(0.85, 0.55, 1), "emoji": "[W]"},
+	{"text": "Distract them!",             "color": Color(1, 0.55, 0.8),  "emoji": ""},
 ]
 
 @onready var header: Label = $Center/Card/V/Header
@@ -87,11 +87,11 @@ func _render_lines() -> void:
 	for child in lines_box.get_children():
 		child.queue_free()
 	var set_data: Array = TACTICAL if _current_set == &"tactical" else SOCIAL
-	header.text = "TACTICAL  /  Z" if _current_set == &"tactical" else "SOCIAL  /  X"
+	header.text = "TACTICAL / Z" if _current_set == &"tactical" else "SOCIAL / X"
 	for i in set_data.size():
 		var line: Dictionary = set_data[i]
 		var btn := Button.new()
-		btn.text = "%d.  %s  %s" % [i + 1, line["emoji"], line["text"]]
+		btn.text = "%d. %s %s" % [i + 1, line["emoji"], line["text"]]
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_color_override(&"font_color", line["color"])
 		btn.add_theme_font_size_override(&"font_size", 14)
@@ -108,7 +108,7 @@ func _select(idx: int) -> void:
 	var line: Dictionary = set_data[idx]
 	# Local: push to HUD feed.
 	if _hud != null and _hud.has_method(&"push_feed"):
-		_hud.push_feed("📣  " + String(line["text"]), line["color"])
+		_hud.push_feed("!" + String(line["text"]), line["color"])
 	# Network: broadcast via NetRpc autoload (only meaningful in MP).
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null and multiplayer.has_multiplayer_peer() \

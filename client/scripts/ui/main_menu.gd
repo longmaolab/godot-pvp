@@ -205,9 +205,9 @@ func _ready() -> void:
 	_populate_weapons_dialog()
 	var weapon_count: int = _count_weapons_on_disk()
 	# Stat pills along the top of the right card.
-	stat_weapons.text = "▣  %d 武器" % weapon_count
-	stat_modes.text = "◇  %d 模式" % MODES.size()
-	stat_maps.text = "◈  %d 地图" % MAPS.size()
+	stat_weapons.text = "▣ %d 武器" % weapon_count
+	stat_modes.text = "◇ %d 模式" % MODES.size()
+	stat_maps.text = "◈ %d 地图" % MAPS.size()
 	status_label.text = "M3 vertical slice · server-authoritative · 9 test suites green"
 	# Invite-link auto-join: if launched in the browser with ?room=AXJ7
 	# in the URL, pre-fill the code field and fire the join flow. Deferred
@@ -245,7 +245,7 @@ func _maybe_auto_join_from_url() -> void:
 	if code.length() != 4:
 		return
 	room_code_input.text = code
-	status_label.text = "🔗 邀请链接：%s" % code
+	status_label.text = "邀请链接：%s" % code
 	_on_join_by_code_pressed()
 
 
@@ -298,7 +298,7 @@ func _refresh_skin_label() -> void:
 	var s: Node = get_node(^"/root/Settings")
 	# A..R letter mapping mirrors PlayerController.SKIN_LETTERS.
 	var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
-	skin_name_label.text = "Character %s   (%d / 18)" % [letter, s.skin_index + 1]
+	skin_name_label.text = "Character %s (%d / 18)" % [letter, s.skin_index + 1]
 	_refresh_summary()
 
 
@@ -308,14 +308,14 @@ func _refresh_skin_label() -> void:
 func _refresh_summary() -> void:
 	if summary_map != null and map_picker != null:
 		var midx: int = clampi(map_picker.selected, 0, MAPS.size() - 1)
-		summary_map.text = "📍  %s" % MAPS[midx].name
+		summary_map.text = "@ %s" % MAPS[midx].name
 	if summary_mode != null and mode_picker != null and MODES.size() > 0:
 		var oidx: int = clampi(mode_picker.selected, 0, MODES.size() - 1)
-		summary_mode.text = "🎯  %s" % MODES[oidx].name
+		summary_mode.text = "* %s" % MODES[oidx].name
 	if summary_skin != null and has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
-		summary_skin.text = "👤  Character %s" % letter
+		summary_skin.text = "Character %s" % letter
 
 
 func _on_name_changed(new_text: String) -> void:
@@ -424,7 +424,7 @@ func _append_weapon_row(wpn: Resource) -> void:
 	header.add_child(name_lbl)
 
 	var type_lbl := Label.new()
-	type_lbl.text = "·  " + wpn.type_label
+	type_lbl.text = "·" + wpn.type_label
 	type_lbl.add_theme_font_size_override(&"font_size", 14)
 	type_lbl.add_theme_color_override(&"font_color", Color(0.55, 0.82, 1, 0.85))
 	header.add_child(type_lbl)
@@ -742,10 +742,10 @@ func _enter_staging(as_host: bool) -> void:
 	staging_panel.visible = true
 	start_btn.visible = as_host
 	if as_host:
-		staging_status.text = "🌐  Hosting on :7777 — 等人加入"
+		staging_status.text = "Hosting on :7777 — 等人加入"
 		staging_count.text = "Connected: 1 (you) — 可以直接 START 单人开"
 	else:
-		staging_status.text = "🔗  Connecting to host..."
+		staging_status.text = "Connecting to host..."
 		staging_count.text = "等房主点 START"
 	# Hide every "normal menu" node in the right card so START is the only
 	# primary action visible — no more PRACTICE button competing for the
@@ -792,7 +792,7 @@ func _on_peer_disconnected_staging(_id: int) -> void:
 func _on_connected_to_host_staging() -> void:
 	if not _is_staging or _is_host:
 		return
-	staging_status.text = "🔗  Connected — 等房主点 START"
+	staging_status.text = "Connected — 等房主点 START"
 	# Send the hello handshake so the server replies with server_mode_info
 	# — that's what _on_server_mode_info_for_routing listens for to decide
 	# between staying on this staging panel (listen-host) and jumping into

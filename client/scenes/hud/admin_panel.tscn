@@ -44,45 +44,45 @@ theme_override_constants/separation = 4
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(1, 0.4, 0.6, 1)
-text = "⚡  ADMIN PANEL  [F2]"
+text = "⚡ ADMIN PANEL [F2]"
 horizontal_alignment = 1
 
 [node name="Sep" type="HSeparator" parent="Card/V"]
 
 [node name="FlyBtn" type="CheckButton" parent="Card/V"]
-text = "🪂  Fly mode  [H]"
+text = "Fly mode [H]"
 theme_override_font_sizes/font_size = 13
 
 [node name="GodBtn" type="CheckButton" parent="Card/V"]
-text = "🛡  God mode  [J]"
+text = "God mode [J]"
 theme_override_font_sizes/font_size = 13
 
 [node name="InfAmmoBtn" type="CheckButton" parent="Card/V"]
-text = "♾  Infinite ammo  [L]"
+text = "♾ Infinite ammo [L]"
 theme_override_font_sizes/font_size = 13
 
 [node name="SpeedBtn" type="CheckButton" parent="Card/V"]
-text = "⚡  Speed 3×  [N]"
+text = "⚡ Speed 3× [N]"
 theme_override_font_sizes/font_size = 13
 
 [node name="FreezeBtn" type="CheckButton" parent="Card/V"]
-text = "🧊  Freeze bots  [M]"
+text = "Freeze bots [M]"
 theme_override_font_sizes/font_size = 13
 
 [node name="Sep2" type="HSeparator" parent="Card/V"]
 
 [node name="HealBtn" type="Button" parent="Card/V"]
-text = "❤  FULL HEAL"
+text = "❤ FULL HEAL"
 theme_override_font_sizes/font_size = 13
 
 [node name="AmmoBtn" type="Button" parent="Card/V"]
-text = "📦  REFILL ALL AMMO"
+text = "REFILL ALL AMMO"
 theme_override_font_sizes/font_size = 13
 
 [node name="NukeBtn" type="Button" parent="Card/V"]
-text = "💀  NUKE ALL BOTS"
+text = "[X] NUKE ALL BOTS"
 theme_override_font_sizes/font_size = 13
 
 [node name="CreditsBtn" type="Button" parent="Card/V"]
-text = "💰  +1000 CREDITS"
+text = "$ +1000 CREDITS"
 theme_override_font_sizes/font_size = 13

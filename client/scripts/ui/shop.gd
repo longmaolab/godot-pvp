@@ -106,13 +106,13 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 	var header := HBoxContainer.new()
 	v.add_child(header)
 	var title := Label.new()
-	title.text = "★  " + b.display_name
+	title.text = "★" + b.display_name
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override(&"font_size", 20)
 	title.add_theme_color_override(&"font_color", b.theme_color)
 	header.add_child(title)
 	var savings_lbl := Label.new()
-	savings_lbl.text = "省 %d💰" % b.savings()
+	savings_lbl.text = "省 %d$" % b.savings()
 	savings_lbl.add_theme_color_override(&"font_color", Color(0.5, 1, 0.5))
 	savings_lbl.add_theme_font_size_override(&"font_size", 13)
 	header.add_child(savings_lbl)
@@ -128,7 +128,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 		if w == null:
 			continue
 		var chip := Label.new()
-		var prefix: String = "✓ " if s.is_owned(String(w.id)) else ""
+		var prefix: String = "✓" if s.is_owned(String(w.id)) else ""
 		chip.text = "%s%s" % [prefix, w.display_name]
 		chip.add_theme_font_size_override(&"font_size", 11)
 		var col: Color = Color(0.55, 0.75, 0.55) if s.is_owned(String(w.id)) else Color(1, 0.85, 0.4)
@@ -138,7 +138,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 	var buy_row := HBoxContainer.new()
 	v.add_child(buy_row)
 	var price_lbl := Label.new()
-	price_lbl.text = "总价 💰%d  (单买 💰%d)" % [b.price_credits, b.full_price()]
+	price_lbl.text = "总价 $%d (单买 $%d)" % [b.price_credits, b.full_price()]
 	price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	price_lbl.add_theme_color_override(&"font_color", Color(0.7, 0.85, 0.95))
 	price_lbl.add_theme_font_size_override(&"font_size", 12)
@@ -153,7 +153,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 		buy_btn.text = "全部已拥有"
 		buy_btn.disabled = true
 	else:
-		buy_btn.text = "BUY · 💰%d" % b.price_credits
+		buy_btn.text = "BUY · $%d" % b.price_credits
 		buy_btn.pressed.connect(_on_buy_bundle.bind(b))
 	buy_row.add_child(buy_btn)
 	return pc
@@ -162,7 +162,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 func _on_buy_bundle(b: Resource) -> void:
 	var s: Node = get_node(^"/root/Settings")
 	if not s.spend_credits(b.price_credits):
-		_reveal("[color=#ff8888]Not enough credits — need 💰%d, have 💰%d.[/color]" % [b.price_credits, s.credits])
+		_reveal("[color=#ff8888]Not enough credits — need $%d, have $%d.[/color]" % [b.price_credits, s.credits])
 		return
 	var unlocked: Array = []
 	for w in b.items:
@@ -171,7 +171,7 @@ func _on_buy_bundle(b: Resource) -> void:
 			unlocked.append(w.display_name)
 	var msg: String = "[color=#ffd84a]★ %s purchased ★[/color]\n\n[color=#88ff88]Unlocked:[/color]\n" % b.display_name
 	for n in unlocked:
-		msg += "  • " + n + "\n"
+		msg += "•" + n + "\n"
 	_reveal(msg)
 
 
@@ -184,8 +184,8 @@ func _refresh_currency() -> void:
 	if not has_node(^"/root/Settings"):
 		return
 	var s: Node = get_node(^"/root/Settings")
-	credits_label.text = "💰 %d" % s.credits
-	fragments_label.text = "🧩 %d" % s.fragments
+	credits_label.text = "$ %d" % s.credits
+	fragments_label.text = "%d" % s.fragments
 
 
 # ── Weapons tab ───────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ func _make_weapon_row(w: Resource) -> PanelContainer:
 	pc.add_child(row)
 
 	var name_label := Label.new()
-	name_label.text = "%s  ·  %s  ·  DMG %d" % [w.display_name, w.type_label, int(w.damage)]
+	name_label.text = "%s · %s · DMG %d" % [w.display_name, w.type_label, int(w.damage)]
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.add_theme_font_size_override(&"font_size", 13)
 	row.add_child(name_label)
@@ -262,14 +262,14 @@ func _make_weapon_row(w: Resource) -> PanelContainer:
 		buy_btn.disabled = true
 		buy_btn.text = "locked"
 	elif s.is_owned(w.id):
-		price_label.text = "💰 %d" % w.price_credits
+		price_label.text = "$ %d" % w.price_credits
 		price_label.add_theme_color_override(&"font_color", Color(0.6, 0.8, 0.95))
 		buy_btn.disabled = true
 		buy_btn.text = "OWNED"
 	else:
-		price_label.text = "💰 %d" % w.price_credits
+		price_label.text = "$ %d" % w.price_credits
 		price_label.add_theme_color_override(&"font_color", Color(1, 0.85, 0.4))
-		buy_btn.text = "BUY · 💰%d" % w.price_credits
+		buy_btn.text = "BUY · $%d" % w.price_credits
 		buy_btn.pressed.connect(_on_buy_weapon.bind(w))
 	return pc
 
@@ -277,7 +277,7 @@ func _make_weapon_row(w: Resource) -> PanelContainer:
 func _on_buy_weapon(w: Resource) -> void:
 	var s: Node = get_node(^"/root/Settings")
 	if not s.spend_credits(w.price_credits):
-		_reveal("[color=#ff8888]Not enough credits![/color]\n你需要 💰 %d，但只有 💰 %d。" % [w.price_credits, s.credits])
+		_reveal("[color=#ff8888]Not enough credits![/color]\n你需要 $ %d，但只有 $ %d。" % [w.price_credits, s.credits])
 		return
 	s.mark_purchased(String(w.id))
 	_reveal("[color=#a8ff88]Unlocked %s![/color]\n[color=#cccccc]%s[/color]\n\n按 1-4 切换武器时可选。" % [w.display_name, w.description])
@@ -341,12 +341,12 @@ func _on_open_chest(kind: StringName) -> void:
 
 func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name: String) -> void:
 	var lines: Array[String] = []
-	lines.append("[center][color=#ffd84a]✦  %s CHEST  ✦[/color][/center]" % \
+	lines.append("[center][color=#ffd84a]✦ %s CHEST ✦[/color][/center]" % \
 		("COMMON" if kind == &"common" else "RARE"))
 	lines.append("")
-	lines.append("[color=#88ccff]🧩  +%d fragments[/color]" % frags)
+	lines.append("[color=#88ccff] +%d fragments[/color]" % frags)
 	if creds > 0:
-		lines.append("[color=#ffd84a]💰  +%d credits[/color]" % creds)
+		lines.append("[color=#ffd84a]$ +%d credits[/color]" % creds)
 	if weapon_name != "":
 		lines.append("")
 		lines.append("[color=#ff88dd]★ JACKPOT — unlocked %s! ★[/color]" % weapon_name)
@@ -357,20 +357,20 @@ func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name
 func _refresh_wheel_hint() -> void:
 	var s: Node = get_node(^"/root/Settings")
 	if s.has_free_spin_today():
-		wheel_spin_btn.text = "🎁  FREE SPIN"
-		wheel_hint.text = "今日免费一次！明天后续转盘要 100💰"
+		wheel_spin_btn.text = "FREE SPIN"
+		wheel_hint.text = "今日免费一次！明天后续转盘要 100$"
 	else:
-		wheel_spin_btn.text = "🎲  SPIN  ·  💰%d" % WHEEL_PAID_PRICE
-		wheel_hint.text = "免费转盘已用，需要 100💰 继续抽奖"
+		wheel_spin_btn.text = "[D] SPIN · $%d" % WHEEL_PAID_PRICE
+		wheel_hint.text = "免费转盘已用，需要 100$ 继续抽奖"
 
 
 const WHEEL_OUTCOMES := [
 	{"name": "jackpot",   "weight": 0.003, "label": "★ JACKPOT ★",        "color": "#ff88dd"},
-	{"name": "big_bundle","weight": 0.007, "label": "💎 BIG BUNDLE",       "color": "#ffaa66"},
+	{"name": "big_bundle","weight": 0.007, "label": "* BIG BUNDLE",       "color": "#ffaa66"},
 	{"name": "small_rare","weight": 0.05,  "label": "✨ small rare",       "color": "#aaff88"},
-	{"name": "big_frags", "weight": 0.14,  "label": "🧩×100 fragments",    "color": "#88ccff"},
-	{"name": "frags",     "weight": 0.35,  "label": "🧩×25 fragments",     "color": "#88aaee"},
-	{"name": "credits",   "weight": 0.45,  "label": "💰×80 credits",       "color": "#ffd84a"},
+	{"name": "big_frags", "weight": 0.14,  "label": "×100 fragments",    "color": "#88ccff"},
+	{"name": "frags",     "weight": 0.35,  "label": "×25 fragments",     "color": "#88aaee"},
+	{"name": "credits",   "weight": 0.45,  "label": "$×80 credits",       "color": "#ffd84a"},
 ]
 
 
@@ -380,7 +380,7 @@ func _on_spin() -> void:
 		s.record_free_spin()
 	else:
 		if not s.spend_credits(WHEEL_PAID_PRICE):
-			_reveal("[color=#ff8888]Need 100💰 for paid spin[/color]")
+			_reveal("[color=#ff8888]Need 100$ for paid spin[/color]")
 			return
 	wheel_spin_btn.disabled = true
 	# Pick outcome.
@@ -408,7 +408,7 @@ func _on_spin() -> void:
 func _apply_wheel_outcome(o: Dictionary, s: Node) -> void:
 	wheel_result.text = "[color=%s]%s[/color]" % [o["color"], o["label"]]
 	wheel_result.bbcode_enabled = true
-	wheel_result.text = "[center][color=%s]🎉  %s[/color][/center]" % [o["color"], o["label"]]
+	wheel_result.text = "[center][color=%s]! %s[/color][/center]" % [o["color"], o["label"]]
 	match o["name"]:
 		"credits":    s.award_credits(80)
 		"frags":      s.award_fragments(25)
@@ -484,11 +484,11 @@ func _make_upgrade_row(w: Resource, s: Node) -> PanelContainer:
 		btn.text = "%s lvl %d/3" % [stat_label, lvl]
 		if lvl < 3:
 			var cost: int = [30, 60, 120][lvl]
-			btn.text += "  🧩%d" % cost
+			btn.text += "%d" % cost
 			btn.pressed.connect(func(): s.bump_upgrade(String(w.id), stat))
 		else:
 			btn.disabled = true
-			btn.text += "  MAX"
+			btn.text += "MAX"
 		btn.custom_minimum_size = Vector2(140, 28)
 		row.add_child(btn)
 	return pc

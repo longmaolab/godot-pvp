@@ -155,7 +155,7 @@ horizontal_alignment = 1
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
-text = "★  MATCH COMPLETE  ★"
+text = "★ MATCH COMPLETE ★"
 horizontal_alignment = 1
 
 [node name="Sep1" type="HSeparator" parent="Center/Card/V"]
@@ -164,7 +164,7 @@ horizontal_alignment = 1
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
-text = "▶  SCOREBOARD"
+text = "▶ SCOREBOARD"
 
 [node name="ScoreboardList" type="VBoxContainer" parent="Center/Card/V"]
 theme_override_constants/separation = 4
@@ -181,7 +181,7 @@ theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("me_btn_normal")
 theme_override_styles/hover = SubResource("me_btn_hover")
-text = "🏠  返回主菜单"
+text = "[HOME] 返回主菜单"
 
 [node name="PlayAgainButton" type="Button" parent="Center/Card/V/ButtonsRow"]
 custom_minimum_size = Vector2(180, 52)
@@ -189,4 +189,4 @@ theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("me_btn_normal")
 theme_override_styles/hover = SubResource("me_btn_hover")
-text = "🔁  再来一局"
+text = "再来一局"

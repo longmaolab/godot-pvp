@@ -75,7 +75,7 @@ theme_override_styles/panel = SubResource("panel_glass")
 theme_override_constants/separation = 16
 
 [node name="Title" type="Label" parent="Center/Panel/V"]
-text = "▶  房间列表 / ROOMS"
+text = "▶ 房间列表 / ROOMS"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 28
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
@@ -104,7 +104,7 @@ theme_override_constants/separation = 12
 
 [node name="RefreshButton" type="Button" parent="Center/Panel/V/Buttons"]
 custom_minimum_size = Vector2(120, 50)
-text = "🔄 刷新"
+text = "刷新"
 theme_override_font_sizes/font_size = 17
 theme_override_styles/normal = SubResource("btn_secondary")
 
@@ -117,7 +117,7 @@ theme_override_styles/normal = SubResource("btn_primary")
 
 [node name="JoinButton" type="Button" parent="Center/Panel/V/Buttons"]
 custom_minimum_size = Vector2(160, 50)
-text = "🔗 JOIN"
+text = "JOIN"
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_styles/normal = SubResource("btn_primary")

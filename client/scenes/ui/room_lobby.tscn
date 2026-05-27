@@ -84,13 +84,13 @@ theme_override_font_sizes/font_size = 32
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 
 [node name="MapLabel" type="Label" parent="Center/Panel/V"]
-text = "📍 ...   🎯 ..."
+text = "@ ... * ..."
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 17
 theme_override_colors/font_color = Color(0.55, 0.85, 1, 1)
 
 [node name="PlayersHeader" type="Label" parent="Center/Panel/V"]
-text = "▶  玩家 / PLAYERS"
+text = "▶ 玩家 / PLAYERS"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 1)
@@ -113,7 +113,7 @@ theme_override_constants/separation = 14
 
 [node name="StartButton" type="Button" parent="Center/Panel/V/Buttons"]
 custom_minimum_size = Vector2(280, 80)
-text = "▶   START MATCH"
+text = "▶ START MATCH"
 theme_override_font_sizes/font_size = 28
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0.06, 0.42, 0.22, 1)
@@ -123,7 +123,7 @@ visible = false
 
 [node name="ReadyButton" type="Button" parent="Center/Panel/V/Buttons"]
 custom_minimum_size = Vector2(280, 80)
-text = "⏳  READY 我准备好了"
+text = "⏳ READY 我准备好了"
 theme_override_font_sizes/font_size = 24
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_styles/normal = SubResource("btn_secondary")
