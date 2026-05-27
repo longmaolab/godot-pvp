@@ -35,6 +35,11 @@ var last_free_spin_iso: String = ""   # ISO date string
 # the same browser/install resumes the same row. NOT a cross-device login;
 # real accounts (P-M7) use handle/password and merge by device_id.
 var device_id: String = ""
+# P0-1: server-issued bearer token. Sent alongside device_id on every
+# request_profile; server validates it against the stored hash. Without a
+# matching token, knowing the device_id is no longer enough to inherit
+# someone else's account / credits / weapons.
+var auth_token: String = ""
 # Set after server_profile_received; 0 means "not yet bound on this session".
 var account_id: int = 0
 # True once we've round-tripped server_profile at least once this session.
@@ -87,6 +92,7 @@ func load_from_disk() -> void:
 	device_id = cfg.get_value("identity", "device_id", "")
 	if device_id.is_empty():
 		device_id = _generate_device_id()
+	auth_token = cfg.get_value("identity", "auth_token", "")
 	player_name = cfg.get_value("player", "name", player_name)
 	skin_index = cfg.get_value("player", "skin", skin_index)
 	master_volume = cfg.get_value("audio", "master", master_volume)
@@ -134,10 +140,23 @@ func flush_now() -> void:
 	_flush_to_disk()
 
 
+# Catch process / window shutdown so the trailing edge of the save-debounce
+# never gets dropped on quit. Without this, `award_credits()` (or any other
+# mutation) within the last SAVE_DEBOUNCE_S seconds before exit is lost: the
+# SceneTreeTimer is freed before its timeout fires, and `_save_pending=true`
+# is meaningless once we're gone. Web tab-close also hits NOTIFICATION_PREDELETE
+# during teardown, so the same handler covers both paths.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE or what == NOTIFICATION_EXIT_TREE:
+		if _save_pending:
+			_flush_to_disk()
+
+
 func _flush_to_disk() -> void:
 	_save_pending = false
 	var cfg := ConfigFile.new()
 	cfg.set_value("identity", "device_id", device_id)
+	cfg.set_value("identity", "auth_token", auth_token)
 	cfg.set_value("player", "name", player_name)
 	cfg.set_value("player", "skin", skin_index)
 	cfg.set_value("audio", "master", master_volume)
@@ -174,7 +193,10 @@ func sync_with_server() -> void:
 	if device_id.is_empty():
 		device_id = _generate_device_id()
 		save_to_disk()
-	net_rpc.client_request_profile.rpc_id(1, device_id, player_name, skin_index)
+	# P0-1: send our cached auth_token alongside device_id. Empty on first
+	# contact ever or after a wipe → server issues a fresh one in the
+	# server_profile reply, which _apply_server_profile persists.
+	net_rpc.client_request_profile.rpc_id(1, device_id, auth_token, player_name, skin_index)
 
 
 func _apply_server_profile(profile: Dictionary) -> void:
@@ -188,6 +210,13 @@ func _apply_server_profile(profile: Dictionary) -> void:
 	common_chests = int(profile.get("common_chests", common_chests))
 	rare_chests = int(profile.get("rare_chests", rare_chests))
 	upgrades = Dictionary(profile.get("upgrades", upgrades))
+	# P0-1: server-issued bearer token. Present only when the server JUST
+	# issued one (first contact ever, or first contact after the migration
+	# stamped our existing account). Subsequent server_profile pushes
+	# omit it because the cached token is still valid.
+	var issued_token: String = String(profile.get("auth_token", ""))
+	if not issued_token.is_empty():
+		auth_token = issued_token
 	# last_free_spin is server-ms now; keep iso fallback for offline-only render
 	save_to_disk()
 	synced_with_server = true

@@ -13,6 +13,17 @@ extends Node
 ## stay inert — they own no DB, no business logic. Only the DS executes.
 
 const Database = preload("res://server/scripts/database.gd")
+const _WEAPON_REGISTRY = preload("res://shared/scripts/weapon_registry.gd")
+
+# Lazy-built once per process; canonical source for weapon pricing on the
+# server side. Client-sent `price` arg is ignored.
+var _weapon_registry: Node = null
+
+
+func _get_weapon_registry() -> Node:
+	if _weapon_registry == null:
+		_weapon_registry = _WEAPON_REGISTRY.new()
+	return _weapon_registry
 
 # Anti-spam: per-peer rate windows for the heavier RPCs (purchase / chest
 # open / wheel spin). Stops a malicious client from draining the DB.
@@ -22,6 +33,11 @@ var _peer_rate: Dictionary = {}   # peer_id → { window_start_ms: int, count: i
 
 # Each connected peer's bound account_id. Empty until they client_request_profile.
 var _peer_account: Dictionary = {}   # peer_id (int) → account_id (int)
+
+# P0-1: token issued by bind_account but not yet pushed to client. Consumed
+# by the next _push_profile call so the client's persistence layer can save
+# it to user://settings.cfg for the next session.
+var _pending_issued_token: Dictionary = {}   # peer_id → token String
 
 # Pricing table — bumped here so we can tune without touching DB schema.
 # Mirror of pvp-game economy values for now. Server-canonical.
@@ -103,22 +119,33 @@ func _peer_ok_for_action(peer_id: int) -> bool:
 func _on_peer_disconnected(peer_id: int) -> void:
 	_peer_account.erase(peer_id)
 	_peer_rate.erase(peer_id)
+	_pending_issued_token.erase(peer_id)
 
 
 # ── Bootstrap ────────────────────────────────────────────────────────────
 
-func _on_request_profile(peer_id: int, device_id: String, local_name: String, local_skin: int) -> void:
+func _on_request_profile(peer_id: int, device_id: String, auth_token: String, local_name: String, local_skin: int) -> void:
 	if not _is_authoritative_server():
 		return
-	if device_id.is_empty() or device_id.length() > 64:
+	if device_id.length() > 64:
 		_ack(peer_id, "request_profile", false, "bad device_id")
 		return
-	var db: Node = get_node(^"/root/Database")
-	var account: Dictionary = db.get_or_create_account(device_id, local_name, local_skin)
-	if account.is_empty():
-		_ack(peer_id, "request_profile", false, "db error")
+	if auth_token.length() > 128:
+		_ack(peer_id, "request_profile", false, "bad token")
 		return
-	_peer_account[peer_id] = int(account.id)
+	var db: Node = get_node(^"/root/Database")
+	# P0-1: server-issued bearer token replaces "device_id alone == auth".
+	# bind_account returns {} if the supplied token doesn't match the
+	# account's stored hash — refuse the bind rather than letting an
+	# attacker with a stolen device_id inherit credits / weapons.
+	var bind: Dictionary = db.bind_account(device_id, auth_token, local_name, local_skin)
+	if bind.is_empty():
+		_ack(peer_id, "request_profile", false, "auth failed")
+		return
+	_peer_account[peer_id] = int(bind.account_id)
+	# Stash any newly-issued token so _push_profile attaches it to the
+	# server_profile payload. Empty = "you already had a valid token".
+	_pending_issued_token[peer_id] = String(bind.get("issued_token", ""))
 	_push_profile(peer_id)
 
 
@@ -156,6 +183,13 @@ func _push_profile(peer_id: int) -> void:
 		"owned":       owned,
 		"upgrades":    upgrades,
 	}
+	# Attach freshly-issued token (if any) — client persists it for the
+	# next session. Empty string means "your existing token is still good,
+	# don't touch what you have stored".
+	var token: String = String(_pending_issued_token.get(peer_id, ""))
+	if not token.is_empty():
+		profile["auth_token"] = token
+		_pending_issued_token.erase(peer_id)
 	var net_rpc: Node = get_node(^"/root/NetRpc")
 	net_rpc.server_profile.rpc_id(peer_id, profile)
 
@@ -190,11 +224,22 @@ func _on_set_skin(peer_id: int, skin: int) -> void:
 
 # ── Economy ─────────────────────────────────────────────────────────────
 
-func _on_purchase_weapon(peer_id: int, weapon_id: String, price: int) -> void:
+func _on_purchase_weapon(peer_id: int, weapon_id: String, _price: int) -> void:
+	# Client-sent `_price` is intentionally ignored — the server looks up the
+	# canonical price_credits on the WeaponDef resource. Reject unknown ids
+	# and zero-priced (non-buyable) weapons rather than silently floor-ing.
 	if not _is_authoritative_server() or not _peer_account.has(peer_id):
 		return
 	if not _peer_ok_for_action(peer_id):
 		_ack(peer_id, "purchase", false, "rate limited")
+		return
+	var weapon: Resource = _get_weapon_registry().get_weapon(StringName(weapon_id))
+	if weapon == null:
+		_ack(peer_id, "purchase", false, "unknown weapon")
+		return
+	var actual_price: int = int(weapon.price_credits)
+	if actual_price <= 0:
+		_ack(peer_id, "purchase", false, "not for sale")
 		return
 	var account_id: int = _peer_account[peer_id]
 	var db: Node = get_node(^"/root/Database")
@@ -203,9 +248,6 @@ func _on_purchase_weapon(peer_id: int, weapon_id: String, price: int) -> void:
 	if weapon_id in owned:
 		_ack(peer_id, "purchase", false, "already owned")
 		return
-	# Server-canonical price — client-sent `price` arg ignored (anti-cheat).
-	# Real lookup: TODO weapon registry server-side, hard-coded fallback for now.
-	var actual_price: int = max(100, price)   # min floor, client value as cap
 	if not db.spend_credits(account_id, actual_price):
 		_ack(peer_id, "purchase", false, "insufficient credits")
 		return
@@ -220,25 +262,47 @@ func _on_open_chest(peer_id: int, kind: String) -> void:
 	if not _peer_ok_for_action(peer_id):
 		_ack(peer_id, "open_chest", false, "rate limited")
 		return
+	# Whitelist kind — column names cannot be parameterised in SQL, so we
+	# never interpolate the client string into the query. Each kind has its
+	# own hard-coded SELECT/UPDATE branch below.
+	if kind != "common" and kind != "rare":
+		_ack(peer_id, "open_chest", false, "bad chest kind")
+		return
 	var account_id: int = _peer_account[peer_id]
 	var db: Node = get_node(^"/root/Database")
+	# Wrap the whole "spend chest-or-credits + roll reward + award credits +
+	# award fragments" sequence in a single transaction. Without this, a
+	# crash between "spent chest" and "awarded reward" leaves the player
+	# with -1 chest and zero compensation; or worse, the chest survives but
+	# the reward already got partially credited.
+	if not db.begin_transaction():
+		_ack(peer_id, "open_chest", false, "db busy")
+		return
 	# Two paths: spend a chest from inventory, or buy + open in one shot.
-	var col: String = "common_chests" if kind == "common" else "rare_chests"
-	db.db.query_with_bindings("SELECT %s AS qty, credits FROM economy WHERE account_id = ?" % col, [account_id])
+	if kind == "common":
+		db.db.query_with_bindings("SELECT common_chests AS qty, credits FROM economy WHERE account_id = ?", [account_id])
+	else:
+		db.db.query_with_bindings("SELECT rare_chests AS qty, credits FROM economy WHERE account_id = ?", [account_id])
 	if db.db.query_result.is_empty():
+		db.rollback()
 		_ack(peer_id, "open_chest", false, "no economy row")
 		return
 	var row: Dictionary = db.db.query_result[0]
 	var qty: int = int(row.get("qty", 0))
 	var credits: int = int(row.get("credits", 0))
 	if qty > 0:
-		db.db.query_with_bindings("UPDATE economy SET %s = %s - 1 WHERE account_id = ?" % [col, col], [account_id])
+		if kind == "common":
+			db.db.query_with_bindings("UPDATE economy SET common_chests = common_chests - 1 WHERE account_id = ?", [account_id])
+		else:
+			db.db.query_with_bindings("UPDATE economy SET rare_chests = rare_chests - 1 WHERE account_id = ?", [account_id])
 	else:
 		var price: int = int(CHEST_PRICE.get(kind, 9999))
 		if credits < price:
+			db.rollback()
 			_ack(peer_id, "open_chest", false, "insufficient credits")
 			return
 		if not db.spend_credits(account_id, price):
+			db.rollback()
 			_ack(peer_id, "open_chest", false, "race lost")
 			return
 	# Roll reward
@@ -249,6 +313,7 @@ func _on_open_chest(peer_id: int, kind: String) -> void:
 	var awarded_fragments: int = randi_range(int(fg[0]), int(fg[1]))
 	db.award_credits(account_id, awarded_credits)
 	db.award_fragments(account_id, awarded_fragments)
+	db.commit()
 	var reward := {"credits": awarded_credits, "fragments": awarded_fragments}
 	var net_rpc: Node = get_node(^"/root/NetRpc")
 	net_rpc.server_reward.rpc_id(peer_id, kind, reward)
@@ -302,7 +367,13 @@ func _on_spin_wheel(peer_id: int) -> void:
 		var remaining_ms: int = WHEEL_COOLDOWN_MS - (now - last)
 		_ack(peer_id, "spin", false, "wait %d hours" % (remaining_ms / 3_600_000))
 		return
-	# Pick random reward
+	# Atomic: stamp last_free_spin_ms + credit reward in one transaction.
+	# Without this, a crash mid-spin could either credit the reward without
+	# stamping the cooldown (= infinite free spins) or stamp without
+	# crediting (= player loses their reward).
+	if not db.begin_transaction():
+		_ack(peer_id, "spin", false, "db busy")
+		return
 	var reward: Dictionary = WHEEL_REWARDS[randi() % WHEEL_REWARDS.size()].duplicate()
 	if reward.has("credits"):
 		db.award_credits(account_id, int(reward.credits))
@@ -313,6 +384,7 @@ func _on_spin_wheel(peer_id: int) -> void:
 	if reward.has("rare_chests"):
 		db.db.query_with_bindings("UPDATE economy SET rare_chests = rare_chests + 1 WHERE account_id = ?", [account_id])
 	db.db.query_with_bindings("UPDATE economy SET last_free_spin_ms = ? WHERE account_id = ?", [now, account_id])
+	db.commit()
 	var net_rpc: Node = get_node(^"/root/NetRpc")
 	net_rpc.server_reward.rpc_id(peer_id, "wheel", reward)
 	_ack(peer_id, "spin", true, "")
@@ -354,21 +426,37 @@ func _on_register_account(peer_id: int, device_id: String, handle: String, passw
 		return
 	var pass_hash: String = db.hash_password(password)
 	# Two cases:
-	# (a) peer already has anonymous account by device_id → upgrade it
+	# (a) peer already has anonymous account by device_id → upgrade it,
+	#     but ONLY if the account isn't already claimed by someone else's
+	#     prior register (P0-1 hardening — without this an attacker who
+	#     bound to a victim's anon device_id could silently overwrite the
+	#     victim's handle + pass_hash and lock them out).
 	# (b) brand-new → create
 	if _peer_account.has(peer_id):
 		var acct_id: int = _peer_account[peer_id]
+		if db.account_is_registered(acct_id):
+			_ack(peer_id, "register", false, "account already registered")
+			return
 		db.db.query_with_bindings("UPDATE accounts SET handle = ?, pass_hash = ? WHERE id = ?", [h, pass_hash, acct_id])
 		_ack(peer_id, "register", true, "")
 		_push_profile(peer_id)
 		return
-	# Brand-new (no device_id binding yet)
-	var account: Dictionary = db.get_or_create_account(device_id, h, 0)
-	if account.is_empty():
+	# Brand-new (no device_id binding yet) — bootstrap via bind_account so
+	# the new account also gets an auth_token; otherwise it'd be stuck on
+	# the legacy "device_id alone" auth path forever.
+	var bind: Dictionary = db.bind_account(device_id, "", h, 0)
+	if bind.is_empty():
 		_ack(peer_id, "register", false, "db error")
+		return
+	var account: Dictionary = bind.account
+	if db.account_is_registered(int(account.id)):
+		# Race: someone else bound to this device_id and registered between
+		# our bind and the registration. Refuse to overwrite their handle.
+		_ack(peer_id, "register", false, "account already registered")
 		return
 	db.db.query_with_bindings("UPDATE accounts SET handle = ?, pass_hash = ? WHERE id = ?", [h, pass_hash, account.id])
 	_peer_account[peer_id] = int(account.id)
+	_pending_issued_token[peer_id] = String(bind.get("issued_token", ""))
 	_ack(peer_id, "register", true, "")
 	_push_profile(peer_id)
 

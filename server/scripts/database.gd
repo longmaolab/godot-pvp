@@ -14,6 +14,22 @@ extends Node
 const DB_PATH_LINUX := "/var/lib/godot-pvp/godot-pvp.db"
 const DB_PATH_FALLBACK := "user://godot-pvp.db"
 
+# Schema version. Bumped EACH time the schema needs ALTER. _migrate() runs
+# every boot, applies any `_MIGRATIONS[v]` entry whose key is > the DB's
+# stored `PRAGMA user_version`, and stamps the new version. `_CURRENT_SCHEMA_VERSION`
+# must equal the highest key in `_MIGRATIONS` (asserted at boot).
+#
+# Existing fresh-boot DBs (made via `CREATE TABLE IF NOT EXISTS` before
+# this framework existed) start at user_version=0; the v1 entry is a
+# no-op that just stamps them as "schema v1 = matches current CREATE
+# block". Future column additions add v2, v3, ... with the ALTER text.
+const _CURRENT_SCHEMA_VERSION := 2
+const _MIGRATIONS := {
+	1: "",   # baseline — CREATE TABLE IF NOT EXISTS already shipped this schema
+	2: "ALTER TABLE accounts ADD COLUMN auth_token_hash TEXT",
+	# 3: "..."
+}
+
 var db: Object = null   # SQLite instance (godot-sqlite gdextension)
 var _ready_for_queries: bool = false
 
@@ -40,8 +56,9 @@ func _ready() -> void:
 	db.query("PRAGMA journal_mode=WAL")
 	db.query("PRAGMA synchronous=NORMAL")
 	_create_tables()
+	_migrate()
 	_ready_for_queries = true
-	print("[Database] ready at %s (WAL mode, foreign_keys=ON)" % db.path)
+	print("[Database] ready at %s (WAL mode, foreign_keys=ON, schema v%d)" % [db.path, _read_schema_version()])
 
 
 ## True for dedicated server boot. Uses NetProtocol's helper (which
@@ -156,19 +173,160 @@ func get_or_create_account(device_id: String, default_name: String = "Player", d
 		db.query_with_bindings("UPDATE accounts SET last_seen_ms = ? WHERE id = ?", [now, row.id])
 		row["last_seen_ms"] = now
 		return row
-	# Create
+	# Create — wrap the 3 INSERTs + readback in a transaction so a crash
+	# between the INSERTs can't leave an account with no economy row (which
+	# made `get_economy` return {} → user shown 0 credits forever).
 	var safe_name: String = (default_name if not default_name.strip_edges().is_empty() else "Player").substr(0, 24)
 	var safe_skin: int = clampi(default_skin, 0, 17)
-	db.query_with_bindings("""
+	if not begin_transaction():
+		return {}
+	var ok: bool = db.query_with_bindings("""
 		INSERT INTO accounts (device_id, created_ms, last_seen_ms, player_name, skin_index)
 		VALUES (?, ?, ?, ?, ?)
 	""", [device_id, now, now, safe_name, safe_skin])
 	var account_id: int = db.last_insert_rowid
-	# Bootstrap economy row
-	db.query_with_bindings("INSERT INTO economy (account_id) VALUES (?)", [account_id])
-	db.query_with_bindings("INSERT INTO stats_lifetime (account_id) VALUES (?)", [account_id])
+	if ok:
+		ok = db.query_with_bindings("INSERT INTO economy (account_id) VALUES (?)", [account_id])
+	if ok:
+		ok = db.query_with_bindings("INSERT INTO stats_lifetime (account_id) VALUES (?)", [account_id])
+	if not ok:
+		rollback()
+		push_error("[Database] get_or_create_account: bootstrap INSERTs failed; rolled back")
+		return {}
+	commit()
 	db.query_with_bindings("SELECT * FROM accounts WHERE id = ?", [account_id])
 	return db.query_result[0] if not db.query_result.is_empty() else {}
+
+
+## Auth-token bootstrap / verification. Replaces the old "device_id alone is
+## proof of identity" model — knowing device_id is no longer enough to
+## inherit an account.
+##
+## Returns a Dictionary with `account_id`, `account` (full row), and
+## `issued_token` (non-empty when the server just generated a token and the
+## client must persist it). On token mismatch returns {} — caller should
+## refuse the bind.
+##
+## Flow:
+##   - device_id empty / unknown → create new anon account + new token. Returns
+##     {account_id, account, issued_token}.
+##   - device_id known + account has no token yet (legacy account from
+##     pre-token build) → adopt the supplied token if any; otherwise issue a
+##     fresh one. Returns {account_id, account, issued_token} (caller saves it).
+##   - device_id known + account has a stored hash + supplied token hashes
+##     to the stored value → bind, no new token. Returns {account_id, account,
+##     issued_token=""}.
+##   - device_id known + supplied token mismatch → return {} (refuse bind).
+##     The caller can fall back to "create new anon" or just reject.
+func bind_account(device_id: String, supplied_token: String, default_name: String = "Player", default_skin: int = 0) -> Dictionary:
+	if not _ready_for_queries:
+		return {}
+	var now: int = _now_ms()
+	# Empty device_id → always fresh anon. Caller (profile_service) only
+	# does this when client has no prior session.
+	if device_id.is_empty():
+		var new_token: String = _generate_token()
+		var acct: Dictionary = _create_anon_account("", default_name, default_skin, _hash_token(new_token))
+		if acct.is_empty():
+			return {}
+		return {"account_id": int(acct.id), "account": acct, "issued_token": new_token}
+	# Lookup
+	db.query_with_bindings("SELECT * FROM accounts WHERE device_id = ?", [device_id])
+	if db.query_result.is_empty():
+		# Unknown device_id → create new anon and issue token
+		var new_token2: String = _generate_token()
+		var acct2: Dictionary = _create_anon_account(device_id, default_name, default_skin, _hash_token(new_token2))
+		if acct2.is_empty():
+			return {}
+		return {"account_id": int(acct2.id), "account": acct2, "issued_token": new_token2}
+	var row: Dictionary = db.query_result[0]
+	var stored_hash: String = _s(row.get("auth_token_hash"), "")
+	# Always touch last_seen so the row reflects the visit even on auth fail.
+	db.query_with_bindings("UPDATE accounts SET last_seen_ms = ? WHERE id = ?", [now, row.id])
+	row["last_seen_ms"] = now
+	if stored_hash.is_empty():
+		# Legacy account (pre-token) — first contact in the new model.
+		# Adopt supplied token if non-empty; otherwise issue fresh. Either
+		# way, write the hash and return it to client so future contacts
+		# can verify. Locks the account to whoever shows up first AFTER
+		# this PR ships — acceptable trade-off documented in CLAUDE.md.
+		var token_to_use: String = supplied_token if not supplied_token.is_empty() else _generate_token()
+		db.query_with_bindings("UPDATE accounts SET auth_token_hash = ? WHERE id = ?",
+			[_hash_token(token_to_use), row.id])
+		row["auth_token_hash"] = _hash_token(token_to_use)
+		# If client supplied the token we adopted, no need to re-issue.
+		var to_return: String = "" if not supplied_token.is_empty() else token_to_use
+		return {"account_id": int(row.id), "account": row, "issued_token": to_return}
+	# Account has a stored hash — supplied token MUST verify.
+	if supplied_token.is_empty():
+		return {}   # caller treats as auth failure
+	if _hash_token(supplied_token) != stored_hash:
+		return {}
+	return {"account_id": int(row.id), "account": row, "issued_token": ""}
+
+
+## Helper for bind_account — wraps the anon-create path in a transaction
+## (just like get_or_create_account's create branch). `token_hash` may be
+## "" if the caller hasn't set up tokens yet.
+func _create_anon_account(device_id: String, default_name: String, default_skin: int, token_hash: String) -> Dictionary:
+	var now: int = _now_ms()
+	var safe_name: String = (default_name if not default_name.strip_edges().is_empty() else "Player").substr(0, 24)
+	var safe_skin: int = clampi(default_skin, 0, 17)
+	if not begin_transaction():
+		return {}
+	var ok: bool = db.query_with_bindings("""
+		INSERT INTO accounts (device_id, created_ms, last_seen_ms, player_name, skin_index, auth_token_hash)
+		VALUES (?, ?, ?, ?, ?, ?)
+	""", [device_id if not device_id.is_empty() else null, now, now, safe_name, safe_skin,
+		token_hash if not token_hash.is_empty() else null])
+	var account_id: int = db.last_insert_rowid
+	if ok:
+		ok = db.query_with_bindings("INSERT INTO economy (account_id) VALUES (?)", [account_id])
+	if ok:
+		ok = db.query_with_bindings("INSERT INTO stats_lifetime (account_id) VALUES (?)", [account_id])
+	if not ok:
+		rollback()
+		push_error("[Database] _create_anon_account: INSERTs failed")
+		return {}
+	commit()
+	db.query_with_bindings("SELECT * FROM accounts WHERE id = ?", [account_id])
+	return db.query_result[0] if not db.query_result.is_empty() else {}
+
+
+# Token = 24 random bytes → base64 → ~32 char string. The DB stores SHA-256
+# of this so a DB-only leak doesn't immediately compromise live sessions
+# (attacker still needs to brute-force 192 bits, infeasible).
+func _generate_token() -> String:
+	return Marshalls.raw_to_base64(Crypto.new().generate_random_bytes(24))
+
+
+func _hash_token(token: String) -> String:
+	var h: HashingContext = HashingContext.new()
+	h.start(HashingContext.HASH_SHA256)
+	h.update(token.to_utf8_buffer())
+	return Marshalls.raw_to_base64(h.finish())
+
+
+## Returns the "is this account already claimed (has handle+pass)" check.
+## Used by _on_register_account to refuse second-claim of an existing
+## anonymous account that someone else previously bound to.
+func account_is_registered(account_id: int) -> bool:
+	if not _ready_for_queries:
+		return false
+	db.query_with_bindings("SELECT handle, pass_hash FROM accounts WHERE id = ?", [account_id])
+	if db.query_result.is_empty():
+		return false
+	var row: Dictionary = db.query_result[0]
+	# Either handle or pass_hash being set means someone claimed it.
+	return not _s(row.get("handle"), "").is_empty() or not _s(row.get("pass_hash"), "").is_empty()
+
+
+# Null-safe string conversion. Local helper so account_is_registered /
+# bind_account don't depend on profile_service's _s. Mirrors that function.
+static func _s(v, default: String = "") -> String:
+	if v == null:
+		return default
+	return str(v)
 
 
 func update_account_name(account_id: int, name: String) -> bool:
@@ -319,6 +477,73 @@ func append_match_history(room_id: String, mode_id: String, map_id: String,
 		INSERT INTO match_history (room_id, mode_id, map_id, started_ms, ended_ms, winner_id, final_scores)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	""", [room_id, mode_id, map_id, started_ms, ended_ms, winner_id, JSON.stringify(final_scores)])
+
+
+# ── Migrations ─────────────────────────────────────────────────────────
+
+func _read_schema_version() -> int:
+	db.query("PRAGMA user_version")
+	if db.query_result.is_empty():
+		return 0
+	return int(db.query_result[0].get("user_version", 0))
+
+
+func _migrate() -> void:
+	# Apply every migration with key > current stored version, in ascending
+	# order, inside a single transaction per step. Bumps user_version after
+	# each step succeeds. Anything fails → ROLLBACK and leave the DB
+	# untouched, so a bad migration doesn't half-apply.
+	var stored: int = _read_schema_version()
+	if stored == _CURRENT_SCHEMA_VERSION:
+		return
+	if stored > _CURRENT_SCHEMA_VERSION:
+		# DB came from a newer build (downgrade); refuse rather than risk
+		# data loss from unknown columns.
+		push_error("[Database] DB schema v%d > app's v%d — refusing to run" % [stored, _CURRENT_SCHEMA_VERSION])
+		return
+	var versions: Array = _MIGRATIONS.keys()
+	versions.sort()
+	for v in versions:
+		if int(v) <= stored:
+			continue
+		var sql: String = String(_MIGRATIONS[v])
+		print("[Database] migrating to schema v%d" % int(v))
+		db.query("BEGIN IMMEDIATE")
+		var ok: bool = true
+		if not sql.is_empty():
+			ok = db.query(sql)
+		# user_version takes a literal; can't use bindings.
+		if ok:
+			ok = db.query("PRAGMA user_version = %d" % int(v))
+		if not ok:
+			db.query("ROLLBACK")
+			push_error("[Database] migration to v%d failed; rolled back" % int(v))
+			return
+		db.query("COMMIT")
+
+
+# ── Transactions ───────────────────────────────────────────────────────
+# Public helpers for multi-statement DAO sequences (e.g. account bootstrap,
+# chest open). Always paired BEGIN / (COMMIT | ROLLBACK). Nested calls are
+# NOT supported — SQLite doesn't allow nested transactions without
+# SAVEPOINT, which we don't need yet. Callers must not double-begin.
+
+func begin_transaction() -> bool:
+	if not _ready_for_queries:
+		return false
+	return db.query("BEGIN IMMEDIATE")
+
+
+func commit() -> bool:
+	if not _ready_for_queries:
+		return false
+	return db.query("COMMIT")
+
+
+func rollback() -> bool:
+	if not _ready_for_queries:
+		return false
+	return db.query("ROLLBACK")
 
 
 # ── Utility ─────────────────────────────────────────────────────────────

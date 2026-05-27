@@ -78,6 +78,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		if is_dedicated_server:
 			print("[server]   ↳ ignored: weapon %s not in shooter's loadout" % weapon_id)
 		return
+	# P1-8: fire-time weapon must equal server's tracked current weapon.
+	# Without this, the loadout check above is the only gate — a client
+	# could fire as any-loadout-weapon at any time (e.g. fire as railgun
+	# while equipped with AK20 → take railgun damage with AK fire rate).
+	# Skip the check on the very first fire when the server's mirror is
+	# still on its spawn weapon and the client hasn't sent a switch yet.
+	if shooter.weapon_def != null and StringName(shooter.weapon_def.id) != weapon_id:
+		if is_dedicated_server:
+			print("[server]   ↳ ignored: fire weapon=%s but shooter currently holds %s" % [weapon_id, shooter.weapon_def.id])
+		return
 	# C4: clamp aim against the shooter's last validated input frame. A real
 	# human can't snap-aim more than ~PI per fire interval, so anything past
 	# MAX_AIM_DELTA_RAD almost certainly came from a teleport-aim cheat.
@@ -91,6 +101,11 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		# DS path → server replays inputs into _remote_input_yaw/pitch.
 		# Listen-host path → use_remote_input=false; instead the remote
 		# client's last `_net_apply_state` RPC populates _net_remote_yaw/pitch.
+		# P2-20: first-shot fallback. If neither baseline is set yet (a fresh
+		# spawn fires before its first input/state arrives) use the shooter's
+		# current rotation as the baseline. Without this, the C4 check was
+		# entirely skipped on the very first shot, giving a one-tick window
+		# for snap-aim cheats on the opening engagement of every life.
 		var have_baseline: bool = false
 		var baseline_yaw: float = 0.0
 		var baseline_pitch: float = 0.0
@@ -102,6 +117,13 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 			have_baseline = true
 			baseline_yaw = shooter._net_remote_yaw
 			baseline_pitch = shooter._net_remote_pitch
+		else:
+			# Server's last-known transform — usually the spawn pose. Means
+			# even a never-moved fresh client can't fire at an absurd aim
+			# delta from "what they spawned facing".
+			have_baseline = true
+			baseline_yaw = shooter.rotation.y
+			baseline_pitch = shooter.head.rotation.x if shooter.has_node(^"Head") else 0.0
 		if have_baseline:
 			var dy: float = absf(wrapf(fire_yaw - baseline_yaw, -PI, PI))
 			var dp: float = absf(fire_pitch - baseline_pitch)

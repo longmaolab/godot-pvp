@@ -30,6 +30,13 @@ const MAIN_MENU := preload("res://client/scenes/main_menu.tscn")
 @onready var reveal_dialog: AcceptDialog = $RevealDialog
 @onready var reveal_text: RichTextLabel = $RevealDialog/Text
 
+# Captured at the moment a server-routed purchase RPC fires; consumed when the
+# matching server_action_result lands so the success popup names the weapon
+# the user clicked. (server_action_result only carries action+ok+reason, not
+# the weapon id, so we have to remember on the client side.)
+var _pending_weapon_unlock_name: String = ""
+var _pending_weapon_unlock_desc: String = ""
+
 
 func _ready() -> void:
 	back_btn.pressed.connect(_on_back)
@@ -52,6 +59,22 @@ func _ready() -> void:
 		s.purchased_changed.connect(_populate_weapons)
 		s.purchased_changed.connect(_populate_bundles)
 		s.upgrades_changed.connect(_populate_upgrades)
+		# Server reply for any mutating shop op (purchase / chest / wheel /
+		# upgrade). We always re-enable the matching button here; success
+		# refreshes happen via credits_changed / purchased_changed which
+		# arrive together with the same server_profile push.
+		s.server_action.connect(_on_server_action)
+		s.reward_received.connect(_on_server_reward)
+
+
+# Are we talking to a real server right now? `synced_with_server` flips after
+# the server's first profile snapshot lands; once true, every mutation must
+# route through an RPC (else the local change is overwritten on the next
+# sync, the original P0 from review 09:00).
+func _is_online() -> bool:
+	if not has_node(^"/root/Settings"):
+		return false
+	return get_node(^"/root/Settings").synced_with_server
 
 
 # ── Bundles tab ───────────────────────────────────────────────────────────
@@ -160,6 +183,12 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 
 
 func _on_buy_bundle(b: Resource) -> void:
+	# Bundles have no dedicated server RPC yet — in online mode the trust
+	# boundary doesn't allow client-driven spend_credits + mark_purchased.
+	# Block with a clear message until a server-side bundle registry exists.
+	if _is_online():
+		_reveal("[color=#ff8888]Bundles not available online yet — only single-weapon purchases route through the server.[/color]")
+		return
 	var s: Node = get_node(^"/root/Settings")
 	if not s.spend_credits(b.price_credits):
 		_reveal("[color=#ff8888]Not enough credits — need $%d, have $%d.[/color]" % [b.price_credits, s.credits])
@@ -276,11 +305,29 @@ func _make_weapon_row(w: Resource) -> PanelContainer:
 
 func _on_buy_weapon(w: Resource) -> void:
 	var s: Node = get_node(^"/root/Settings")
-	if not s.spend_credits(w.price_credits):
+	# Cheap affordability check for the offline path / instant feedback. The
+	# server re-checks authoritatively, so a stale credit count here just
+	# means a benign rejection round-trip — never a money leak.
+	if not _is_online() and not s.can_afford_credits(w.price_credits):
 		_reveal("[color=#ff8888]Not enough credits![/color]\n你需要 $ %d，但只有 $ %d。" % [w.price_credits, s.credits])
 		return
-	s.mark_purchased(String(w.id))
-	_reveal("[color=#a8ff88]Unlocked %s![/color]\n[color=#cccccc]%s[/color]\n\n按 1-4 切换武器时可选。" % [w.display_name, w.description])
+	# request_purchase_weapon routes through the server when synced (ignoring
+	# the client-sent price — server reads canonical price_credits) or falls
+	# back to local spend/mark when offline.
+	_pending_weapon_unlock_name = w.display_name
+	_pending_weapon_unlock_desc = w.description
+	if not s.request_purchase_weapon(String(w.id), w.price_credits):
+		_pending_weapon_unlock_name = ""
+		_pending_weapon_unlock_desc = ""
+		_reveal("[color=#ff8888]Purchase failed.[/color]")
+		return
+	# Online: the reveal happens on server_action ack in _on_server_action.
+	# Offline: request_purchase_weapon already did spend+mark synchronously
+	# so we can reveal immediately.
+	if not _is_online():
+		_reveal("[color=#a8ff88]Unlocked %s![/color]\n[color=#cccccc]%s[/color]\n\n按 1-4 切换武器时可选。" % [w.display_name, w.description])
+		_pending_weapon_unlock_name = ""
+		_pending_weapon_unlock_desc = ""
 
 
 # ── Chests tab ────────────────────────────────────────────────────────────
@@ -293,6 +340,13 @@ func _refresh_chests() -> void:
 
 
 func _on_buy_chest(kind: StringName) -> void:
+	# No server RPC for stockpiling chests — the server only supports
+	# buy+open atomically (open_chest spends a chest if available or pays
+	# credits otherwise). In online mode, route the click straight to
+	# open_chest; in offline mode keep the legacy add-to-inventory flow.
+	if _is_online():
+		_on_open_chest(kind)
+		return
 	var s: Node = get_node(^"/root/Settings")
 	var price: int = COMMON_CHEST_PRICE if kind == &"common" else RARE_CHEST_PRICE
 	if not s.spend_credits(price):
@@ -304,6 +358,22 @@ func _on_buy_chest(kind: StringName) -> void:
 
 func _on_open_chest(kind: StringName) -> void:
 	var s: Node = get_node(^"/root/Settings")
+	# Online path: server rolls rewards authoritatively and pushes them via
+	# server_reward → reward_received → _on_server_reward. Don't run the
+	# local RNG/award code at all — that would double-credit and also let a
+	# tampered client claim arbitrary rewards.
+	if _is_online():
+		# Cheap pre-check so the popup is informative; server re-checks.
+		if s.common_chests == 0 and s.rare_chests == 0:
+			var price: int = COMMON_CHEST_PRICE if kind == &"common" else RARE_CHEST_PRICE
+			if s.credits < price:
+				_reveal("[color=#ff8888]Not enough credits[/color]")
+				return
+		if not s.request_open_chest(String(kind)):
+			_reveal("[color=#ff8888]Open chest unavailable.[/color]")
+		return
+	# Offline / legacy path: client-side RNG. Acceptable because there's no
+	# server state to desync from.
 	if not s.consume_chest(kind):
 		return
 	# Roll rewards. Common: small frags + maybe credits. Rare: bigger,
@@ -376,6 +446,19 @@ const WHEEL_OUTCOMES := [
 
 func _on_spin() -> void:
 	var s: Node = get_node(^"/root/Settings")
+	# Online: server authoritatively spins, picks reward, and pushes via
+	# server_reward. _on_server_reward handles the UI. We still play the
+	# dial animation locally — but the result label only fills in after the
+	# reward arrives.
+	if _is_online():
+		wheel_spin_btn.disabled = true
+		if not s.request_spin_wheel():
+			wheel_spin_btn.disabled = false
+			_reveal("[color=#ff8888]Spin unavailable.[/color]")
+			return
+		_start_wheel_animation(null)
+		return
+	# Offline: client-side RNG, mirrors the original local economy.
 	if s.has_free_spin_today():
 		s.record_free_spin()
 	else:
@@ -497,3 +580,71 @@ func _make_upgrade_row(w: Resource, s: Node) -> PanelContainer:
 func _reveal(bbcode: String) -> void:
 	reveal_text.text = bbcode
 	reveal_dialog.popup_centered(Vector2i(520, 320))
+
+
+# Server replied to a mutating shop op. Show the popup for purchase here so
+# the success message only shows after the authoritative confirmation. The
+# server_profile push that arrives alongside this ack drives the credit /
+# inventory UI refresh via the existing credits_changed / purchased_changed
+# signals.
+func _on_server_action(action: String, ok: bool, reason: String) -> void:
+	match action:
+		"purchase":
+			if ok and not _pending_weapon_unlock_name.is_empty():
+				_reveal("[color=#a8ff88]Unlocked %s![/color]\n[color=#cccccc]%s[/color]\n\n按 1-4 切换武器时可选。" \
+					% [_pending_weapon_unlock_name, _pending_weapon_unlock_desc])
+			elif not ok:
+				_reveal("[color=#ff8888]Purchase failed: %s[/color]" % reason)
+			_pending_weapon_unlock_name = ""
+			_pending_weapon_unlock_desc = ""
+		"open_chest":
+			if not ok:
+				_reveal("[color=#ff8888]Chest open failed: %s[/color]" % reason)
+		"spin":
+			if not ok:
+				wheel_spin_btn.disabled = false
+				_reveal("[color=#ff8888]Spin failed: %s[/color]" % reason)
+
+
+# Server-rolled rewards from open_chest / spin_wheel. The reward dict carries
+# `credits` and/or `fragments` at minimum; the server has already credited
+# them in the database, so we only need to render the reveal. Local economy
+# state has already been refreshed via the parallel server_profile push.
+func _on_server_reward(kind: String, reward: Dictionary) -> void:
+	if kind == "common" or kind == "rare":
+		var frags: int = int(reward.get("fragments", 0))
+		var creds: int = int(reward.get("credits", 0))
+		_animate_chest_reveal(StringName(kind), frags, creds, String(reward.get("weapon_name", "")))
+	elif kind == "wheel":
+		_show_wheel_reward(reward)
+
+
+func _show_wheel_reward(reward: Dictionary) -> void:
+	# Build a short label from whatever keys came back. Server reward dict
+	# format mirrors profile_service.WHEEL_REWARDS (credits | fragments |
+	# common_chests | rare_chests).
+	var bits: Array[String] = []
+	if reward.has("credits"):
+		bits.append("$+%d credits" % int(reward.credits))
+	if reward.has("fragments"):
+		bits.append("+%d fragments" % int(reward.fragments))
+	if reward.has("common_chests"):
+		bits.append("+%d common chest" % int(reward.common_chests))
+	if reward.has("rare_chests"):
+		bits.append("+%d rare chest" % int(reward.rare_chests))
+	var label_text: String = "\n".join(bits) if not bits.is_empty() else "(reward)"
+	wheel_result.text = "[center][color=#ffd84a]! %s[/color][/center]" % label_text
+	wheel_result.bbcode_enabled = true
+	_refresh_wheel_hint()
+	wheel_spin_btn.disabled = false
+
+
+# Spin the dial with the same 3.5s cubic-ease tween as the local path. When
+# the server is authoritative, the result label is filled in by
+# _on_server_reward after the tween — no client-side outcome picking.
+func _start_wheel_animation(_unused) -> void:
+	var target_rot: float = TAU * 5.0 + randf_range(0.0, TAU)
+	wheel_dial.rotation = 0.0
+	var t: Tween = create_tween()
+	t.tween_property(wheel_dial, "rotation", target_rot, 3.5) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

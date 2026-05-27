@@ -196,6 +196,11 @@ func _enter_dedicated_server_mode() -> void:
 		# INPUT_ABILITY edge in push_remote_input also triggers it).
 		if not net_rpc.client_ability_received.is_connected(_on_client_ability_server):
 			net_rpc.client_ability_received.connect(_on_client_ability_server)
+		# P1-8: track which weapon a client is holding. fire_resolver
+		# refuses fire RPCs whose weapon_id doesn't match this state, so a
+		# client can't fire as one weapon while pretending to hold another.
+		if not net_rpc.client_switch_weapon_received.is_connected(_on_client_switch_weapon_server):
+			net_rpc.client_switch_weapon_received.connect(_on_client_switch_weapon_server)
 		# DS-M2: per-tick input RPCs from clients → routed to the corresponding
 		# server-side PlayerController. The player simulates physics with this
 		# input instead of reading Input.* (which is meaningless on the server).
@@ -377,6 +382,12 @@ func _enter_practice_mode() -> void:
 				if hud != null:
 					hud.push_feed("BOT chasing you!", Color(1, 0.5, 0.4))
 		)
+## Counter for synthetic bot peer ids. Real Godot peer IDs are random
+## positive 32-bit; using negatives guarantees no collision with a live
+## player. Pre-decrement so the first bot is -1001 (avoids 0 / -1 ambiguity).
+var _next_bot_peer_id: int = -1000
+
+
 func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	var bot: Node = BOT_SCENE.instantiate()
 	bot.weapon_def = weapon
@@ -397,6 +408,19 @@ func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	bot.head_hitbox.monitoring = true
 	bot.body_hitbox.monitoring = true
 	bots.append(bot)
+	# P2-17: register the bot in players_by_peer under a synthetic negative
+	# peer_id so fire_resolver can find it (without this, MP bots on a DS
+	# emit client_fire_received with authority=1, which has no player on
+	# the DS → fire_resolver short-circuits and bots do 0 damage). On
+	# listen-host the misattribution was even worse: peer 1 = host's own
+	# player, so bot shots fired with host's loadout/cooldown/buff state.
+	# Use multiplayer.is_server() so practice mode (no networking) keeps
+	# its old behavior — there's no fire_resolver path in practice.
+	if _is_networked() and multiplayer.is_server():
+		_next_bot_peer_id -= 1
+		var bot_peer_id: int = _next_bot_peer_id
+		bot.set_multiplayer_authority(bot_peer_id)
+		players_by_peer[bot_peer_id] = bot
 	# Bots auto-respawn so practice mode keeps having a punching bag/target.
 	bot.died.connect(func(_killer):
 		if is_instance_valid(bot):
@@ -430,6 +454,9 @@ func _enter_host_mode() -> void:
 		# host as well, so the host simulates their CharacterBody3D through real
 		# collision instead of accepting raw transform pushes.
 		net_rpc.client_input_received.connect(_on_client_input_ds)
+		# P1-8: server-authoritative weapon switch. Same as the DS path —
+		# guards against "lie about which weapon is held" fire spoof.
+		net_rpc.client_switch_weapon_received.connect(_on_client_switch_weapon_server)
 	# Stand up the lag-compensator so the host accumulates position history
 	# starting from match start.
 	var lc_script := load("res://server/scripts/lag_compensator.gd")
@@ -862,7 +889,17 @@ func _rpc_sync_request() -> void:
 		if not requester_room.is_empty() and _room_id_for_peer(peer) != requester_room:
 			continue
 		var peer_prof: Dictionary = _profile_for_peer(peer)
-		_rpc_spawn.rpc_id(requester, peer, _spawn_pos_for(peer), peer_prof.name, peer_prof.skin)
+		# P0-2 fix: send the player's ACTUAL current position, not a re-picked
+		# spawn. _spawn_pos_for is non-deterministic (ties broken by Godot's
+		# sort_custom, which is unstable) — calling it again here can route two
+		# different players to the same spawn point, and disagree with what the
+		# host's own view holds. Repro: mp_hit_test failure where client saw
+		# both host and itself at Spawn2 while host had them at Spawn0/Spawn1.
+		var pnode: Node = players_by_peer[peer]
+		var spawn_pos_to_send: Vector3 = _spawn_pos_for(peer)
+		if pnode != null and is_instance_valid(pnode):
+			spawn_pos_to_send = pnode.global_position
+		_rpc_spawn.rpc_id(requester, peer, spawn_pos_to_send, peer_prof.name, peer_prof.skin)
 	# F3 fix: inverse direction. _on_peer_connected_as_host now SKIPS the
 	# spawn broadcast for lobbyists (the right call — they shouldn't ghost
 	# into other rooms' matches), but that means same-room peers won't
@@ -1071,6 +1108,25 @@ func _on_client_ability_server(peer_id: int) -> void:
 		return
 	if shooter.has_method(&"try_activate_ability"):
 		shooter.try_activate_ability()
+
+
+## P1-8: client said they switched weapons. Validate the weapon is in the
+## peer's loadout, then update the server-side mirror via equip_by_id (which
+## also reshuffles per-weapon ammo state on the mirror, matching client UX).
+## fire_resolver reads `shooter.weapon_def.id` to enforce future fire RPCs.
+func _on_client_switch_weapon_server(peer_id: int, weapon_id: StringName) -> void:
+	if not multiplayer.is_server():
+		return
+	var shooter: Node = players_by_peer.get(peer_id)
+	if shooter == null or not is_instance_valid(shooter):
+		return
+	if not shooter.has_method(&"equip_by_id"):
+		return
+	# equip_by_id walks the loadout and refuses unknown ids — that's the
+	# anti-spoof gate. Returns false if the requested weapon isn't in
+	# the player's loadout (or if loadout hasn't been set yet).
+	if not shooter.equip_by_id(weapon_id):
+		push_warning("[server] switch_weapon rejected: peer=%d weapon=%s not in loadout" % [peer_id, weapon_id])
 
 
 

@@ -37,6 +37,9 @@ func _run() -> void:
 	db.db.query("PRAGMA journal_mode=WAL")
 	db._create_tables()
 	db._ready_for_queries = true
+	# P1-9: run the migration framework so auth_token_hash (v2) lands on the
+	# test DB. Without this, bind_account's INSERT fails on a missing column.
+	db._migrate()
 
 	# --- 1. Account creation: new device_id → row created with defaults
 	var alice: Dictionary = db.get_or_create_account("device-alice", "Alice", 5)
@@ -153,11 +156,41 @@ func _run() -> void:
 	if hash1 == hash2:
 		failures.append("two hash_password calls returned same value — salt not random")
 
+	# --- 11. P0-1 bind_account: fresh device → issues token
+	var bind1: Dictionary = db.bind_account("device-charlie", "", "Charlie", 3)
+	if bind1.is_empty():
+		failures.append("bind_account empty for fresh device")
+	if String(bind1.get("issued_token", "")).is_empty():
+		failures.append("bind_account didn't issue token for fresh device")
+	var charlie_token: String = String(bind1.get("issued_token"))
+	var charlie_id: int = int(bind1.get("account_id"))
+	# Reconnect with correct token → bind succeeds, no new token issued
+	var bind2: Dictionary = db.bind_account("device-charlie", charlie_token, "Charlie", 3)
+	if int(bind2.get("account_id", -1)) != charlie_id:
+		failures.append("bind_account with correct token returned wrong account")
+	if not String(bind2.get("issued_token", "")).is_empty():
+		failures.append("bind_account re-issued token to already-valid client")
+	# Attacker with wrong token → empty (refuse bind)
+	var bind3: Dictionary = db.bind_account("device-charlie", "wrong-token-here", "Evil", 0)
+	if not bind3.is_empty():
+		failures.append("bind_account accepted WRONG token — account hijack possible")
+	# Attacker with no token (legacy-flow exploit) → empty (refuse bind)
+	var bind4: Dictionary = db.bind_account("device-charlie", "", "Evil", 0)
+	if not bind4.is_empty():
+		failures.append("bind_account accepted EMPTY token on account that already has one — hijack possible")
+	# --- 12. account_is_registered
+	if db.account_is_registered(charlie_id):
+		failures.append("anon account flagged as registered")
+	db.db.query_with_bindings("UPDATE accounts SET handle = ?, pass_hash = ? WHERE id = ?",
+		["charliehandle", db.hash_password("pw"), charlie_id])
+	if not db.account_is_registered(charlie_id):
+		failures.append("registered account flagged as anonymous")
+
 	# --- Done
 	db.db.close_db()
 
 	if failures.is_empty():
-		print("  PASS — 10/10 Database DAO assertions (accounts, economy, weapons, upgrades, stats, leaderboard, match history, password hash)")
+		print("  PASS — 12/12 Database DAO assertions (accounts, economy, weapons, upgrades, stats, leaderboard, match history, password hash, bind_account, account_is_registered)")
 		quit(0)
 	else:
 		for f in failures:

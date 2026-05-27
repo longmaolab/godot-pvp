@@ -273,6 +273,34 @@ func equip_slot(slot_index: int) -> void:
 	var new_weapon: Resource = loadout[slot_index]
 	if new_weapon == null or new_weapon == weapon_def:
 		return
+	_equip_resource(new_weapon)
+	# P1-8: tell the server so its mirror's weapon_def matches and
+	# fire_resolver can enforce "weapon_id of fire RPC == current". Without
+	# this, the server's view stays on whatever the spawn put us on, and
+	# a tampered client could fire as any-loadout-weapon at-will.
+	if is_local and _is_networked() and not multiplayer.is_server():
+		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+		if net_rpc != null:
+			net_rpc.client_switch_weapon.rpc_id(1, new_weapon.id)
+
+
+## Same effect as equip_slot but keyed by weapon id rather than loadout
+## slot. Used by the server-side switch handler — the host's mirror only
+## knows the client by their weapon's id, not their UI slot.
+func equip_by_id(weapon_id: StringName) -> bool:
+	for w in loadout:
+		if w != null and StringName(w.id) == weapon_id:
+			if w == weapon_def:
+				return true   # already equipped — idempotent
+			_equip_resource(w)
+			return true
+	return false
+
+
+# Internal — actual weapon-swap state mutation. Both equip_slot and
+# equip_by_id route through here so client local + server mirror flip
+# the same set of fields.
+func _equip_resource(new_weapon: Resource) -> void:
 	# Stash current ammo before switching.
 	if weapon_def != null:
 		_ammo_state[weapon_def.id] = {"in_mag": ammo_in_mag, "reserve": ammo_reserve}
@@ -907,7 +935,7 @@ func respawn(at: Vector3) -> void:
 	is_dead = false
 	visible = true
 	collision_layer = 1 << 1
-	collision_mask = (1 << 0)
+	collision_mask = (1 << 0) | (1 << 1)
 	head_hitbox.monitoring = true
 	body_hitbox.monitoring = true
 	hp_changed.emit(hp, max_hp)

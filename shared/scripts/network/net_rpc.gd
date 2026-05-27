@@ -19,6 +19,7 @@ signal client_fire_received(peer_id: int, weapon_id: StringName, yaw: float, pit
 ## push_remote_input — sending the RPC there too is harmless (the cooldown
 ## guard inside try_activate_ability makes the second call a no-op).
 signal client_ability_received(peer_id: int)
+signal client_switch_weapon_received(peer_id: int, weapon_id: StringName)
 signal client_chat_received(peer_id: int, text: String, color: Color)
 
 # ── Lobby/room RPCs (Phase 1 — see .agent/lobby_plan.md). All client→server,
@@ -39,7 +40,7 @@ signal client_set_ready_received(peer_id: int, ready: bool)
 ## uuid, server replies with the canonical profile + economy snapshot.
 ## After bootstrap, mutations go through the typed RPCs below; server
 ## echoes the updated row back so the client cache stays in sync.
-signal client_request_profile_received(peer_id: int, device_id: String, local_name: String, local_skin: int)
+signal client_request_profile_received(peer_id: int, device_id: String, auth_token: String, local_name: String, local_skin: int)
 signal client_set_player_name_received(peer_id: int, name: String)
 signal client_set_skin_index_received(peer_id: int, skin: int)
 signal client_purchase_weapon_received(peer_id: int, weapon_id: String, price: int)
@@ -133,13 +134,35 @@ func client_send_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 @rpc("any_peer", "reliable", "call_remote")
 func client_fire(weapon_id: StringName, yaw: float, pitch: float) -> void:
 	var peer := multiplayer.get_remote_sender_id()
+	# Gate at the RPC edge — fire_resolver's per-shot pipeline (lag-comp
+	# rewind + raycast + restore) costs real CPU, so we want to bail BEFORE
+	# emitting the signal rather than after running the work.
+	if not _check_rpc_rate(peer, "fire"):
+		return
 	client_fire_received.emit(peer, weapon_id, yaw, pitch)
 
 
 @rpc("any_peer", "reliable", "call_remote")
 func client_use_ability() -> void:
 	var peer := multiplayer.get_remote_sender_id()
+	if not _check_rpc_rate(peer, "ability"):
+		return
 	client_ability_received.emit(peer)
+
+
+# P1-8: server-authoritative current weapon. Client equip_slot fires this so
+# the host's view of the player switches in lockstep. Without it the server
+# kept thinking the client was still on its initial weapon, and fire_resolver
+# accepted ANY weapon_id from the client's loadout — a tampered client could
+# pass an SRX weapon_id while holding an AK20 and get SRX damage every shot.
+@rpc("any_peer", "reliable", "call_remote")
+func client_switch_weapon(weapon_id: StringName) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	# Reuse the lobby/profile budget — switches are user-driven, not a
+	# tight loop. 6/2s is enough for legitimate hot-swap UX.
+	if not _check_rpc_rate(peer, "profile"):
+		return
+	client_switch_weapon_received.emit(peer, weapon_id)
 
 
 # ── Lobby/room RPCs (client → server). All are dumb relays — RoomManager
@@ -153,6 +176,8 @@ func client_list_rooms() -> void:
 @rpc("any_peer", "reliable", "call_remote")
 func client_create_room(map_path: String, mode_def_path: String) -> void:
 	var peer := multiplayer.get_remote_sender_id()
+	if not _check_rpc_rate(peer, "create"):
+		return
 	client_create_room_received.emit(peer, map_path, mode_def_path)
 
 
@@ -177,12 +202,16 @@ func client_start_match() -> void:
 @rpc("any_peer", "reliable", "call_remote")
 func client_set_lobby_profile(name: String, skin: int) -> void:
 	var peer := multiplayer.get_remote_sender_id()
+	if not _check_rpc_rate(peer, "profile"):
+		return
 	client_set_lobby_profile_received.emit(peer, name, skin)
 
 
 @rpc("any_peer", "reliable", "call_remote")
 func client_set_ready(ready: bool) -> void:
 	var peer := multiplayer.get_remote_sender_id()
+	if not _check_rpc_rate(peer, "ready"):
+		return
 	client_set_ready_received.emit(peer, ready)
 
 
@@ -193,9 +222,13 @@ func client_set_ready(ready: bool) -> void:
 # server_profile snapshot.
 
 @rpc("any_peer", "reliable", "call_remote")
-func client_request_profile(device_id: String, local_name: String, local_skin: int) -> void:
+func client_request_profile(device_id: String, auth_token: String, local_name: String, local_skin: int) -> void:
 	var peer := multiplayer.get_remote_sender_id()
-	client_request_profile_received.emit(peer, device_id, local_name, local_skin)
+	# Allocate a row on first contact; gate to stop a peer from spamming
+	# bind requests with rotating device_ids to fill the accounts table.
+	if not _check_rpc_rate(peer, "bind"):
+		return
+	client_request_profile_received.emit(peer, device_id, auth_token, local_name, local_skin)
 
 
 @rpc("any_peer", "reliable", "call_remote")
@@ -260,15 +293,60 @@ const CHAT_BURST := 5
 const CHAT_WINDOW_MS := 4000
 var _chat_rate_state: Dictionary = {}   # peer_id → { window_start_ms: int, count: int }
 
+# Generic per-(peer, kind) rate state for everything-but-chat. Keyed by
+# String "peer:kind" so we don't double-charge a peer who fires at 10/s and
+# also opens chests at 1/s. Each entry: { window_start_ms, count }.
+var _rpc_rate_state: Dictionary = {}
+
+# Rate budgets for each gated RPC. Tuned per-RPC because they have very
+# different "legitimate" rates — autofire is ~10/s, create_room is ~once/min.
+# Format: kind → [burst, window_ms]. Burst is the count threshold AFTER
+# which further hits in the same window are dropped.
+const _RPC_RATE_BUDGETS := {
+	"fire":      [30, 1000],   # autofire ~10/s × 3x headroom
+	"ability":   [4, 1000],    # taps; ability cooldown >1s anyway
+	"create":    [3, 5000],    # room create is heavy (broadcasts to whole DS)
+	"profile":   [6, 2000],    # lobby name/skin edits
+	"ready":     [10, 2000],   # toggling ready, indecisive but bounded
+	"upgrade":   [10, 2000],   # shop upgrade clicks
+	"bind":      [3, 5000],    # request_profile creates DB rows on first contact — keep low
+}
+
 
 # R4: called from GameController._on_peer_disconnected_as_host. Without this,
-# (a) the dict grows by one entry per ever-connected peer for the DS process
+# (a) the dicts grow by one entry per ever-connected peer for the DS process
 # lifetime, and (b) peer-id reuse (Godot's IDs are 32-bit random; collisions
 # rare but possible across reconnects) would let a new connection inherit
-# the old occupant's saturated chat budget and get silently muted on their
+# the old occupant's saturated budgets and get silently throttled on their
 # first message.
 func forget_peer(peer: int) -> void:
 	_chat_rate_state.erase(peer)
+	# Generic budgets keyed by "peer:kind". Sweep the whole dict — there
+	# are at most |kinds| entries per peer so this is O(kinds).
+	for k in _RPC_RATE_BUDGETS.keys():
+		_rpc_rate_state.erase("%d:%s" % [peer, k])
+
+
+# Returns true if the (peer, kind) hit is within budget; false if it should
+# be dropped. Server-side only — on a client the check no-ops (RPCs are
+# `call_remote`, so a client's call goes to the server which gates there).
+# Self-contained: maintains its own state, callers just yes/no.
+func _check_rpc_rate(peer: int, kind: String) -> bool:
+	if not multiplayer.is_server():
+		return true
+	var budget: Variant = _RPC_RATE_BUDGETS.get(kind)
+	if budget == null:
+		return true   # unknown kind → don't gate (better than silently dropping)
+	var burst: int = int(budget[0])
+	var window_ms: int = int(budget[1])
+	var now_ms: int = Time.get_ticks_msec()
+	var key: String = "%d:%s" % [peer, kind]
+	var s: Dictionary = _rpc_rate_state.get(key, {"window_start_ms": now_ms, "count": 0})
+	if now_ms - int(s.get("window_start_ms", 0)) > window_ms:
+		s = {"window_start_ms": now_ms, "count": 0}
+	s["count"] = int(s.get("count", 0)) + 1
+	_rpc_rate_state[key] = s
+	return int(s["count"]) <= burst
 
 
 @rpc("any_peer", "reliable", "call_remote")
