@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/scripts/match_modes/frontlines_rule.gd" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"frontlines"
+display_name = "Frontlines — 推线"
+description = "两队推线模式。占敌方基地不被打断 30 秒即胜;离开或被反击会减回去。Marker3D 'FrontA' / 'FrontB' 在地图上,缺省 ±15 米。"
+family = &"frontlines"
+humans_per_team = 3
+team_count = 2
+default_bots_per_side = 3
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 0
+lives_per_player = -1
+credits_per_kill = 5
+credits_per_win = 90
+credits_per_loss = 25
+credit_cap_per_match = 300
+rule_script = ExtResource("2")

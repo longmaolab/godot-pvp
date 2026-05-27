@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/scripts/match_modes/br_rule.gd" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"br"
+display_name = "Battle Royale — 缩圈"
+description = "经典缩圈大逃杀。安全区每 60 秒缩 5 米,圈外每秒掉 3 HP。最后一人活到底获胜。建议 6+ 人或填 bot。"
+family = &"br"
+humans_per_team = 0
+team_count = 1
+default_bots_per_side = 5
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 0
+lives_per_player = 1
+credits_per_kill = 8
+credits_per_win = 100
+credits_per_loss = 15
+credit_cap_per_match = 400
+rule_script = ExtResource("2")

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/scripts/match_modes/laststand_rule.gd" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"laststand"
+display_name = "LastStand — 抗波"
+description = "玩家 vs 越来越强的 bot 波次。第 1 波 3 个 bot,每波 +1,撑过 12 波获胜。全部玩家死亡则结算。"
+family = &"laststand"
+humans_per_team = 1
+team_count = 1
+default_bots_per_side = 0
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 0
+lives_per_player = 1
+credits_per_kill = 4
+credits_per_win = 200
+credits_per_loss = 30
+credit_cap_per_match = 600
+rule_script = ExtResource("2")

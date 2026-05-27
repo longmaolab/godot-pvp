@@ -610,8 +610,13 @@ func _step_movement(delta: float) -> void:
 			var now_ms: int = Time.get_ticks_msec()
 			if now_ms - _last_speed_warn_ms > 5000:
 				_last_speed_warn_ms = now_ms
-				push_warning("[anticheat] peer %d horiz speed=%.1f m/s exceeds %.1f" %
-					[get_multiplayer_authority(), horiz, NetProtocol.SUSPECT_HORIZ_SPEED])
+				var msg: String = "peer %d horiz speed=%.1f m/s exceeds %.1f" % \
+					[get_multiplayer_authority(), horiz, NetProtocol.SUSPECT_HORIZ_SPEED]
+				push_warning("[anticheat] " + msg)
+				# Mirror into anticheat.log via ProfileService.
+				var ps: Node = get_tree().root.get_node_or_null(^"ProfileService")
+				if ps != null and ps.has_method(&"_anticheat_log"):
+					ps._anticheat_log("speed", msg)
 
 
 ## DS-M3 client-side fire feedback. When the local human is in snapshot-only

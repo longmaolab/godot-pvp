@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ModeDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://shared/data/modes/_mode_def.gd" id="1"]
+[ext_resource type="Script" path="res://shared/scripts/match_modes/dday_rule.gd" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"dday"
+display_name = "D-Day — 防守"
+description = "非对称攻防。防守方守住核心 3 分钟即胜;进攻方占领点不被打断 8 秒即胜。简化版用 peer_id 奇偶分队(双数防守,单数进攻)。"
+family = &"dday"
+humans_per_team = 2
+team_count = 2
+default_bots_per_side = 2
+rounds_to_win = 1
+round_seconds = 0
+kill_goal = 0
+lives_per_player = -1
+credits_per_kill = 6
+credits_per_win = 120
+credits_per_loss = 25
+credit_cap_per_match = 350
+rule_script = ExtResource("2")

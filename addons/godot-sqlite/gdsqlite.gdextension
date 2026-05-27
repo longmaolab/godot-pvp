@@ -5,26 +5,22 @@ compatibility_minimum = "4.5"
 
 [libraries]
 
-macos.debug = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_debug.framework"
-macos.release = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_release.framework"
-windows.debug.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.windows.template_release.x86_64.dll"
+# Only platforms we actually ship binaries for:
+# - linux x86_64: dedicated server on VPS
+# - macos: editor + desktop client
+# Web is excluded via export_presets.cfg's exclude_filter (stock web template
+# lacks dlink_enabled, can't load GDExtensions anyway).
+# Windows/Android/iOS binaries trimmed from upstream release to keep repo
+# under 20MB; if you need them, fetch from
+# https://github.com/2shady4u/godot-sqlite/releases and drop into bin/.
+
+# macos: framework is universal (x86_64 + arm64), Godot 4.6 requires
+# both arch tags or it errors "No GDExtension library found for ...".
+macos.debug.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_debug.framework"
+macos.release.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_release.framework"
+macos.debug.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_debug.framework"
+macos.release.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.macos.template_release.framework"
 linux.debug.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.linux.template_debug.x86_64.so"
 linux.release.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.linux.template_release.x86_64.so"
-linux.debug.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.linux.template_debug.arm64.so"
-linux.release.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.linux.template_release.arm64.so"
-android.debug.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.android.template_debug.arm64.so"
-android.release.arm64 = "res://addons/godot-sqlite/bin/libgdsqlite.android.template_release.arm64.so"
-android.debug.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.android.template_debug.x86_64.so"
-android.release.x86_64 = "res://addons/godot-sqlite/bin/libgdsqlite.android.template_release.x86_64.so"
-ios.debug = "res://addons/godot-sqlite/bin/libgdsqlite.ios.template_debug.xcframework"
-ios.release = "res://addons/godot-sqlite/bin/libgdsqlite.ios.template_release.xcframework"
 
 [dependencies]
-
-ios.debug = { 
-    "res://addons/godot-sqlite/bin/libgodot-cpp.ios.template_debug.xcframework": "" 
-}
-ios.release = { 
-    "res://addons/godot-sqlite/bin/libgodot-cpp.ios.template_release.xcframework": "" 
-}

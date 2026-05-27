@@ -50,3 +50,4 @@ common/physics_interpolation=true
 [rendering]
 
 renderer/rendering_method.web="mobile"
+textures/vram_compression/import_etc2_astc=true

@@ -70,6 +70,12 @@ func _run() -> void:
 	var remote_peer: int = 1234567
 	p.set_multiplayer_authority(remote_peer)
 	p.is_local = false
+	# CRITICAL: server-side mirror of a remote peer needs `use_remote_input=true`
+	# so PlayerController._physics_process branches into _step_weapon_server.
+	# Without it, the player goes to the "ghost" branch (`_apply_remote_state`)
+	# which doesn't tick weapon state at all — and this test was failing for
+	# years because the original setup forgot this flag.
+	p.use_remote_input = true
 	root.add_child(p)
 	p.global_position = Vector3.ZERO
 

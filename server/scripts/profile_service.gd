@@ -608,8 +608,30 @@ func _maybe_alert_headshot_ratio(peer_id: int) -> void:
 	var ratio: float = float(heads) / float(kills)
 	if ratio > NetProtocol.SUSPECT_HEADSHOT_RATIO:
 		_peer_hs_warned[peer_id] = true
-		push_warning("[anticheat] peer %d headshot ratio %.2f (%d/%d) exceeds %.2f — possible aimbot" %
-			[peer_id, ratio, heads, kills, NetProtocol.SUSPECT_HEADSHOT_RATIO])
+		var line: String = "peer %d headshot ratio %.2f (%d/%d) exceeds %.2f — possible aimbot" % \
+			[peer_id, ratio, heads, kills, NetProtocol.SUSPECT_HEADSHOT_RATIO]
+		push_warning("[anticheat] " + line)
+		_anticheat_log("headshot_ratio", line)
+
+
+# Admin dashboard MVP — every push_warning() from the anti-cheat layer also
+# appends a JSON line to `user://anticheat.log`. SSH onto the VPS and
+# `tail -f /root/.local/share/godot/app_userdata/godot-pvp/anticheat.log`
+# to monitor in real time. Future: surface via an RPC + admin client UI.
+func _anticheat_log(category: String, message: String) -> void:
+	var line: Dictionary = {
+		"ts_ms": int(Time.get_unix_time_from_system() * 1000.0),
+		"category": category,
+		"message": message,
+	}
+	var f := FileAccess.open("user://anticheat.log", FileAccess.READ_WRITE)
+	if f == null:
+		f = FileAccess.open("user://anticheat.log", FileAccess.WRITE)
+	if f == null:
+		return
+	f.seek_end()
+	f.store_line(JSON.stringify(line))
+	f.close()
 
 
 ## Called by GameController._on_match_finished_in_room. Stamps the winner +
