@@ -48,7 +48,9 @@ if [ ! -f docs/index.pck ] || [ ! -f docs/index.wasm ]; then
   REASON="docs/ 不完整"
 else
   # 找比 docs/index.pck 新的源文件(说明改过代码 / 资源)
-  NEWER=$(find client server shared assets addons project.godot server.json \
+  # 加 export_presets.cfg 是因为我们改过几次 exclude_filter / extensions_support,
+  # 这种纯 export config 的改动 Godot 不会自动重新打包,必须靠 deploy 这里强制触发。
+  NEWER=$(find client server shared assets addons project.godot server.json export_presets.cfg \
     -newer docs/index.pck 2>/dev/null | head -3)
   if [ -n "$NEWER" ]; then
     NEED_EXPORT=1

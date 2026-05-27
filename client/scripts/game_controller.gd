@@ -20,6 +20,7 @@ const CROSSBOW: Resource = preload("res://shared/data/weapons/crossbow.tres")
 const DEFAULT_LOADOUT: Array[Resource] = [AK20, SG8, SRX, RAILGUN]
 
 const _WEAPON_REGISTRY := preload("res://shared/scripts/weapon_registry.gd")
+const _BOT_SPEECH := preload("res://client/scripts/data/bot_speech.gd")
 var weapon_registry: Node
 
 @export var map_scene: PackedScene = preload("res://shared/scenes/maps/blank.tscn")
@@ -431,6 +432,8 @@ func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 
 func _on_bot_died(bot: Node, original_spawn: Vector3) -> void:
 	if hud != null:
+		var bot_name: String = String(bot.player_name) if is_instance_valid(bot) and "player_name" in bot else "Bot"
+		hud.push_feed("%s: %s" % [bot_name, _BOT_SPEECH.random_death()], Color(0.85, 0.65, 0.65))
 		hud.push_feed("BOT DOWN -- respawn in 5s", Color(0.7, 1, 0.5))
 	get_tree().create_timer(5.0).timeout.connect(func():
 		if not is_instance_valid(bot):
@@ -587,6 +590,8 @@ func _enter_client_mode() -> void:
 			net_rpc.server_mode_info_received.connect(_on_server_mode_info)
 		if not net_rpc.server_map_info_received.is_connected(_on_server_map_info):
 			net_rpc.server_map_info_received.connect(_on_server_map_info)
+		if not net_rpc.server_mode_def_received.is_connected(_on_server_mode_def):
+			net_rpc.server_mode_def_received.connect(_on_server_mode_def)
 		if not net_rpc.server_snapshot_received.is_connected(_on_server_snapshot):
 			net_rpc.server_snapshot_received.connect(_on_server_snapshot)
 		if not net_rpc.server_respawn_received.is_connected(_on_server_respawn):
@@ -670,6 +675,29 @@ func _on_server_map_info(map_path: String) -> void:
 	if hud != null:
 		hud.push_feed("Loaded server map: %s" % map_path.get_file().get_basename(),
 			Color(0.55, 0.85, 1, 1))
+
+
+# R11: client mirrors the server's mode_def so HUD / mode-specific UI
+# render against the authority. Server is canonical for win conditions —
+# this is presentation-only. Empty path = "casual / no mode" → clear.
+func _on_server_mode_def(mode_path: String) -> void:
+	# Same path as current → no-op (host's own pre-loaded mode_def, or a
+	# duplicate sync_request after a re-mount).
+	var current_path: String = mode_def.resource_path if mode_def != null else ""
+	if mode_path == current_path:
+		return
+	if mode_path.is_empty():
+		mode_def = null
+	elif ResourceLoader.exists(mode_path):
+		mode_def = load(mode_path)
+	else:
+		push_warning("[client] server requested unknown mode: %s" % mode_path)
+		return
+	# Update existing match_controller if present so HUD reads new kill_goal /
+	# scoring config. Don't spin up a NEW one — server is authoritative for
+	# win conditions, client's mc is HUD-only.
+	if match_controller != null and is_instance_valid(match_controller):
+		match_controller.mode_def = mode_def
 
 
 ## M3: match for our room ended on the DS. The payload carries the room's
@@ -879,6 +907,11 @@ func _rpc_sync_request() -> void:
 		var their_map: String = _map_path_for_peer(requester)
 		if not their_map.is_empty():
 			net_rpc.server_map_info.rpc_id(requester, their_map)
+		# R11: also send the mode_def path so the client's match_controller +
+		# HUD render against the right authority. Falls back to global
+		# mode_def if requester isn't in a room (practice / pre-room sync).
+		var their_mode: String = _mode_path_for_peer(requester)
+		net_rpc.server_mode_def.rpc_id(requester, their_mode)
 	# Only spawn the requester's own room's players to them. Same logic
 	# as above — sending a spawn for a peer in a different match would
 	# materialize ghosts in the wrong client's world.
@@ -1279,6 +1312,14 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 			if players_by_peer[p] == killer:
 				killer_peer = p
 				break
+	# Bot kill speech — if the killer is one of our local bots, push a
+	# trash-talk line so single-player practice isn't dead silent. Filter
+	# to local hud only (DS has no hud). Self-kills don't speak; bot
+	# killing dummy/bot still triggers, which is fine — feels lively.
+	if hud != null and killer != null and killer is PlayerController \
+			and killer in bots and killer != players_by_peer.get(victim_peer):
+		var bot_name: String = String(killer.player_name) if "player_name" in killer else "Bot"
+		hud.push_feed("%s: %s" % [bot_name, _BOT_SPEECH.random_kill()], Color(1.0, 0.65, 0.65))
 	# F3-M2: prefer the room's match_controller (MP path) over the global
 	# one (practice path). The victim's room is the source of truth for
 	# scoring — `peer_to_room[victim_peer]` tells us which match cares.
@@ -1566,6 +1607,12 @@ func _boot_match_for_room(room) -> void:
 			if is_instance_valid(p) and p.has_method(&"respawn"):
 				p.respawn(_spawn_pos_for(peer))
 
+	# Fill the room with bots per `mode_def.default_bots_per_side` so a
+	# 1-human MP room isn't empty. Practice already does this its own way
+	# (single bot via _enter_practice_mode); this is the MP path the
+	# mode_def field has been advertising forever but nobody read.
+	_spawn_room_bots(room, room_world)
+
 	# Tell the room's clients the match is on — they transition from
 	# room_lobby.tscn into game.tscn, which then runs _enter_client_mode
 	# → sends client_hello + sync_request → server replies with
@@ -1576,6 +1623,63 @@ func _boot_match_for_room(room) -> void:
 		for peer in room.players:
 			if peer in live:
 				net_rpc.server_match_starting.rpc_id(peer)
+
+
+## MP bot fill — reads `mode_def.default_bots_per_side` and spawns that
+## many bots into the room's RoomWorld. Bots get negative peer ids
+## (synthesized via _next_bot_peer_id so fire_resolver can attribute
+## damage to them), are registered in players_by_peer + peer_to_room,
+## and target the first human in the room. Practice mode skips this —
+## practice has its own bot-spawn path in _enter_practice_mode.
+func _spawn_room_bots(room, room_world: Node) -> void:
+	if not _is_networked() or not multiplayer.is_server():
+		return
+	if mode_def == null or not ("default_bots_per_side" in mode_def):
+		return
+	var n: int = int(mode_def.default_bots_per_side)
+	if n <= 0:
+		return
+	# Pick first human as initial target. Bot brain handles
+	# is_instance_valid(target) so if this human leaves the bot idles.
+	var first_human: Node = null
+	for peer in room.players:
+		if players_by_peer.has(peer):
+			first_human = players_by_peer[peer]
+			break
+	# Default loadout weapon for bots — re-using AK20 here is fine, modes
+	# that need different bot kits can override by setting bot.weapon_def
+	# after this call (none do yet).
+	for i in n:
+		_next_bot_peer_id -= 1
+		var bot_peer_id: int = _next_bot_peer_id
+		var bot: Node = BOT_SCENE.instantiate()
+		bot.weapon_def = AK20
+		bot.target = first_human
+		bot.player_name = "Bot-%d" % (i + 1)
+		bot.is_local = false
+		bot.is_human_input = false
+		bot.set_multiplayer_authority(bot_peer_id)
+		room_world.add_child(bot)
+		bot.global_position = _spawn_pos_for(bot_peer_id)
+		bot.head_hitbox.monitoring = true
+		bot.body_hitbox.monitoring = true
+		bots.append(bot)
+		players_by_peer[bot_peer_id] = bot
+		# RoomManager owns the peer→room mapping; we update it directly
+		# instead of going through join_room because bots aren't real peers.
+		var rm: Node = get_node_or_null(^"/root/RoomManager")
+		if rm != null:
+			rm.peer_to_room[bot_peer_id] = room.room_id
+			# Also include the bot in the room's players list so
+			# _broadcast_scoreboard_for_room counts them in the K/D rows.
+			if not bot_peer_id in room.players:
+				room.players.append(bot_peer_id)
+		# Auto-respawn 5s after death — same hook practice mode uses.
+		var spawn_pos: Vector3 = bot.global_position
+		bot.died.connect(func(_killer):
+			if is_instance_valid(bot):
+				_on_bot_died(bot, spawn_pos)
+		)
 
 
 ## M3: hooked to RoomManager.match_finished. Fires from either path that
@@ -1769,6 +1873,22 @@ func _map_path_for_peer(peer_id: int) -> String:
 		return m.scene_file_path
 	if map_scene != null and not map_scene.resource_path.is_empty():
 		return map_scene.resource_path
+	return ""
+
+
+# R11: same shape as _map_path_for_peer but for mode_def. Returns empty
+# string when the peer isn't in a room AND we don't have a global mode_def
+# (practice path with mode_def=null is the common case).
+func _mode_path_for_peer(peer_id: int) -> String:
+	var rid: String = _room_id_for_peer(peer_id)
+	if not rid.is_empty():
+		var rm: Node = get_node_or_null(^"/root/RoomManager")
+		if rm != null and rm.rooms.has(rid):
+			var path: String = String(rm.rooms[rid].mode_def_path)
+			if not path.is_empty():
+				return path
+	if mode_def != null and not mode_def.resource_path.is_empty():
+		return mode_def.resource_path
 	return ""
 
 

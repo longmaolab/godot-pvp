@@ -70,6 +70,14 @@ signal server_mode_info_received(is_dedicated: bool)
 ## on a client that picked Trenches → bullets pass through it visually,
 ## players fall into pits that don't exist for them, etc).
 signal server_map_info_received(map_path: String)
+## R11: same pattern as server_map_info but for the ModeDef resource. Client
+## menu's MODE picker used to silently mismatch the server (server runs
+## ffa_kill5 + client picked 10v10 → score limit reports wrong number on HUD).
+## Server sends its requester's room's `mode_def.resource_path` during sync;
+## client loads and assigns it locally so HUD / mode-specific UI renders
+## against the real authority. Server is still 100% authoritative for win
+## conditions; this is presentation-only on the client.
+signal server_mode_def_received(mode_path: String)
 ## Host clicked START in the menu's staging area; all clients should leave
 ## the lobby state and load the game scene now. The host's map/mode picks
 ## are already authoritative via _launch_game → server_map_info during
@@ -407,6 +415,14 @@ func server_mode_info(is_dedicated: bool) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_map_info(map_path: String) -> void:
 	server_map_info_received.emit(map_path)
+
+
+# R11: server-authoritative mode sync. Same lifecycle as server_map_info —
+# sent during sync_request alongside the map. Pass empty string to mean
+# "casual / no mode_def" (practice path).
+@rpc("authority", "reliable", "call_remote")
+func server_mode_def(mode_path: String) -> void:
+	server_mode_def_received.emit(mode_path)
 
 
 # Staging "host clicked START" broadcast. Fired from main_menu's staging
