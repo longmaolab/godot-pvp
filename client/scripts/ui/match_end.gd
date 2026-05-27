@@ -16,6 +16,14 @@ var current_scene_path: String = "res://client/scenes/game.tscn"
 # bounce back to the room lobby so the player can re-ready for round 2.
 var _return_scene_path: String = MAIN_MENU_PATH
 var _play_again_scene_path: String = ""   # "" = reload current scene
+# Per-peer profile dict from server (Room.to_dict.profiles): peer_id →
+# {name, skin, ready}. Used to render real names instead of "Peer N".
+var _profiles: Dictionary = {}
+# Optional override for the Play Again button. When set, click invokes
+# this Callable instead of doing a scene change. DS-client uses it to
+# send client_start_match RPC so a click goes straight into the next
+# round instead of bouncing through the lobby.
+var _play_again_callable: Callable = Callable()
 
 
 func _ready() -> void:
@@ -76,9 +84,10 @@ func _render_scoreboard(scores: Dictionary, winner_peer: int) -> void:
 
 	for p in peer_list:
 		var is_self: bool = (p == local_peer)
-		var label_name: String = "You (peer %d)" % p if is_self else "Peer %d" % p
+		var resolved: String = _peer_display_name(p)
+		var label_name: String = ("%s (你)" % resolved) if is_self else resolved
 		if p == winner_peer:
-			label_name = "[W]" + label_name
+			label_name = "[W] " + label_name
 		var row := _make_row(
 			label_name,
 			str(int(kills.get(p, 0))),
@@ -129,11 +138,9 @@ func _make_row(name_txt: String, k: String, d: String, rw: String,
 	return pc
 
 
-## DS-client calls this to redirect both buttons to the room lobby instead
-## of the main menu — the room still exists after a match ends, so going
-## back to lobby (where the host can hit START again) is the natural flow.
-## Pass play_again_path = same as return_path so "Play Again" also goes
-## to the lobby (the host re-clicks START there to restart the match).
+## DS-client calls this to redirect Return to whichever scene makes sense
+## (lobby if room survives, main menu otherwise). Play Again can either
+## scene-change or invoke a Callable (e.g. send client_start_match RPC).
 func set_return_target(return_path: String, play_again_label: String = "Play Again",
 		play_again_path: String = "") -> void:
 	_return_scene_path = return_path
@@ -142,11 +149,37 @@ func set_return_target(return_path: String, play_again_label: String = "Play Aga
 		play_again_btn.text = play_again_label
 
 
+## Override Play Again click to run a Callable instead of a scene change.
+## DS-client sets this to "send client_start_match RPC" so the user goes
+## straight into the next round without bouncing through the lobby.
+func set_play_again_callable(cb: Callable, label: String = "再来一局 / PLAY AGAIN") -> void:
+	_play_again_callable = cb
+	if play_again_btn != null:
+		play_again_btn.text = label
+
+
+## Pass the server's per-peer profile dict so the scoreboard can render
+## real names instead of "Peer 1304920972". Profiles dict shape:
+##   { peer_id (int or str) → {name, skin, ready} }
+func set_profiles(profiles: Dictionary) -> void:
+	_profiles = profiles
+
+
+func _peer_display_name(peer_id: int) -> String:
+	# Profile dict may have int or string keys depending on RPC coercion.
+	var prof: Dictionary = _profiles.get(peer_id, _profiles.get(str(peer_id), {}))
+	var name_text: String = String(prof.get("name", ""))
+	return name_text if not name_text.is_empty() else "Player %d" % peer_id
+
+
 func _on_return() -> void:
 	get_tree().change_scene_to_file(_return_scene_path)
 
 
 func _on_play_again() -> void:
+	if _play_again_callable.is_valid():
+		_play_again_callable.call()
+		return
 	if _play_again_scene_path.is_empty():
 		# Legacy listen-host: reload the current game scene fresh.
 		get_tree().reload_current_scene()

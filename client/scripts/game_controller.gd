@@ -652,6 +652,7 @@ func _on_server_map_info(map_path: String) -> void:
 ## to the browser instead.
 const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
 const ROOM_BROWSER_SCENE_CLIENT := "res://client/scenes/ui/room_browser.tscn"
+const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
 
 func _on_server_match_ended(room_state: Dictionary) -> void:
 	if room_state.is_empty():
@@ -675,11 +676,35 @@ func _on_server_match_ended(room_state: Dictionary) -> void:
 		var screen: Node = MATCH_END_SCENE.instantiate()
 		add_child(screen)
 		var my_id: int = multiplayer.get_unique_id() if _is_networked() else 1
+		# Profiles dict carries peer_id → {name, skin, ready} so the
+		# scoreboard shows "Xeno" instead of "Peer 1304920972".
+		screen.set_profiles(room_state.get("profiles", {}))
 		screen.show_for(winner, final, my_id)
-		screen.set_return_target(ROOM_LOBBY_SCENE, "Back to Lobby", ROOM_LOBBY_SCENE)
+		# Return goes back to main menu (safe fallback regardless of room
+		# lifecycle). Play Again wires a callable that re-asks the server
+		# for client_start_match so a click goes straight into next round.
+		screen.set_return_target(MAIN_MENU_PATH, "返回主菜单 / MENU")
+		screen.set_play_again_callable(_request_play_again_match)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
 	# No usable result data — straight to lobby.
+	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
+
+
+## Hook for MatchEnd's Play Again button on DS clients. Sends the same
+## client_start_match RPC the lobby's START button sends. Server validates
+## host + room state; on success it broadcasts server_match_starting which
+## our normal handler picks up and transitions everyone into the new game
+## scene. If we're not host the server ignores the RPC — joiner ends up
+## stuck on the end-screen, so flip to the lobby as a fallback so the host
+## can still hit START there.
+func _request_play_again_match() -> void:
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		net_rpc.client_start_match.rpc_id(1)
+	# Whether or not we're host, bounce back to the lobby — if we ARE host,
+	# server_match_starting will overwrite that with the game scene a moment
+	# later; if we're a joiner, lobby is where we wait for host's decision.
 	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
 
 
