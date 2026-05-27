@@ -1,6 +1,12 @@
 extends CanvasLayer
 class_name MatchEnd
-## Endgame overlay. Shown when MatchController emits match_ended.
+## Endgame overlay. Shown when MatchController emits match_ended (listen-host
+## practice) OR when DS broadcasts server_match_ended to the room (MP path).
+##
+## Renders winner banner + per-peer scoreboard, surfaces the room state so a
+## joiner knows whether the room still exists and what their role is, and
+## handles Play Again by either reloading the scene (listen-host) or sending
+## client_start_match with explicit reject feedback (DS path).
 
 const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
 
@@ -8,6 +14,8 @@ const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
 @onready var scoreboard_list: VBoxContainer = $Center/Card/V/ScoreboardList
 @onready var return_btn: Button = $Center/Card/V/ButtonsRow/ReturnButton
 @onready var play_again_btn: Button = $Center/Card/V/ButtonsRow/PlayAgainButton
+@onready var card_v: VBoxContainer = $Center/Card/V
+@onready var subtitle: Label = $Center/Card/V/Subtitle
 
 var local_peer: int = 1   # set from game_controller before show_for()
 var current_scene_path: String = "res://client/scenes/game.tscn"
@@ -24,11 +32,45 @@ var _profiles: Dictionary = {}
 # send client_start_match RPC so a click goes straight into the next
 # round instead of bouncing through the lobby.
 var _play_again_callable: Callable = Callable()
+# Room state from server (id, host, players, profiles, last_winner,
+# last_scores). When empty the room is gone and Play Again is hidden.
+var _room_state: Dictionary = {}
+# Lazily built status labels — surfaced under Subtitle and above the
+# button row so room state and reject reasons are visible to the user.
+var _room_status_label: Label = null
+var _action_status_label: Label = null
+
+# Map server-side reject reasons (from server_start_match_failed RPC) to
+# Chinese-first user-facing copy. Unknown reasons fall back to the raw tag
+# so a future server-side reason still surfaces something to the user
+# instead of silent failure.
+const REJECT_REASONS: Dictionary = {
+	"no_room": "你已经不在任何房间里。点「返回菜单」回主菜单。",
+	"room_gone": "房间已解散。点「返回菜单」回主菜单。",
+	"not_host": "只有房主能开新一局。等房主决定。",
+	"already_running": "新一局已经在开了，稍等。",
+}
 
 
 func _ready() -> void:
 	return_btn.pressed.connect(_on_return)
 	play_again_btn.pressed.connect(_on_play_again)
+	_build_status_labels()
+	# Subscribe to the server's rejection feedback. _on_start_match_failed
+	# re-enables the button + shows a reason instead of leaving the user
+	# staring at a frozen disabled button.
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		if "server_start_match_failed_received" in net_rpc:
+			if not net_rpc.server_start_match_failed_received.is_connected(_on_start_match_failed):
+				net_rpc.server_start_match_failed_received.connect(_on_start_match_failed)
+		# When server accepts our (or another room member's) start_match,
+		# it broadcasts server_match_starting. We're an overlay on the
+		# already-loaded game.tscn — reload that scene so the fresh
+		# _enter_client_mode pulls a clean spawn snapshot for round 2.
+		if "server_match_starting_received" in net_rpc:
+			if not net_rpc.server_match_starting_received.is_connected(_on_match_starting):
+				net_rpc.server_match_starting_received.connect(_on_match_starting)
 
 
 ## Populate the screen and present. winner_peer == local_peer → VICTORY (green
@@ -46,6 +88,7 @@ func show_for(winner_peer: int, scores: Dictionary, local_peer_id: int) -> void:
 		title.add_theme_color_override(&"font_outline_color", Color(0.45, 0.3, 0.55, 1))
 
 	_render_scoreboard(scores, winner_peer)
+	_refresh_room_status()
 
 
 func _render_scoreboard(scores: Dictionary, winner_peer: int) -> void:
@@ -165,6 +208,15 @@ func set_profiles(profiles: Dictionary) -> void:
 	_profiles = profiles
 
 
+## Pass the room state dictionary (Room.to_dict shape). Drives:
+##   - room id + player count + your role under the title
+##   - Play Again visibility (room destroyed → hidden)
+## Empty dict = room gone; only Return button remains usable.
+func set_room_state(room_state: Dictionary) -> void:
+	_room_state = room_state
+	_refresh_room_status()
+
+
 func _peer_display_name(peer_id: int) -> String:
 	# Profile dict may have int or string keys depending on RPC coercion.
 	var prof: Dictionary = _profiles.get(peer_id, _profiles.get(str(peer_id), {}))
@@ -172,11 +224,70 @@ func _peer_display_name(peer_id: int) -> String:
 	return name_text if not name_text.is_empty() else "Player %d" % peer_id
 
 
+# ── Status labels ────────────────────────────────────────────────────────
+
+func _build_status_labels() -> void:
+	# Room status sits right under Subtitle. Action status sits right
+	# above the button row. Both are inserted via move_child so the
+	# VBox preserves an intuitive order even though they're built late.
+	_room_status_label = Label.new()
+	_room_status_label.name = "RoomStatus"
+	_room_status_label.add_theme_font_size_override(&"font_size", 14)
+	_room_status_label.add_theme_color_override(&"font_color", Color(0.65, 0.85, 1, 0.95))
+	_room_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_v.add_child(_room_status_label)
+	card_v.move_child(_room_status_label, subtitle.get_index() + 1)
+
+	_action_status_label = Label.new()
+	_action_status_label.name = "ActionStatus"
+	_action_status_label.add_theme_font_size_override(&"font_size", 13)
+	_action_status_label.add_theme_color_override(&"font_color", Color(1, 0.7, 0.55, 0.9))
+	_action_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_action_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_action_status_label.text = ""
+	card_v.add_child(_action_status_label)
+	card_v.move_child(_action_status_label, play_again_btn.get_parent().get_index())
+
+
+func _refresh_room_status() -> void:
+	if _room_status_label == null:
+		return
+	if _room_state.is_empty():
+		_room_status_label.text = "房间已不存在"
+		_room_status_label.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55, 0.95))
+		# Without a room, Play Again has nowhere to go. Hide it.
+		if play_again_btn != null:
+			play_again_btn.visible = false
+		return
+	var room_id: String = String(_room_state.get("id", "?"))
+	var players: Array = _room_state.get("players", [])
+	var host_peer: int = int(_room_state.get("host", 0))
+	var is_host: bool = (local_peer == host_peer)
+	var role_text: String = "[HOST] 房主" if is_host else "[JOINER] 加入者"
+	_room_status_label.text = "房间 %s · %d 人 · %s" % [room_id, players.size(), role_text]
+	_room_status_label.add_theme_color_override(&"font_color", Color(0.65, 0.85, 1, 0.95))
+	if play_again_btn != null:
+		play_again_btn.visible = true
+		# Joiner sees a different verb — they're requesting, not commanding.
+		# (Don't overwrite a label explicitly set by set_play_again_callable
+		# unless the caller hasn't customized it yet.)
+		if play_again_btn.text == "再来一局 / PLAY AGAIN" and not is_host:
+			play_again_btn.text = "请求再来一局 / REQUEST REMATCH"
+
+
+# ── Button handlers ──────────────────────────────────────────────────────
+
 func _on_return() -> void:
 	get_tree().change_scene_to_file(_return_scene_path)
 
 
 func _on_play_again() -> void:
+	# Disable + show pending so the user gets visible feedback while the
+	# RPC round-trips. On reject we re-enable; on success the scene swaps.
+	play_again_btn.disabled = true
+	if _action_status_label != null:
+		_action_status_label.text = "请求中..."
+		_action_status_label.add_theme_color_override(&"font_color", Color(0.75, 0.9, 1, 0.9))
 	if _play_again_callable.is_valid():
 		_play_again_callable.call()
 		return
@@ -185,3 +296,27 @@ func _on_play_again() -> void:
 		get_tree().reload_current_scene()
 	else:
 		get_tree().change_scene_to_file(_play_again_scene_path)
+
+
+## Server accepted (someone's) client_start_match — broadcast came back.
+## Reload the game scene so we get a clean _enter_client_mode pass for the
+## new round (fresh local PlayerController, fresh _input_tick=0, fresh HUD).
+func _on_match_starting() -> void:
+	get_tree().change_scene_to_file(current_scene_path)
+
+
+func _on_start_match_failed(reason: String) -> void:
+	# Re-enable the button so the user can try again (e.g. wait for host).
+	if play_again_btn != null:
+		play_again_btn.disabled = false
+	if _action_status_label != null:
+		_action_status_label.text = REJECT_REASONS.get(reason, "无法开始新一局：%s" % reason)
+		_action_status_label.add_theme_color_override(&"font_color", Color(1, 0.65, 0.45, 1))
+	# A reason of "no_room" or "room_gone" means the room is dead. Hide
+	# Play Again entirely so the user doesn't bash a permanently-failing
+	# button. They can still hit Return.
+	if reason == "no_room" or reason == "room_gone":
+		if play_again_btn != null:
+			play_again_btn.visible = false
+		_room_state = {}
+		_refresh_room_status()

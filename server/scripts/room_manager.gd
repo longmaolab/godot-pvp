@@ -20,6 +20,14 @@ extends Node
 ##   - peer authentication (no anti-griefing in Phase 1)
 
 const Room = preload("res://server/scripts/room.gd")
+const MapRegistry = preload("res://shared/data/map_registry.gd")
+
+# Allowlist for map / mode resource paths. Without this, a malicious client
+# can send any res:// string as `map_path` / `mode_def_path` and the server
+# will load() it as a "map" / "mode" resource — turning room creation into a
+# generic resource-loader.
+const MODES_DIR := "res://shared/data/modes/"
+var _valid_mode_paths: Dictionary = {}   # path String → true
 
 const ROOM_ID_LENGTH := 4
 const ROOM_ID_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/1/I/O — confusing in chat
@@ -51,6 +59,9 @@ var peer_to_room: Dictionary = {}       # peer_id (int) → room_id (String)
 
 
 func _ready() -> void:
+	# Build the mode allowlist once at startup. (Maps come from MapRegistry's
+	# static MAPS array — no scan needed.)
+	_scan_mode_paths()
 	# As an autoload, this _ready fires once per Godot process. Hook the
 	# NetRpc signals so RPCs from clients land on our handlers. Each handler
 	# gates on multiplayer.is_server() so this is harmless on a client-side
@@ -70,6 +81,12 @@ func _ready() -> void:
 	room_state_changed.connect(_broadcast_room_state)
 	room_destroyed.connect(_broadcast_room_destroyed)
 	match_finished.connect(_broadcast_match_ended)
+	# Defense-in-depth: GameController also calls leave_room on disconnect,
+	# but only if the Game scene is loaded. Hooking here directly guarantees
+	# room cleanup even if a peer disconnects during lobby (before any game
+	# world exists) — otherwise their slot stays held until process restart.
+	# leave_room is idempotent, so double-fire from both paths is safe.
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
 
 ## Create a new room owned by `host_peer`. Returns the room_id on success,
@@ -77,6 +94,14 @@ func _ready() -> void:
 func create_room(host_peer: int, map_path: String, mode_def_path: String) -> String:
 	if rooms.size() >= MAX_ROOMS:
 		print("[RoomMgr] create_room rejected: at cap %d" % MAX_ROOMS)
+		return ""
+	# Path allowlist — refuse any res:// string that isn't a known map / mode.
+	# Empty mode_def_path is allowed (= Practice / no-mode FFA).
+	if not _is_valid_map_path(map_path):
+		print("[RoomMgr] create_room rejected: unknown map_path=%s" % map_path)
+		return ""
+	if not _is_valid_mode_path(mode_def_path):
+		print("[RoomMgr] create_room rejected: unknown mode_def_path=%s" % mode_def_path)
 		return ""
 	# If this peer is already in a room, kick them out of it first — a
 	# create implies they're starting over.
@@ -192,15 +217,29 @@ func _on_client_list_rooms(peer_id: int) -> void:
 func _on_client_create_room(peer_id: int, map_path: String, mode_def_path: String) -> void:
 	if not multiplayer.is_server():
 		return
-	var room_id: String = create_room(peer_id, map_path, mode_def_path)
-	if not _peer_is_live(peer_id):
-		return  # CRUD still happened; just don't try to reply to a non-live peer
-	var net_rpc: Node = get_node(^"/root/NetRpc")
-	if room_id.is_empty():
-		net_rpc.server_room_join_failed.rpc_id(peer_id, "服务器房间已满 (10 房间上限)")
+	# Pre-validate so we can give the client a precise rejection reason.
+	# create_room() repeats the same checks defensively — but those silently
+	# return ""; here we want a typed message in the UI.
+	var reject_reason: String = ""
+	if not _is_valid_map_path(map_path):
+		reject_reason = "无效地图"
+	elif not _is_valid_mode_path(mode_def_path):
+		reject_reason = "无效模式"
+	if reject_reason.is_empty():
+		var room_id: String = create_room(peer_id, map_path, mode_def_path)
+		if not _peer_is_live(peer_id):
+			return  # CRUD still happened; just don't try to reply to a non-live peer
+		var net_rpc: Node = get_node(^"/root/NetRpc")
+		if room_id.is_empty():
+			net_rpc.server_room_join_failed.rpc_id(peer_id, "服务器房间已满 (10 房间上限)")
+			return
+		var room: Room = rooms[room_id]
+		net_rpc.server_room_joined.rpc_id(peer_id, room_id, room.to_dict())
 		return
-	var room: Room = rooms[room_id]
-	net_rpc.server_room_joined.rpc_id(peer_id, room_id, room.to_dict())
+	if not _peer_is_live(peer_id):
+		return
+	var net_rpc: Node = get_node(^"/root/NetRpc")
+	net_rpc.server_room_join_failed.rpc_id(peer_id, reject_reason)
 
 
 func _on_client_join_room(peer_id: int, room_id: String) -> void:
@@ -269,19 +308,38 @@ func _on_client_set_ready(peer_id: int, ready: bool) -> void:
 func _on_client_start_match(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
+	# Each reject path sends back a machine-readable reason so the client UI
+	# can show a real message + re-enable the button. Silent returns used to
+	# leave a joiner's "Play Again" frozen with no feedback.
 	if not peer_to_room.has(peer_id):
+		_send_start_match_failed(peer_id, "no_room")
 		return
 	var room_id: String = peer_to_room[peer_id]
 	var room: Room = rooms.get(room_id, null)
 	if room == null:
+		_send_start_match_failed(peer_id, "room_gone")
 		return
-	# Only the room's host can start its match.
 	if room.host_peer != peer_id:
+		_send_start_match_failed(peer_id, "not_host")
 		return
-	# Already running? Idempotent — ignore.
 	if room.state == Room.STATE_MATCH:
+		_send_start_match_failed(peer_id, "already_running")
 		return
 	start_match(room_id)
+
+
+## Reply to the requester with a typed rejection so client UI can render
+## a real status. Gated on _is_real_networked_server so headless unit tests
+## (no real peer) can still call _on_client_start_match without "unknown
+## peer ID" engine errors.
+func _send_start_match_failed(peer_id: int, reason: String) -> void:
+	if not _is_real_networked_server():
+		return
+	if not (peer_id in multiplayer.get_peers()):
+		return
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		net_rpc.server_start_match_failed.rpc_id(peer_id, reason)
 
 
 func start_match(room_id: String) -> void:
@@ -386,6 +444,15 @@ func _is_real_networked_server() -> bool:
 
 # ── Internals ─────────────────────────────────────────────────────────────
 
+func _on_peer_disconnected(peer_id: int) -> void:
+	# multiplayer.peer_disconnected fires on every node in every process, but
+	# leave_room only makes sense on the authoritative server. Gating here
+	# keeps client-side autoload instances inert.
+	if not multiplayer.is_server():
+		return
+	leave_room(peer_id)
+
+
 func _destroy_room(room_id: String) -> void:
 	if not rooms.has(room_id):
 		return
@@ -401,6 +468,45 @@ func _destroy_room(room_id: String) -> void:
 			peer_to_room.erase(peer)
 	rooms.erase(room_id)
 	room_destroyed.emit(room_id, evicted)
+
+
+func _is_valid_map_path(path: String) -> bool:
+	for m in MapRegistry.MAPS:
+		if String(m.path) == path:
+			return true
+	return false
+
+
+func _is_valid_mode_path(path: String) -> bool:
+	# Empty = Practice / no-mode, accepted intentionally.
+	if path.is_empty():
+		return true
+	return _valid_mode_paths.has(path)
+
+
+func _scan_mode_paths() -> void:
+	_valid_mode_paths.clear()
+	var dir := DirAccess.open(MODES_DIR)
+	if dir == null:
+		push_warning("[RoomMgr] cannot open %s — no mode allowlist" % MODES_DIR)
+		return
+	dir.list_dir_begin()
+	while true:
+		var fname: String = dir.get_next()
+		if fname == "":
+			break
+		if dir.current_is_dir():
+			continue
+		# Web export rewrites .tres → .tres.remap (path indirection). Strip
+		# the .remap suffix so the rest of the loop sees the original name.
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
+		if not fname.ends_with(".tres"):
+			continue
+		if fname.begins_with("_"):
+			continue
+		_valid_mode_paths[MODES_DIR + fname] = true
+	dir.list_dir_end()
 
 
 func _generate_room_id() -> String:

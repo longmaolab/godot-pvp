@@ -74,6 +74,10 @@ signal server_map_info_received(map_path: String)
 ## are already authoritative via _launch_game → server_map_info during
 ## sync_request, so this RPC carries no payload — it's just "go".
 signal server_match_starting_received()
+# Server says "no, can't start match" — reason is a short machine-readable
+# tag (room_gone / not_host / already_running / no_room) the client UI maps
+# to a human message. See server_start_match_failed below.
+signal server_start_match_failed_received(reason: String)
 
 # ── Lobby/room replies (server → client). RoomManager broadcasts to the
 #    relevant audience (requester only for list, all members for state, evicted
@@ -333,6 +337,14 @@ func server_map_info(map_path: String) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_match_starting() -> void:
 	server_match_starting_received.emit()
+
+
+# Server tells the requester why their client_start_match was rejected,
+# so the UI can re-enable the button and show "you're not the host" /
+# "room no longer exists" instead of silently freezing.
+@rpc("authority", "reliable", "call_remote")
+func server_start_match_failed(reason: String) -> void:
+	server_start_match_failed_received.emit(reason)
 
 
 # ── Lobby/room RPCs (server → client). RoomManager calls these via rpc_id

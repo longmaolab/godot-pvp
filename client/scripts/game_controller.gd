@@ -677,8 +677,11 @@ func _on_server_match_ended(room_state: Dictionary) -> void:
 		add_child(screen)
 		var my_id: int = multiplayer.get_unique_id() if _is_networked() else 1
 		# Profiles dict carries peer_id → {name, skin, ready} so the
-		# scoreboard shows "Xeno" instead of "Peer 1304920972".
+		# scoreboard shows "Xeno" instead of "Peer 1304920972". Room state
+		# drives the room-status line + Play Again visibility (hidden if
+		# room is gone) — set BEFORE show_for so _refresh_room_status sees it.
 		screen.set_profiles(room_state.get("profiles", {}))
+		screen.set_room_state(room_state)
 		screen.show_for(winner, final, my_id)
 		# Return goes back to main menu (safe fallback regardless of room
 		# lifecycle). Play Again wires a callable that re-asks the server
@@ -692,20 +695,24 @@ func _on_server_match_ended(room_state: Dictionary) -> void:
 
 
 ## Hook for MatchEnd's Play Again button on DS clients. Sends the same
-## client_start_match RPC the lobby's START button sends. Server validates
-## host + room state; on success it broadcasts server_match_starting which
-## our normal handler picks up and transitions everyone into the new game
-## scene. If we're not host the server ignores the RPC — joiner ends up
-## stuck on the end-screen, so flip to the lobby as a fallback so the host
-## can still hit START there.
+## client_start_match RPC the lobby's START button sends.
+##
+## Stay on the match_end overlay until the server's reply arrives:
+##   - Host: server validates → start_match → broadcasts server_match_starting
+##     → our handler swaps scene to game.tscn. MatchEnd is freed.
+##   - Joiner: server replies server_start_match_failed("not_host")
+##     → MatchEnd._on_start_match_failed re-enables the button + shows
+##     "只有房主能开新一局".
+##   - Room gone: server replies "no_room" / "room_gone" → MatchEnd shows
+##     "房间已不存在" and hides the button so the user only has Return.
+##
+## Previous version bounced everyone to room_lobby immediately, which
+## (a) lost the failure feedback (overlay was already gone) and
+## (b) confused joiners by flipping them between scenes mid-request.
 func _request_play_again_match() -> void:
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
 		net_rpc.client_start_match.rpc_id(1)
-	# Whether or not we're host, bounce back to the lobby — if we ARE host,
-	# server_match_starting will overwrite that with the game scene a moment
-	# later; if we're a joiner, lobby is where we wait for host's decision.
-	get_tree().change_scene_to_file(ROOM_LOBBY_SCENE)
 
 
 ## Configure a player on a DS-client to render purely from snapshots. Local
