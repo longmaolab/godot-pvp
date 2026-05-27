@@ -1141,6 +1141,14 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 func _spawn_damage_label(world_pos: Vector3, dmg: int, is_head: bool) -> void:
 	var label := Label3D.new()
 	label.text = ("HEAD %d" % dmg) if is_head else str(dmg)
+	# Label3D's default font on Web exports can fail to render even ASCII
+	# (no project-theme inheritance, engine default sometimes missing) →
+	# tofu blocks around the hit point. Pin our bundled ui_font.tres so
+	# the damage popup always shows real numbers. Same fix that
+	# PlayerVisuals.attach_name_tag uses for floating name tags.
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	if ui_font != null:
+		label.font = ui_font
 	label.font_size = 96 if is_head else 64
 	label.outline_size = 14
 	label.outline_modulate = Color(0, 0, 0, 1)
