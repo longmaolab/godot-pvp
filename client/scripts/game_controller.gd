@@ -866,6 +866,11 @@ func _on_server_respawn(peer_id: int, pos: Vector3) -> void:
 		return
 	if p.has_method(&"respawn"):
 		p.respawn(pos)
+	# Spectator cleanup — if our own peer just respawned, swap back to own
+	# camera. _spectate_target's player_controller.respawn() also makes
+	# its own camera current, so without this we'd see the wrong cam.
+	if p == local_player:
+		_on_local_respawn()
 
 
 ## DS-M4: dedicated server dummy hit / killed observers. Log to stdout so the
@@ -2001,3 +2006,66 @@ func _on_throwable_explode(proj_id: int, position: Vector3) -> void:
 		v.queue_free()
 	_throwable_visuals.erase(proj_id)
 	_THROWABLE_VISUAL.spawn_explosion_vfx(self, position, color, radius)
+
+
+# ── Spectator mode (while dead) ──────────────────────────────────────────
+# While local_player.is_dead, [ / ] keys cycle through alive peers' cameras.
+# Esc / respawn return to own view. Camera switching is local-only — we
+# call camera.make_current() on the chosen player's camera.
+
+var _spectate_target: Node = null
+var _spectate_index: int = -1
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if local_player == null or not is_instance_valid(local_player):
+		return
+	if not local_player.is_dead:
+		return
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
+		_cycle_spectate(1 if event.keycode == KEY_BRACKETRIGHT else -1)
+
+
+func _cycle_spectate(direction: int) -> void:
+	# Gather all alive players in same room (or all alive if no room).
+	var local_id: int = multiplayer.get_unique_id() if _is_networked() else 1
+	var my_room: String = _room_id_for_peer(local_id)
+	var alive: Array = []
+	for peer in players_by_peer.keys():
+		var p: Node = players_by_peer[peer]
+		if p == null or not is_instance_valid(p):
+			continue
+		if "is_dead" in p and p.is_dead:
+			continue
+		if p == local_player:
+			continue
+		if not my_room.is_empty() and _room_id_for_peer(peer) != my_room:
+			continue
+		alive.append(p)
+	if alive.is_empty():
+		# Fall back to own camera so the player isn't blank.
+		_spectate_target = null
+		if local_player.camera != null:
+			local_player.camera.make_current()
+		if hud != null:
+			hud.push_feed("观战: 房间内无其他存活玩家", Color(0.85, 0.85, 0.55))
+		return
+	_spectate_index = (_spectate_index + direction) % alive.size()
+	if _spectate_index < 0:
+		_spectate_index += alive.size()
+	_spectate_target = alive[_spectate_index]
+	if _spectate_target.camera != null:
+		_spectate_target.camera.make_current()
+	if hud != null:
+		var name_str: String = String(_spectate_target.player_name) if "player_name" in _spectate_target else "Peer"
+		hud.push_feed("观战: %s  ([/] 切换)" % name_str, Color(0.65, 0.85, 1))
+
+
+func _on_local_respawn() -> void:
+	# Called externally when local player respawns — reset spectate state.
+	_spectate_target = null
+	_spectate_index = -1
+	if local_player != null and local_player.camera != null:
+		local_player.camera.make_current()

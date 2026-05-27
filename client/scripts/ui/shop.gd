@@ -410,9 +410,25 @@ func _on_open_chest(kind: StringName) -> void:
 
 
 func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name: String) -> void:
+	# Two-phase reveal — first show a "shaking chest" frame, then after a
+	# short suspense window, swap to the actual reward. Pure cosmetic.
+	# Server already chose + persisted; we're just timing the visual.
+	var kind_label: String = "COMMON" if kind == &"common" else "RARE"
+	var shake_color: String = "#88ccff" if kind == &"common" else "#ff88dd"
+	var shake_frames: Array[String] = [
+		"[center][color=%s]┌─■─┐\n│ ▒▒ │ ?\n└───┘[/color][/center]" % shake_color,
+		"[center][color=%s] ┌─■─┐\n  │ ▓▓ │ ?\n └───┘[/color][/center]" % shake_color,
+		"[center][color=%s]┌─■─┐\n│ ▒▒ │ ??\n└───┘[/color][/center]" % shake_color,
+		"[center][color=%s] ┌─■─┐\n  │ ▓▓ │ ??\n └───┘[/color][/center]" % shake_color,
+	]
+	# Shake for ~0.8s.
+	var t: Tween = create_tween()
+	for i in 6:
+		var frame: String = shake_frames[i % shake_frames.size()]
+		t.tween_callback(func(): _reveal(frame)).set_delay(0.12)
+	# Final reveal.
 	var lines: Array[String] = []
-	lines.append("[center][color=#ffd84a]✦ %s CHEST ✦[/color][/center]" % \
-		("COMMON" if kind == &"common" else "RARE"))
+	lines.append("[center][color=#ffd84a]✦ %s CHEST OPENED ✦[/color][/center]" % kind_label)
 	lines.append("")
 	lines.append("[color=#88ccff] +%d fragments[/color]" % frags)
 	if creds > 0:
@@ -420,7 +436,8 @@ func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name
 	if weapon_name != "":
 		lines.append("")
 		lines.append("[color=#ff88dd]★ JACKPOT — unlocked %s! ★[/color]" % weapon_name)
-	_reveal("\n".join(lines))
+	var final_text: String = "\n".join(lines)
+	t.tween_callback(func(): _reveal(final_text)).set_delay(0.25)
 
 
 # ── Wheel tab ─────────────────────────────────────────────────────────────

@@ -471,6 +471,15 @@ theme_override_styles/hover = SubResource("picker_hover")
 theme_override_styles/pressed = SubResource("picker_hover")
 theme_override_styles/focus = SubResource("picker_hover")
 
+[node name="LoadoutEditButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 36)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "↻ 自定义装备 / CUSTOM"
+
 [node name="LoadoutDescription" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
 text = ""
 autowrap_mode = 0
@@ -516,6 +525,15 @@ theme_override_styles/normal = SubResource("btn_secondary_normal")
 theme_override_styles/hover = SubResource("btn_secondary_hover")
 theme_override_styles/pressed = SubResource("btn_secondary_pressed")
 text = "◯ 每日转盘 / DAILY WHEEL"
+
+[node name="LoginButton" type="Button" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+text = "[A] 账号 / ACCOUNT"
 
 [node name="FunFactSep" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
@@ -792,6 +810,176 @@ title = "武器图鉴 / WEAPON CATALOG"
 size = Vector2i(760, 600)
 theme = ExtResource("2_theme")
 ok_button_text = "关闭"
+
+[node name="LoadoutEditDialog" type="AcceptDialog" parent="."]
+title = "编辑装备 / EDIT LOADOUT"
+size = Vector2i(620, 460)
+theme = ExtResource("2_theme")
+ok_button_text = "关闭"
+
+[node name="V" type="VBoxContainer" parent="LoadoutEditDialog"]
+custom_minimum_size = Vector2(580, 400)
+anchors_preset = 15
+theme_override_constants/separation = 12
+
+[node name="Hint" type="Label" parent="LoadoutEditDialog/V"]
+text = "为 4 个槽位各选一把武器。下次进 PRACTICE 或房间会装备这套。"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+autowrap_mode = 3
+
+[node name="Slot1Row" type="HBoxContainer" parent="LoadoutEditDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="LoadoutEditDialog/V/Slot1Row"]
+text = "槽 1 (主):"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(90, 0)
+
+[node name="Picker" type="OptionButton" parent="LoadoutEditDialog/V/Slot1Row"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+
+[node name="Slot2Row" type="HBoxContainer" parent="LoadoutEditDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="LoadoutEditDialog/V/Slot2Row"]
+text = "槽 2 (副):"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(90, 0)
+
+[node name="Picker" type="OptionButton" parent="LoadoutEditDialog/V/Slot2Row"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+
+[node name="Slot3Row" type="HBoxContainer" parent="LoadoutEditDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="LoadoutEditDialog/V/Slot3Row"]
+text = "槽 3 (重):"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(90, 0)
+
+[node name="Picker" type="OptionButton" parent="LoadoutEditDialog/V/Slot3Row"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+
+[node name="Slot4Row" type="HBoxContainer" parent="LoadoutEditDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="LoadoutEditDialog/V/Slot4Row"]
+text = "槽 4 (投):"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(90, 0)
+
+[node name="Picker" type="OptionButton" parent="LoadoutEditDialog/V/Slot4Row"]
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+theme_override_styles/normal = SubResource("picker_normal")
+theme_override_styles/hover = SubResource("picker_hover")
+
+[node name="ButtonsRow" type="HBoxContainer" parent="LoadoutEditDialog/V"]
+theme_override_constants/separation = 10
+
+[node name="SaveButton" type="Button" parent="LoadoutEditDialog/V/ButtonsRow"]
+custom_minimum_size = Vector2(0, 44)
+text = "保存 / SAVE"
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+
+[node name="ResetButton" type="Button" parent="LoadoutEditDialog/V/ButtonsRow"]
+custom_minimum_size = Vector2(0, 44)
+text = "重置默认 / RESET"
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+
+[node name="Status" type="Label" parent="LoadoutEditDialog/V"]
+text = ""
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+
+[node name="LoginDialog" type="AcceptDialog" parent="."]
+title = "账号 / ACCOUNT"
+size = Vector2i(500, 340)
+theme = ExtResource("2_theme")
+ok_button_text = "关闭"
+
+[node name="V" type="VBoxContainer" parent="LoginDialog"]
+custom_minimum_size = Vector2(460, 280)
+anchors_preset = 15
+theme_override_constants/separation = 10
+
+[node name="Hint" type="Label" parent="LoginDialog/V"]
+text = "绑定账号:即使换设备 / 清缓存,也能用账号密码回来。匿名设备账号也继续工作 — 这是 OPTIONAL 升级。"
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.78, 0.85, 0.95, 1)
+autowrap_mode = 3
+
+[node name="HandleRow" type="HBoxContainer" parent="LoginDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="HandleLabel" type="Label" parent="LoginDialog/V/HandleRow"]
+text = "账号:"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(60, 0)
+
+[node name="HandleInput" type="LineEdit" parent="LoginDialog/V/HandleRow"]
+custom_minimum_size = Vector2(0, 36)
+placeholder_text = "账号名 (3-16 字符)"
+max_length = 16
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("lineedit_style")
+
+[node name="PasswordRow" type="HBoxContainer" parent="LoginDialog/V"]
+theme_override_constants/separation = 8
+
+[node name="PasswordLabel" type="Label" parent="LoginDialog/V/PasswordRow"]
+text = "密码:"
+theme_override_font_sizes/font_size = 14
+custom_minimum_size = Vector2(60, 0)
+
+[node name="PasswordInput" type="LineEdit" parent="LoginDialog/V/PasswordRow"]
+custom_minimum_size = Vector2(0, 36)
+placeholder_text = "至少 6 位"
+max_length = 32
+secret = true
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("lineedit_style")
+
+[node name="ButtonsRow" type="HBoxContainer" parent="LoginDialog/V"]
+theme_override_constants/separation = 10
+
+[node name="RegisterButton" type="Button" parent="LoginDialog/V/ButtonsRow"]
+custom_minimum_size = Vector2(0, 44)
+text = "注册 / REGISTER"
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("btn_secondary_normal")
+theme_override_styles/hover = SubResource("btn_secondary_hover")
+theme_override_styles/pressed = SubResource("btn_secondary_pressed")
+
+[node name="LoginButton" type="Button" parent="LoginDialog/V/ButtonsRow"]
+custom_minimum_size = Vector2(0, 44)
+text = "登录 / LOGIN"
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("btn_primary_normal")
+theme_override_styles/hover = SubResource("btn_primary_hover")
+theme_override_styles/pressed = SubResource("btn_primary_pressed")
+
+[node name="Status" type="Label" parent="LoginDialog/V"]
+text = ""
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="WheelDialog" type="AcceptDialog" parent="."]
 title = "每日转盘 / DAILY WHEEL"

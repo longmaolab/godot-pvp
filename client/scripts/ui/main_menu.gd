@@ -24,6 +24,15 @@ var MODES: Array = []
 @onready var mode_desc: Label = $Scroll/Center/Cols/LeftCard/V/ModeDescription
 @onready var loadout_picker: OptionButton = $Scroll/Center/Cols/LeftCard/V/LoadoutPicker
 @onready var loadout_desc: Label = $Scroll/Center/Cols/LeftCard/V/LoadoutDescription
+@onready var loadout_edit_btn: Button = $Scroll/Center/Cols/LeftCard/V/LoadoutEditButton
+@onready var loadout_edit_dialog: AcceptDialog = $LoadoutEditDialog
+@onready var loadout_edit_slot1: OptionButton = $LoadoutEditDialog/V/Slot1Row/Picker
+@onready var loadout_edit_slot2: OptionButton = $LoadoutEditDialog/V/Slot2Row/Picker
+@onready var loadout_edit_slot3: OptionButton = $LoadoutEditDialog/V/Slot3Row/Picker
+@onready var loadout_edit_slot4: OptionButton = $LoadoutEditDialog/V/Slot4Row/Picker
+@onready var loadout_edit_save: Button = $LoadoutEditDialog/V/ButtonsRow/SaveButton
+@onready var loadout_edit_reset: Button = $LoadoutEditDialog/V/ButtonsRow/ResetButton
+@onready var loadout_edit_status: Label = $LoadoutEditDialog/V/Status
 @onready var weapons_btn: Button = $Scroll/Center/Cols/LeftCard/V/WeaponsButton
 @onready var shop_btn: Button = $Scroll/Center/Cols/LeftCard/V/ShopButton
 @onready var redeem_btn: Button = $Scroll/Center/Cols/LeftCard/V/RedeemButton
@@ -35,6 +44,13 @@ var MODES: Array = []
 @onready var wheel_dialog: AcceptDialog = $WheelDialog
 @onready var wheel_spin: Button = $WheelDialog/V/SpinButton
 @onready var wheel_result: Label = $WheelDialog/V/Result
+@onready var login_btn: Button = $Scroll/Center/Cols/LeftCard/V/LoginButton
+@onready var login_dialog: AcceptDialog = $LoginDialog
+@onready var login_handle: LineEdit = $LoginDialog/V/HandleRow/HandleInput
+@onready var login_password: LineEdit = $LoginDialog/V/PasswordRow/PasswordInput
+@onready var login_register_btn: Button = $LoginDialog/V/ButtonsRow/RegisterButton
+@onready var login_login_btn: Button = $LoginDialog/V/ButtonsRow/LoginButton
+@onready var login_status: Label = $LoginDialog/V/Status
 @onready var practice_btn: Button = $Scroll/Center/Cols/RightCard/V/PracticeButton
 @onready var create_room_btn: Button = $Scroll/Center/Cols/RightCard/V/CreateRoomButton
 @onready var browse_rooms_btn: Button = $Scroll/Center/Cols/RightCard/V/BrowseRoomsButton
@@ -131,6 +147,12 @@ func _ready() -> void:
 	redeem_input.text_submitted.connect(func(_t): _on_submit_redeem())
 	wheel_btn.pressed.connect(_on_open_wheel)
 	wheel_spin.pressed.connect(_on_submit_spin)
+	login_btn.pressed.connect(_on_open_login)
+	login_register_btn.pressed.connect(_on_register_pressed)
+	login_login_btn.pressed.connect(_on_login_pressed)
+	loadout_edit_btn.pressed.connect(_on_open_loadout_edit)
+	loadout_edit_save.pressed.connect(_on_loadout_edit_save)
+	loadout_edit_reset.pressed.connect(_on_loadout_edit_reset)
 	# Subscribe to Settings.server_action so we can show success/failure
 	# feedback inside the redeem dialog. Settings emits this for ALL
 	# server-acked actions; we only react when action == "redeem_code".
@@ -1159,6 +1181,13 @@ func _on_settings_action(action: String, ok: bool, reason: String) -> void:
 			_populate_weapons_dialog()
 		else:
 			weapons_dialog.title = "武器图鉴 — ✗ " + reason
+	elif (action == "login" or action == "register") and login_dialog.visible:
+		if ok:
+			login_status.text = "✓ %s" % ("登录成功" if action == "login" else "账号已注册并绑定")
+			login_status.add_theme_color_override(&"font_color", Color(0.55, 0.95, 0.55))
+		else:
+			login_status.text = "✗ %s" % reason
+			login_status.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
 
 
 # ── Daily wheel ──────────────────────────────────────────────────────────
@@ -1231,3 +1260,137 @@ func _play_wheel_animation(final_text: String) -> void:
 			wheel_result.text = final_text
 			wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
 	).set_delay(0.3)
+
+
+# ── Account login / register ─────────────────────────────────────────────
+
+func _on_open_login() -> void:
+	login_handle.text = ""
+	login_password.text = ""
+	login_status.text = ""
+	login_dialog.popup_centered()
+	login_handle.grab_focus.call_deferred()
+
+
+func _on_register_pressed() -> void:
+	_submit_account("register")
+
+
+func _on_login_pressed() -> void:
+	_submit_account("login")
+
+
+func _submit_account(action: String) -> void:
+	var handle: String = login_handle.text.strip_edges()
+	var password: String = login_password.text
+	if handle.length() < 3 or handle.length() > 16:
+		login_status.text = "账号名 3-16 字符"
+		login_status.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
+		return
+	if password.length() < 6:
+		login_status.text = "密码至少 6 位"
+		login_status.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
+		return
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		login_status.text = "先 CREATE ROOM / BROWSE 连服务器再来"
+		login_status.add_theme_color_override(&"font_color", Color(1, 0.7, 0.4))
+		return
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null:
+		return
+	if action == "register" and settings.has_method(&"request_register_account"):
+		settings.request_register_account(handle, password)
+	elif action == "login" and settings.has_method(&"request_login"):
+		settings.request_login(handle, password)
+	login_status.text = "提交中..."
+	login_status.add_theme_color_override(&"font_color", Color(0.65, 0.85, 0.95))
+
+
+# ── Custom Loadout editor ────────────────────────────────────────────────
+# 4 separate OptionButtons, each filled with every weapon on disk. User
+# picks a weapon per slot, Save writes Settings.loadout_ids; Reset goes
+# back to DEFAULT_LOADOUT.
+
+var _loadout_edit_weapon_ids: Array[String] = []   # ordered same as picker items
+
+
+func _on_open_loadout_edit() -> void:
+	_populate_loadout_edit_pickers()
+	loadout_edit_status.text = ""
+	loadout_edit_dialog.popup_centered()
+
+
+func _populate_loadout_edit_pickers() -> void:
+	# Scan disk once, build the same ID list for all 4 pickers.
+	_loadout_edit_weapon_ids.clear()
+	var pickers: Array[OptionButton] = [loadout_edit_slot1, loadout_edit_slot2, loadout_edit_slot3, loadout_edit_slot4]
+	for p in pickers:
+		p.clear()
+	var dir := DirAccess.open("res://shared/data/weapons/")
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var fname: String = dir.get_next()
+		if fname == "":
+			break
+		if fname.ends_with(".tres.remap"):
+			fname = fname.substr(0, fname.length() - 6)
+		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
+			continue
+		var wpn: Resource = load("res://shared/data/weapons/" + fname)
+		if wpn == null:
+			continue
+		var wid: String = fname.replace(".tres", "")
+		_loadout_edit_weapon_ids.append(wid)
+		for p in pickers:
+			p.add_item("%s (%s)" % [wpn.display_name, wpn.type_label])
+	# Preselect each slot from Settings.loadout_ids (or DEFAULT_LOADOUT).
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	var current: Array = []
+	if settings != null and "loadout_ids" in settings and not Array(settings.loadout_ids).is_empty():
+		current = settings.loadout_ids
+	else:
+		current = ["ak20", "sg8", "srx", "grenade"]
+	for slot_i in 4:
+		var target_id: String = String(current[slot_i]) if slot_i < current.size() else ""
+		var idx: int = _loadout_edit_weapon_ids.find(target_id)
+		if idx >= 0:
+			pickers[slot_i].select(idx)
+		else:
+			pickers[slot_i].select(0)
+
+
+func _on_loadout_edit_save() -> void:
+	var pickers: Array[OptionButton] = [loadout_edit_slot1, loadout_edit_slot2, loadout_edit_slot3, loadout_edit_slot4]
+	var ids: Array[String] = []
+	for p in pickers:
+		var idx: int = p.selected
+		if idx < 0 or idx >= _loadout_edit_weapon_ids.size():
+			continue
+		ids.append(_loadout_edit_weapon_ids[idx])
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	if settings == null:
+		return
+	settings.loadout_ids = Array(ids)
+	if settings.has_method(&"save_to_disk"):
+		settings.save_to_disk()
+	loadout_edit_status.text = "✓ 已保存 4 槽自定义装备"
+	loadout_edit_status.add_theme_color_override(&"font_color", Color(0.55, 0.95, 0.55))
+	# Reset the LoadoutPicker selection to "default" since picking a recipe
+	# would overwrite our custom save. Custom = no recipe match.
+	if loadout_picker != null:
+		loadout_picker.select(0)
+
+
+func _on_loadout_edit_reset() -> void:
+	# Re-populate with default ids selected.
+	var defaults: Array = ["ak20", "sg8", "srx", "grenade"]
+	var pickers: Array[OptionButton] = [loadout_edit_slot1, loadout_edit_slot2, loadout_edit_slot3, loadout_edit_slot4]
+	for slot_i in 4:
+		var idx: int = _loadout_edit_weapon_ids.find(String(defaults[slot_i]))
+		if idx >= 0:
+			pickers[slot_i].select(idx)
+	loadout_edit_status.text = "已重置 (保存生效)"
+	loadout_edit_status.add_theme_color_override(&"font_color", Color(0.85, 0.85, 0.55))

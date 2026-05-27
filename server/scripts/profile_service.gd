@@ -559,6 +559,13 @@ func _on_redeem_code(peer_id: int, code: String) -> void:
 
 # ── Public helpers for other server systems ─────────────────────────────
 
+# Anti-cheat: per-peer running headshot-ratio counters, kept in memory
+# for the lifetime of the DS process. Reset on peer_disconnect.
+var _peer_kills: Dictionary = {}        # peer_id → int
+var _peer_headshots: Dictionary = {}    # peer_id → int
+var _peer_hs_warned: Dictionary = {}    # peer_id → bool (only warn once per session)
+
+
 ## Called by GameController._on_any_player_died on the DS so the death/kill
 ## also ticks the cross-match `stats_lifetime` table for leaderboards.
 func record_death(killer_peer: int, victim_peer: int) -> void:
@@ -568,6 +575,41 @@ func record_death(killer_peer: int, victim_peer: int) -> void:
 	var victim_id: int = int(_peer_account.get(victim_peer, 0))
 	var db: Node = get_node(^"/root/Database")
 	db.record_kill(killer_id, victim_id)
+
+
+## fire_resolver calls this when a fatal headshot lands. Tracks running
+## ratio per peer; if a peer's HS / kills > threshold AND kills >= sample
+## floor, push_warning so a human reviewer notices. Warn-only — false
+## positives on a streak of legit clutch shots would frustrate real players.
+func record_headshot_kill(killer_peer: int) -> void:
+	if killer_peer <= 0:
+		return
+	_peer_kills[killer_peer] = int(_peer_kills.get(killer_peer, 0)) + 1
+	_peer_headshots[killer_peer] = int(_peer_headshots.get(killer_peer, 0)) + 1
+	_maybe_alert_headshot_ratio(killer_peer)
+
+
+## fire_resolver also calls this for non-head kills so the denominator is
+## accurate. Headshot ratio = hs / (hs + body) = hs / total_kills.
+func record_body_kill(killer_peer: int) -> void:
+	if killer_peer <= 0:
+		return
+	_peer_kills[killer_peer] = int(_peer_kills.get(killer_peer, 0)) + 1
+	_maybe_alert_headshot_ratio(killer_peer)
+
+
+func _maybe_alert_headshot_ratio(peer_id: int) -> void:
+	if _peer_hs_warned.get(peer_id, false):
+		return   # only one warning per peer per session
+	var kills: int = int(_peer_kills.get(peer_id, 0))
+	if kills < NetProtocol.SUSPECT_HEADSHOT_MIN_KILLS:
+		return
+	var heads: int = int(_peer_headshots.get(peer_id, 0))
+	var ratio: float = float(heads) / float(kills)
+	if ratio > NetProtocol.SUSPECT_HEADSHOT_RATIO:
+		_peer_hs_warned[peer_id] = true
+		push_warning("[anticheat] peer %d headshot ratio %.2f (%d/%d) exceeds %.2f — possible aimbot" %
+			[peer_id, ratio, heads, kills, NetProtocol.SUSPECT_HEADSHOT_RATIO])
 
 
 ## Called by GameController._on_match_finished_in_room. Stamps the winner +

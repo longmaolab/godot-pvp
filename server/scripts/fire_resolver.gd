@@ -307,6 +307,16 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 				return
 			if is_dedicated_server:
 				print("[server] hit: shooter=%d victim=%d dmg=%.1f head=%s new_hp=%.1f hitbox=%s" % [peer_id, victim_peer, dmg, is_head, new_hp, collider.name])
+			# Anti-cheat: feed kill / headshot counters into ProfileService for
+			# running ratio tracking. Only count fatal hits (new_hp <= 0) so a
+			# bodyshot streak doesn't dilute the ratio. ProfileService warn-only.
+			if new_hp <= 0.0:
+				var ps: Node = host.get_tree().root.get_node_or_null(^"ProfileService")
+				if ps != null:
+					if is_head and ps.has_method(&"record_headshot_kill"):
+						ps.record_headshot_kill(peer_id)
+					elif not is_head and ps.has_method(&"record_body_kill"):
+						ps.record_body_kill(peer_id)
 			var net_rpc: Node = host.get_node_or_null(^"/root/NetRpc")
 			if net_rpc != null:
 				# F3-M3c: scope damage feedback to the victim's room so a
