@@ -63,6 +63,12 @@ if [ -f "$PROJ/tests/run_hitbox_geometry_test.sh" ]; then
 fi
 run_one "hud_signal_test" \
     "$GODOT" --headless --path "$PROJ" tests/hud_signal_test.tscn
+# grenade_test — throwable AoE math (no network, no projectile spawn — just
+# direct _explode() math). 5s. Added 2026-05-27 alongside the 5 new throwables.
+if [ -f "$PROJ/tests/run_grenade_test.sh" ]; then
+    run_one "grenade_test" \
+        "$PROJ/tests/run_grenade_test.sh"
+fi
 
 ELAPSED=$(($(date +%s) - START_TS))
 echo
