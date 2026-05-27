@@ -592,6 +592,10 @@ func _enter_client_mode() -> void:
 			net_rpc.server_map_info_received.connect(_on_server_map_info)
 		if not net_rpc.server_mode_def_received.is_connected(_on_server_mode_def):
 			net_rpc.server_mode_def_received.connect(_on_server_mode_def)
+		if not net_rpc.server_throwable_spawn_received.is_connected(_on_throwable_spawn):
+			net_rpc.server_throwable_spawn_received.connect(_on_throwable_spawn)
+		if not net_rpc.server_throwable_explode_received.is_connected(_on_throwable_explode):
+			net_rpc.server_throwable_explode_received.connect(_on_throwable_explode)
 		if not net_rpc.server_snapshot_received.is_connected(_on_server_snapshot):
 			net_rpc.server_snapshot_received.connect(_on_server_snapshot)
 		if not net_rpc.server_respawn_received.is_connected(_on_server_respawn):
@@ -1949,3 +1953,45 @@ func _resolve_loadout_for(peer_id: int) -> Array[Resource]:
 	if out.is_empty():
 		return DEFAULT_LOADOUT
 	return out
+
+
+# ── Throwable visuals (client-side) ──────────────────────────────────────
+# Server broadcasts spawn / explode via NetRpc; we mirror the projectile
+# locally for visuals only. Server runs the authoritative arc + damage.
+
+const _THROWABLE_VISUAL := preload("res://client/scripts/throwable_visual.gd")
+var _throwable_visuals: Dictionary = {}   # proj_id (int) → Node3D
+
+
+func _on_throwable_spawn(proj_id: int, weapon_id: StringName, origin: Vector3, velocity: Vector3) -> void:
+	# Skip on the dedicated server — no rendering.
+	if is_dedicated_server:
+		return
+	var path: String = "res://shared/data/weapons/%s.tres" % String(weapon_id)
+	var weapon: Resource = null
+	if ResourceLoader.exists(path):
+		weapon = load(path)
+	var v: Node3D = Node3D.new()
+	v.set_script(_THROWABLE_VISUAL)
+	v.weapon = weapon
+	v.velocity = velocity
+	v.global_position = origin
+	add_child(v)
+	v.global_position = origin   # set AGAIN post-add so the visible mesh sits right
+	_throwable_visuals[proj_id] = v
+
+
+func _on_throwable_explode(proj_id: int, position: Vector3) -> void:
+	if is_dedicated_server:
+		return
+	var v: Variant = _throwable_visuals.get(proj_id)
+	var color: Color = Color(1.0, 0.7, 0.3)
+	var radius: float = 4.0
+	if v != null and is_instance_valid(v):
+		if v.weapon != null:
+			color = v.weapon.bullet_color
+			if "explode_radius" in v.weapon:
+				radius = v.weapon.explode_radius
+		v.queue_free()
+	_throwable_visuals.erase(proj_id)
+	_THROWABLE_VISUAL.spawn_explosion_vfx(self, position, color, radius)

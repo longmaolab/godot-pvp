@@ -78,6 +78,16 @@ signal server_map_info_received(map_path: String)
 ## against the real authority. Server is still 100% authoritative for win
 ## conditions; this is presentation-only on the client.
 signal server_mode_def_received(mode_path: String)
+## Throwable spawn — server broadcasts when a thrown weapon's projectile
+## starts its flight. Client uses `weapon_id` to look up explode_radius +
+## visual mesh, `origin` + `velocity` + `fuse_seconds` to deterministically
+## integrate the same gravity-driven trajectory locally (no per-tick
+## position sync needed, since the throw is short — 1-3s). proj_id is a
+## monotonic counter, used to pair the explode RPC with the right visual.
+signal server_throwable_spawn_received(proj_id: int, weapon_id: StringName, origin: Vector3, velocity: Vector3)
+## Throwable explode — server broadcasts on detonation (contact OR fuse).
+## Client spawns explosion VFX at `position` and frees its visual proxy.
+signal server_throwable_explode_received(proj_id: int, position: Vector3)
 ## Host clicked START in the menu's staging area; all clients should leave
 ## the lobby state and load the game scene now. The host's map/mode picks
 ## are already authoritative via _launch_game → server_map_info during
@@ -423,6 +433,20 @@ func server_map_info(map_path: String) -> void:
 @rpc("authority", "reliable", "call_remote")
 func server_mode_def(mode_path: String) -> void:
 	server_mode_def_received.emit(mode_path)
+
+
+# Throwable lifecycle broadcasts. spawn = "start drawing a projectile at
+# `origin` with `velocity` and run physics locally". explode = "stop the
+# projectile and play VFX at `position`". Reliable so a dropped spawn
+# doesn't leave the client with a phantom mesh.
+@rpc("authority", "reliable", "call_remote")
+func server_throwable_spawn(proj_id: int, weapon_id: StringName, origin: Vector3, velocity: Vector3) -> void:
+	server_throwable_spawn_received.emit(proj_id, weapon_id, origin, velocity)
+
+
+@rpc("authority", "reliable", "call_remote")
+func server_throwable_explode(proj_id: int, position: Vector3) -> void:
+	server_throwable_explode_received.emit(proj_id, position)
 
 
 # Staging "host clicked START" broadcast. Fired from main_menu's staging

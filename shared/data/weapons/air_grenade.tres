@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"air_grenade"
+display_name = "Air Grenade"
+type_label = "Throwable"
+slot = &"support"
+description = "高抛榴弹。强弧度 + 长引信 + 大范围。专打掩体后蹲点的人,绕墙轰顶。"
+damage = 0.0
+headshot_multiplier = 1.0
+magazine = 1
+reserve = 3
+fire_interval_ms = 800
+reload_time_ms = 2000
+auto = false
+pellets = 1
+spread = 0.0
+bullet_speed = 0.0
+is_throwable = true
+throw_speed = 16.0
+throw_arc_pitch = 0.55
+fuse_seconds = 2.5
+explode_radius = 5.5
+explode_damage = 90.0
+price_credits = 220
+bullet_color = Color(0.6, 0.85, 0.5, 1)

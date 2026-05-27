@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hatchet"
+display_name = "Hatchet"
+type_label = "Throwable"
+slot = &"support"
+description = "投掷斧头。中速 + 接触爆 + 中等范围 + 重伤害。一击毙命级输出,但量少。"
+damage = 0.0
+headshot_multiplier = 1.0
+magazine = 1
+reserve = 3
+fire_interval_ms = 600
+reload_time_ms = 2000
+auto = false
+pellets = 1
+spread = 0.0
+bullet_speed = 0.0
+is_throwable = true
+throw_speed = 22.0
+throw_arc_pitch = 0.10
+fuse_seconds = 0.0
+explode_radius = 2.5
+explode_damage = 120.0
+price_credits = 250
+bullet_color = Color(0.85, 0.65, 0.45, 1)

@@ -364,7 +364,12 @@ static func _spawn_throwable(host: Node, shooter: Node, weapon: Resource, fire_y
 		sin(pitch),
 		-cos(yaw) * cos(pitch)
 	)
-	proj.velocity = dir.normalized() * weapon.throw_speed
+	var velocity: Vector3 = dir.normalized() * weapon.throw_speed
+	proj.velocity = velocity
+	# Allocate a monotonic id so the client can pair spawn / explode RPCs.
+	# _next_id is a static var on the script, incremented atomically per spawn.
+	proj.proj_id = proj_script._next_id
+	proj_script._next_id += 1
 	# Parent under the shooter's RoomWorld (MP) or game controller (practice)
 	# so World3D lookup in _resolve_space() finds the right physics space.
 	var room_world: Node = null
@@ -376,3 +381,10 @@ static func _spawn_throwable(host: Node, shooter: Node, weapon: Resource, fire_y
 		room_world.add_child(proj)
 	else:
 		host.add_child(proj)
+	# Broadcast the spawn to all peers so each client integrates the same
+	# trajectory locally for visuals. Reliable because a dropped spawn
+	# leaves the client unaware of the projectile (an explode broadcast
+	# alone wouldn't reconstruct flight visuals).
+	var net_rpc: Node = host.get_tree().root.get_node_or_null(^"NetRpc")
+	if net_rpc != null and host.multiplayer.is_server():
+		net_rpc.server_throwable_spawn.rpc(proj.proj_id, weapon.id, origin, velocity)

@@ -20,6 +20,11 @@ var shooter: Node = null          # the player who threw it (excluded from colli
 var velocity: Vector3 = Vector3.ZERO
 var elapsed: float = 0.0
 var detonated: bool = false
+# Monotonic counter so spawn / explode RPCs can be paired on the client. -1
+# means "not broadcast yet"; set by FireResolver right after spawn so the
+# value is stable across the throw's lifetime.
+static var _next_id: int = 1
+var proj_id: int = -1
 
 
 func _physics_process(delta: float) -> void:
@@ -83,6 +88,10 @@ func _explode() -> void:
 	var center: Vector3 = global_position
 	var radius: float = weapon.explode_radius
 	var max_dmg: float = weapon.explode_damage
+	var net_rpc: Node = get_tree().root.get_node_or_null(^"NetRpc")
+	# Broadcast explosion so every client can spawn VFX + free their proxy.
+	if net_rpc != null and proj_id > 0:
+		net_rpc.server_throwable_explode.rpc(proj_id, center)
 	# Find every player in radius and apply damage with linear falloff.
 	# Player lookup via the game_controller's players_by_peer (queried
 	# by walking up the tree to find /root/Game).
@@ -90,7 +99,6 @@ func _explode() -> void:
 	if game == null or not "players_by_peer" in game:
 		queue_free()
 		return
-	var net_rpc: Node = get_tree().root.get_node_or_null(^"NetRpc")
 	for peer in game.players_by_peer.keys():
 		var victim: Node = game.players_by_peer[peer]
 		if victim == null or not is_instance_valid(victim):
