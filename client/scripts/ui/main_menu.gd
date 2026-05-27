@@ -1199,9 +1199,35 @@ func _on_settings_reward(kind: String, reward: Dictionary) -> void:
 		parts.append("普通宝箱 +%d" % int(reward.common_chests))
 	if reward.has("rare_chests"):
 		parts.append("稀有宝箱 +%d" % int(reward.rare_chests))
-	if parts.is_empty():
-		wheel_result.text = "✓ 转盘已完成"
-	else:
-		wheel_result.text = "★ 中奖: %s" % " / ".join(parts)
-	wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
+	var final_text: String = "✓ 转盘已完成" if parts.is_empty() else "★ 中奖: %s" % " / ".join(parts)
+	_play_wheel_animation(final_text)
 	wheel_spin.disabled = true   # consumed for 24h
+
+
+# Wheel animation: cycle through 8 slot labels in the result label for ~1.8s
+# (decelerating), then settle on the actual prize text. Pure cosmetic — the
+# server already chose the reward + persisted it.
+func _play_wheel_animation(final_text: String) -> void:
+	var labels: Array[String] = [
+		"50 信用点", "150 信用点", "300 信用点", "1000 信用点",
+		"5 碎片", "15 碎片", "普通宝箱", "稀有宝箱",
+	]
+	var total_steps: int = 16
+	var t: Tween = create_tween()
+	for i in total_steps:
+		# Step delay accelerates → decelerates so the wheel "feels" like
+		# it's slowing down to a stop. Linear-ish at the end, fast early.
+		var delay: float = 0.04 + (float(i) / float(total_steps)) * 0.18
+		var label_idx: int = i % labels.size()
+		var label: String = labels[label_idx]
+		t.tween_callback(func():
+			if is_instance_valid(wheel_result):
+				wheel_result.text = "◯ %s" % label
+				wheel_result.add_theme_color_override(&"font_color", Color(0.55, 0.85, 1, 1))
+		).set_delay(delay)
+	# Final settle.
+	t.tween_callback(func():
+		if is_instance_valid(wheel_result):
+			wheel_result.text = final_text
+			wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
+	).set_delay(0.3)

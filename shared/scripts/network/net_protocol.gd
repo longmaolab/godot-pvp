@@ -34,6 +34,20 @@ const INPUT_BITS_MASK := 0xFFFF
 # real human flick speed, so this only flags obvious snap-aim teleports.
 const MAX_AIM_DELTA_RAD := PI
 
+# Anti-cheat speed monitor: legitimate move_speed=5 + speed-pad mults can hit
+# ~15 m/s. Anything higher is suspicious enough to log. We only WARN today
+# (server prints a line, no auto-kick) so a legit edge case doesn't ban
+# real players; the log line + repeated offender count is enough signal to
+# investigate manually.
+const SUSPECT_HORIZ_SPEED := 20.0
+# Headshot ratio threshold for a statistical anti-cheat alert. A genuinely
+# excellent player tops out around 50-60% headshots; anyone consistently
+# above this across enough kills is probably aimbotting.
+const SUSPECT_HEADSHOT_RATIO := 0.85
+# Minimum sample size before headshot-ratio alert fires (avoid 1/1 = 100%
+# false positives on a single lucky shot).
+const SUSPECT_HEADSHOT_MIN_KILLS := 12
+
 # ── Damage ──────────────────────────────────────────────────────────────────
 const PLAYER_MAX_HP := 300                     # matches server.js PLAYER_MAX_HP
 const HEAL_CAP := 150                          # matches server.js healSelf clamp

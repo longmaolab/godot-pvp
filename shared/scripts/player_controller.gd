@@ -108,6 +108,9 @@ var _remote_input_bits: int = 0
 var _remote_input_yaw: float = 0.0
 var _remote_input_pitch: float = 0.0
 var _remote_input_tick: int = -1
+# Anti-cheat: last time we warned about excessive horizontal speed for this
+# peer. Throttle to 1 log / 5s so a sustained speedhack doesn't spam.
+var _last_speed_warn_ms: int = 0
 # Edge-detection for "just pressed" semantics on remote-input players. Bits
 # that were 0 last tick and 1 this tick. Cleared after _step_movement consumes.
 var _remote_input_just_pressed: int = 0
@@ -598,6 +601,17 @@ func _step_movement(delta: float) -> void:
 	velocity.x = lerpf(velocity.x, target_vx, alpha)
 	velocity.z = lerpf(velocity.z, target_vz, alpha)
 	move_and_slide()
+	# Anti-cheat speed monitor — server-side only. Log a warning if a remote
+	# peer's horizontal speed exceeds SUSPECT_HORIZ_SPEED. Throttled to 1
+	# log every 5s per peer so a sustained speedhack doesn't spam the log.
+	if use_remote_input and _is_networked() and multiplayer.is_server():
+		var horiz: float = Vector2(velocity.x, velocity.z).length()
+		if horiz > NetProtocol.SUSPECT_HORIZ_SPEED:
+			var now_ms: int = Time.get_ticks_msec()
+			if now_ms - _last_speed_warn_ms > 5000:
+				_last_speed_warn_ms = now_ms
+				push_warning("[anticheat] peer %d horiz speed=%.1f m/s exceeds %.1f" %
+					[get_multiplayer_authority(), horiz, NetProtocol.SUSPECT_HORIZ_SPEED])
 
 
 ## DS-M3 client-side fire feedback. When the local human is in snapshot-only

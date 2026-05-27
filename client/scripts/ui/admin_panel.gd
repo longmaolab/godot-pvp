@@ -15,6 +15,7 @@ class_name AdminPanel
 @onready var ammo_btn: Button = $Card/V/AmmoBtn
 @onready var nuke_btn: Button = $Card/V/NukeBtn
 @onready var credits_btn: Button = $Card/V/CreditsBtn
+@onready var players_list: VBoxContainer = $Card/V/PlayersList
 
 
 func _ready() -> void:
@@ -83,6 +84,71 @@ func _process(_delta: float) -> void:
 		if p != null and "weapon_def" in p and p.weapon_def != null:
 			p.ammo_in_mag = p.weapon_def.magazine
 			p.ammo_reserve = p.weapon_def.reserve
+	# Refresh player list 4x/sec while the panel is visible. Cheap enough
+	# (just a few labels) that we don't bother with diffing.
+	if visible:
+		_refresh_players_list()
+
+
+var _player_list_accum: float = 0.0
+
+
+func _refresh_players_list() -> void:
+	# Throttle to ~4 Hz so we don't rebuild the layout every frame.
+	_player_list_accum += get_process_delta_time()
+	if _player_list_accum < 0.25:
+		return
+	_player_list_accum = 0.0
+	var gc: Node = _game_controller()
+	if gc == null or not "players_by_peer" in gc:
+		return
+	# Wipe previous rows.
+	for child in players_list.get_children():
+		child.queue_free()
+	var local: Node = _local()
+	for peer in gc.players_by_peer.keys():
+		var p: Node = gc.players_by_peer[peer]
+		if p == null or not is_instance_valid(p):
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 6)
+		var name_str: String = String(p.player_name) if "player_name" in p else "Peer %d" % peer
+		var hp_str: String = "HP %d/%d" % [int(p.hp) if "hp" in p else 0, int(p.max_hp) if "max_hp" in p else 0]
+		var weapon_str: String = String(p.weapon_def.id) if "weapon_def" in p and p.weapon_def != null else "—"
+		var lbl := Label.new()
+		# Show YOU marker for local.
+		var prefix: String = "★ " if p == local else "  "
+		lbl.text = "%s%s · %s · %s" % [prefix, name_str, hp_str, weapon_str]
+		lbl.add_theme_font_size_override(&"font_size", 11)
+		# Dead = greyed out, alive = white-ish, local = yellow.
+		var col: Color = Color(0.55, 0.55, 0.55)
+		if "is_dead" in p and not p.is_dead:
+			col = Color(0.85, 0.85, 0.95) if p != local else Color(1, 0.85, 0.4)
+		lbl.add_theme_color_override(&"font_color", col)
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(lbl)
+		# Teleport-to button — only meaningful for non-local players.
+		if p != local:
+			var tp := Button.new()
+			tp.text = "TP"
+			tp.tooltip_text = "Teleport local player to this player"
+			tp.add_theme_font_size_override(&"font_size", 10)
+			tp.custom_minimum_size = Vector2(36, 0)
+			var captured: Node = p
+			tp.pressed.connect(func(): _teleport_to(captured))
+			row.add_child(tp)
+		players_list.add_child(row)
+
+
+func _teleport_to(target: Node) -> void:
+	var p: Node = _local()
+	if p == null or target == null or not is_instance_valid(target):
+		return
+	# Stand 2m behind the target so you don't spawn inside them.
+	var fwd: Vector3 = -target.transform.basis.z
+	fwd.y = 0
+	fwd = fwd.normalized() if fwd.length() > 0.01 else Vector3(0, 0, 1)
+	p.global_position = target.global_position - fwd * 2.0 + Vector3(0, 0.5, 0)
 
 
 func _on_speed(v: bool) -> void:

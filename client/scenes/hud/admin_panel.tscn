@@ -86,3 +86,14 @@ theme_override_font_sizes/font_size = 13
 [node name="CreditsBtn" type="Button" parent="Card/V"]
 text = "$ +1000 CREDITS"
 theme_override_font_sizes/font_size = 13
+
+[node name="Sep3" type="HSeparator" parent="Card/V"]
+
+[node name="PlayersHeader" type="Label" parent="Card/V"]
+text = "PLAYERS"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.55, 0.85, 1, 0.85)
+
+[node name="PlayersList" type="VBoxContainer" parent="Card/V"]
+custom_minimum_size = Vector2(0, 120)
+theme_override_constants/separation = 2
