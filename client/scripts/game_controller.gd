@@ -2022,86 +2022,211 @@ func _on_throwable_explode(proj_id: int, position: Vector3) -> void:
 	_THROWABLE_VISUAL.spawn_explosion_vfx(self, position, color, radius)
 
 
-# ── Spectator mode (while dead) ──────────────────────────────────────────
-# ── Killcam ─────────────────────────────────────────────────────────────
-# When the LOCAL player dies, frame the killer from 3 camera angles that
-# auto-cut during the respawn window: (0) over the killer's shoulder,
-# (1) side profile of the kill, (2) the victim's last point of view
-# looking back at who shot them. NOT a time-rewind replay — it frames the
-# killer at their live position right after the kill. Player can press
-# [ / ] to drop into free-spectate, which cancels the killcam.
+# ── Killcam (death replay) ───────────────────────────────────────────────
+# A TRUE rewind replay: the client continuously records the last few seconds
+# of every player's position into a ring buffer. When the LOCAL player dies,
+# it replays that buffer — ghost capsules retrace exactly what happened
+# leading up to the kill, the live world is hidden, and a cinematic camera
+# tracks the killer→victim line. ~3s, auto, in-game. Press [ / ] to cancel
+# into free-spectate.
 
-const _KILLCAM_ANGLE_SEC := 1.0   # seconds per camera angle before cutting
+const _KC_SAMPLE_HZ := 20.0          # ring-buffer record rate
+const _KC_HISTORY_SEC := 3.2         # how much past to keep / replay
+const _KC_REPLAY_SEC := 3.0          # wall-clock length of the replay
+const _KC_GHOST_COLORS := [
+	Color(1.0, 0.5, 0.5), Color(0.4, 0.8, 1.0), Color(0.6, 1.0, 0.5),
+	Color(1.0, 0.85, 0.4), Color(0.85, 0.55, 1.0), Color(0.5, 0.95, 0.9),
+]
+
+# Ring buffer: Array of { t:ms, states:{ peer:int → [x,y,z,yaw] } }.
+var _kc_buffer: Array = []
+var _kc_sample_accum: float = 0.0
+
 var _killcam_active: bool = false
 var _killcam_cam: Camera3D = null
-var _killcam_killer: Node = null
-var _killcam_death_pos: Vector3 = Vector3.ZERO
-var _killcam_elapsed: float = 0.0
-var _killcam_angle: int = -1
+var _kc_frames: Array = []            # frozen snapshot of the buffer at death
+var _kc_elapsed: float = 0.0
+var _kc_killer_peer: int = 0
+var _kc_victim_peer: int = 0
+var _kc_ghosts: Dictionary = {}       # peer → MeshInstance3D
+var _kc_hidden: Array = []            # live players we hid, to restore later
+
+
+func _process(delta: float) -> void:
+	if is_dedicated_server:
+		return
+	if _killcam_active:
+		_tick_killcam(delta)
+	else:
+		_record_kc_buffer(delta)
+
+
+# Sample all players' transforms into the ring buffer at _KC_SAMPLE_HZ.
+func _record_kc_buffer(delta: float) -> void:
+	if players_by_peer.is_empty():
+		return
+	_kc_sample_accum += delta
+	if _kc_sample_accum < 1.0 / _KC_SAMPLE_HZ:
+		return
+	_kc_sample_accum = 0.0
+	var states: Dictionary = {}
+	for peer in players_by_peer.keys():
+		var p: Node = players_by_peer[peer]
+		if p == null or not is_instance_valid(p):
+			continue
+		var pos: Vector3 = p.global_position
+		states[peer] = [pos.x, pos.y, pos.z, p.rotation.y]
+	_kc_buffer.append({"t": Time.get_ticks_msec(), "states": states})
+	# Drop frames older than the history window.
+	var cutoff: int = Time.get_ticks_msec() - int(_KC_HISTORY_SEC * 1000.0)
+	while _kc_buffer.size() > 0 and int(_kc_buffer[0].t) < cutoff:
+		_kc_buffer.pop_front()
 
 
 func _start_killcam(killer_node: Node) -> void:
-	# Only for the local human, and only with a valid killer that isn't us.
 	if local_player == null or not is_instance_valid(local_player):
 		return
 	if killer_node == null or not is_instance_valid(killer_node) or killer_node == local_player:
 		return
-	_killcam_killer = killer_node
-	_killcam_death_pos = local_player.global_position
+	if _kc_buffer.size() < 2:
+		return   # nothing recorded yet (match just started) — skip replay
+	# Freeze the buffer as the replay reel.
+	_kc_frames = _kc_buffer.duplicate(true)
+	_kc_killer_peer = killer_node.get_multiplayer_authority()
+	_kc_victim_peer = local_player.get_multiplayer_authority()
 	_killcam_active = true
-	_killcam_elapsed = _KILLCAM_ANGLE_SEC   # force an immediate first cut
-	_killcam_angle = -1
+	_kc_elapsed = 0.0
+	# Camera.
 	if _killcam_cam == null:
 		_killcam_cam = Camera3D.new()
 		add_child(_killcam_cam)
+	_killcam_cam.make_current()
+	# Hide live player bodies so only the replay ghosts are visible.
+	_kc_hidden.clear()
+	for peer in players_by_peer.keys():
+		var p: Node = players_by_peer[peer]
+		if p != null and is_instance_valid(p) and p.visible:
+			p.visible = false
+			_kc_hidden.append(p)
+	# Spawn one ghost per peer in the reel.
+	_kc_ghosts.clear()
+	var peers_seen: Dictionary = {}
+	for fr in _kc_frames:
+		for peer in fr.states.keys():
+			peers_seen[peer] = true
+	var idx: int = 0
+	for peer in peers_seen.keys():
+		var ghost := MeshInstance3D.new()
+		var cap := CapsuleMesh.new()
+		cap.radius = 0.4
+		cap.height = 1.8
+		ghost.mesh = cap
+		var mat := StandardMaterial3D.new()
+		# Killer = red, victim = cyan, others = palette.
+		var col: Color
+		if peer == _kc_killer_peer:
+			col = Color(1.0, 0.35, 0.35)
+		elif peer == _kc_victim_peer:
+			col = Color(0.4, 0.85, 1.0)
+		else:
+			col = _KC_GHOST_COLORS[idx % _KC_GHOST_COLORS.size()]
+		mat.albedo_color = col
+		mat.emission_enabled = true
+		mat.emission = col
+		mat.emission_energy_multiplier = 0.5
+		ghost.material_override = mat
+		add_child(ghost)
+		_kc_ghosts[peer] = ghost
+		idx += 1
 	if hud != null:
 		var kname: String = String(killer_node.player_name) if "player_name" in killer_node else "敌人"
-		hud.push_feed("🎥 击杀回放: 被 %s 干掉  ([/] 切自由观战)" % kname, Color(1, 0.7, 0.4))
+		hud.push_feed("🎥 击杀回放: 被 %s 干掉  ([/] 跳过)" % kname, Color(1, 0.7, 0.4))
 
 
 func _stop_killcam() -> void:
 	_killcam_active = false
-	_killcam_killer = null
 	if _killcam_cam != null:
 		_killcam_cam.queue_free()
 		_killcam_cam = null
+	for g in _kc_ghosts.values():
+		if is_instance_valid(g):
+			g.queue_free()
+	_kc_ghosts.clear()
+	# Restore the live bodies we hid (only those still valid + not dead).
+	for p in _kc_hidden:
+		if is_instance_valid(p) and not (("is_dead" in p) and p.is_dead):
+			p.visible = true
+	_kc_hidden.clear()
+	_kc_frames = []
+	# Hand the view back so the screen isn't black after the reel ends but
+	# before respawn. _on_local_respawn re-asserts this too — idempotent.
+	if local_player != null and is_instance_valid(local_player) and local_player.camera != null:
+		local_player.camera.make_current()
 
 
-func _process(delta: float) -> void:
-	if not _killcam_active or _killcam_cam == null:
+func _tick_killcam(delta: float) -> void:
+	if _kc_frames.size() < 2 or _killcam_cam == null:
+		_stop_killcam()
 		return
-	# Killer left mid-replay → just hold on the death spot.
-	var killer_pos: Vector3 = _killcam_death_pos + Vector3(0, 1, 0)
-	if _killcam_killer != null and is_instance_valid(_killcam_killer):
-		killer_pos = _killcam_killer.global_position + Vector3(0, 1.0, 0)
-	var victim_pos: Vector3 = _killcam_death_pos + Vector3(0, 1.0, 0)
-	# Cut to the next angle every _KILLCAM_ANGLE_SEC.
-	_killcam_elapsed += delta
-	if _killcam_elapsed >= _KILLCAM_ANGLE_SEC:
-		_killcam_elapsed = 0.0
-		_killcam_angle = (_killcam_angle + 1) % 3
-		_place_killcam_angle(_killcam_angle, killer_pos, victim_pos)
-		_killcam_cam.make_current()
-
-
-func _place_killcam_angle(angle: int, killer_pos: Vector3, victim_pos: Vector3) -> void:
-	var to_victim: Vector3 = victim_pos - killer_pos
-	to_victim.y = 0
-	if to_victim.length() < 0.1:
-		to_victim = Vector3(0, 0, 1)
-	to_victim = to_victim.normalized()
-	var side: Vector3 = to_victim.cross(Vector3.UP).normalized()
-	var mid: Vector3 = killer_pos.lerp(victim_pos, 0.5)
-	match angle:
-		0:   # over the killer's shoulder, looking at the victim
-			_killcam_cam.global_position = killer_pos - to_victim * 2.2 + Vector3(0, 1.4, 0)
-			_killcam_cam.look_at(victim_pos, Vector3.UP)
-		1:   # side profile of the whole kill
-			_killcam_cam.global_position = mid + side * 3.5 + Vector3(0, 1.6, 0)
-			_killcam_cam.look_at(mid, Vector3.UP)
-		_:   # victim's last point of view — looking back at the killer
-			_killcam_cam.global_position = victim_pos - to_victim * 2.5 + Vector3(0, 1.5, 0)
-			_killcam_cam.look_at(killer_pos, Vector3.UP)
+	_kc_elapsed += delta
+	var progress: float = clampf(_kc_elapsed / _KC_REPLAY_SEC, 0.0, 1.0)
+	# Map replay progress → buffer wall-time, then place each ghost by
+	# interpolating between the two bracketing frames.
+	var t_first: int = int(_kc_frames[0].t)
+	var t_last: int = int(_kc_frames[_kc_frames.size() - 1].t)
+	var target_ms: float = lerpf(float(t_first), float(t_last), progress)
+	var lo: Dictionary = _kc_frames[0]
+	var hi: Dictionary = {}
+	for i in range(_kc_frames.size()):
+		if int(_kc_frames[i].t) <= target_ms:
+			lo = _kc_frames[i]
+		else:
+			hi = _kc_frames[i]
+			break
+	var frac: float = 0.0
+	if not hi.is_empty():
+		var span: float = float(hi.t) - float(lo.t)
+		if span > 0.0:
+			frac = clampf((target_ms - float(lo.t)) / span, 0.0, 1.0)
+	var hi_states: Dictionary = hi.get("states", {})
+	var killer_pos: Vector3 = Vector3.ZERO
+	var victim_pos: Vector3 = Vector3.ZERO
+	for peer in _kc_ghosts.keys():
+		var g: MeshInstance3D = _kc_ghosts[peer]
+		if not lo.states.has(peer):
+			g.visible = false
+			continue
+		var a = lo.states[peer]
+		var pos := Vector3(a[0], a[1], a[2])
+		var yaw: float = a[3]
+		if hi_states.has(peer):
+			var b = hi_states[peer]
+			pos = pos.lerp(Vector3(b[0], b[1], b[2]), frac)
+			yaw = lerp_angle(yaw, float(b[3]), frac)
+		g.visible = true
+		g.global_position = pos + Vector3(0, 0.9, 0)
+		g.rotation.y = yaw
+		if peer == _kc_killer_peer:
+			killer_pos = pos + Vector3(0, 1.0, 0)
+		elif peer == _kc_victim_peer:
+			victim_pos = pos + Vector3(0, 1.0, 0)
+	# Cinematic camera: track the killer→victim line. First 55% over the
+	# killer's shoulder looking at the victim, then swing to the victim's
+	# POV looking back at the killer (the "who got me" reveal).
+	var to_v: Vector3 = victim_pos - killer_pos
+	to_v.y = 0
+	if to_v.length() < 0.1:
+		to_v = Vector3(0, 0, 1)
+	to_v = to_v.normalized()
+	if progress < 0.55:
+		_killcam_cam.global_position = killer_pos - to_v * 2.4 + Vector3(0, 1.5, 0)
+		_killcam_cam.look_at(victim_pos, Vector3.UP)
+	else:
+		_killcam_cam.global_position = victim_pos + to_v * 0.5 + Vector3(0, 1.6, 0)
+		_killcam_cam.look_at(killer_pos, Vector3.UP)
+	# Replay finished → hold the live spectate view (camera freed on respawn).
+	if progress >= 1.0:
+		_stop_killcam()
 
 
 # While local_player.is_dead, [ / ] keys cycle through alive peers' cameras.
