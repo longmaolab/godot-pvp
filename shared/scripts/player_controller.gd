@@ -136,6 +136,21 @@ const PRED_SOFT_M := 2.5    # within this of the server: trust prediction fully
 const PRED_HARD_M := 5.0    # beyond this: snap (respawn / teleport / big desync)
 const PRED_EASE_RATE := 6.0 # soft-band correction lerp rate toward the server
 
+# ── Slide (sprint + tap-crouch movement tech) ────────────────────────────
+# Tapping crouch while sprinting fires a low, fast slide that decays back to
+# crouch speed — the arena-shooter standard for closing/dodging. Resolved
+# inside _step_movement so it works identically for local prediction and the
+# server mirror (no new input bits; reuses SPRINT + CROUCH). Edge-detected per
+# instance via _slide_crouch_was_down so a held crouch doesn't re-trigger.
+var _slide_timer: float = 0.0
+var _slide_cooldown: float = 0.0
+var _slide_dir: Vector3 = Vector3.ZERO
+var _slide_crouch_was_down: bool = false
+const SLIDE_DURATION := 0.55
+const SLIDE_SPEED_MULT := 1.9   # × move_speed at slide start (decays to CROUCH_SPEED_MULT)
+const SLIDE_COOLDOWN := 0.7     # after a slide ends, before another can start
+const SLIDE_ENTRY_FRAC := 0.8   # must be moving > this × move_speed to slide
+
 # DS-M2: latest input frame received from a network client (used only when
 # use_remote_input=true). Tick gates against replay/out-of-order.
 var _remote_input_bits: int = 0
@@ -709,11 +724,34 @@ func _step_movement(delta: float) -> void:
 	# Mirror the ADS flag on the authoritative side so fire_resolver can read
 	# it for spread. (_step_local_feel also sets it for the local human's FOV.)
 	_is_ads = ads_pressed
+
+	# Slide trigger: crouch TAPPED (edge) while sprinting and moving fast on the
+	# ground fires a slide. Edge-detected per instance so holding crouch is a
+	# normal crouch, not a slide loop. Computed before _is_crouching so the head
+	# dips on the same frame the slide starts.
+	_slide_cooldown = maxf(0.0, _slide_cooldown - delta)
+	var crouch_just: bool = crouch_pressed and not _slide_crouch_was_down
+	var horiz_speed_now: float = Vector2(velocity.x, velocity.z).length()
+	if _slide_timer <= 0.0 and crouch_just and sprint_pressed and is_on_floor() \
+			and horiz_speed_now > move_speed * SLIDE_ENTRY_FRAC and _slide_cooldown <= 0.0:
+		_slide_timer = SLIDE_DURATION
+		var vdir: Vector3 = Vector3(velocity.x, 0.0, velocity.z)
+		_slide_dir = vdir.normalized() if vdir.length() > 0.1 else (-transform.basis.z)
+	_slide_crouch_was_down = crouch_pressed
+	var is_sliding: bool = _slide_timer > 0.0
+
 	# Can't jump while crouching (you'd un-crouch first). Crouch also wins
-	# over sprint — you move slow when hunkered down.
-	_is_crouching = crouch_pressed and is_on_floor()
-	if jump_pressed and is_on_floor() and not _is_crouching:
+	# over sprint — you move slow when hunkered down. A slide also lowers the
+	# profile (low head + small hitbox) for its duration.
+	_is_crouching = is_sliding or (crouch_pressed and is_on_floor())
+	# Jumping out of a slide cancels it (slide-jump / lurch — feels good and
+	# lets you bail early). Normal crouch still blocks the jump.
+	if jump_pressed and is_on_floor() and (is_sliding or not _is_crouching):
 		velocity.y = jump_velocity
+		_slide_timer = 0.0
+		_slide_cooldown = SLIDE_COOLDOWN
+		is_sliding = false
+		_is_crouching = crouch_pressed and is_on_floor()
 
 	# Ease the head/camera down when crouched, up when standing. Runs on
 	# every instance (local sees own POV drop; remote peers see the enemy's
@@ -729,23 +767,37 @@ func _step_movement(delta: float) -> void:
 		if head_hitbox != null:
 			head_hitbox.position.y = lerpf(head_hitbox.position.y, target_y, ease)
 
-	var dir: Vector3 = (transform.basis * Vector3(input_x, 0, input_z))
-	if dir.length() > 0.001:
-		dir = dir.normalized()
-	var speed: float = move_speed * move_speed_multiplier
-	if _is_crouching:
-		speed *= CROUCH_SPEED_MULT
-	elif _is_ads:
-		speed *= ADS_MOVE_MULT          # aiming = slow, steady walk
-	elif sprint_pressed:
-		speed *= sprint_multiplier
-	var target_vx: float = dir.x * speed
-	var target_vz: float = dir.z * speed
-	# Smooth blending toward target velocity so oil/ice zones feel slippy.
-	var alpha: float = clampf(ground_friction * delta, 0.0, 1.0)
-	velocity.x = lerpf(velocity.x, target_vx, alpha)
-	velocity.z = lerpf(velocity.z, target_vz, alpha)
-	move_and_slide()
+	if is_sliding:
+		# Slide overrides normal accel: drive a fixed direction at a speed that
+		# decays from SLIDE_SPEED_MULT down to crouch speed over its duration, so
+		# it starts as a fast lunge and eases into a low crouch-walk.
+		_slide_timer = maxf(0.0, _slide_timer - delta)
+		var ratio: float = clampf(_slide_timer / SLIDE_DURATION, 0.0, 1.0)
+		var slide_mult: float = lerpf(CROUCH_SPEED_MULT, SLIDE_SPEED_MULT, ratio)
+		var slide_speed: float = move_speed * move_speed_multiplier * slide_mult
+		velocity.x = _slide_dir.x * slide_speed
+		velocity.z = _slide_dir.z * slide_speed
+		if _slide_timer <= 0.0:
+			_slide_cooldown = SLIDE_COOLDOWN   # arm the gate for the next slide
+		move_and_slide()
+	else:
+		var dir: Vector3 = (transform.basis * Vector3(input_x, 0, input_z))
+		if dir.length() > 0.001:
+			dir = dir.normalized()
+		var speed: float = move_speed * move_speed_multiplier
+		if _is_crouching:
+			speed *= CROUCH_SPEED_MULT
+		elif _is_ads:
+			speed *= ADS_MOVE_MULT          # aiming = slow, steady walk
+		elif sprint_pressed:
+			speed *= sprint_multiplier
+		var target_vx: float = dir.x * speed
+		var target_vz: float = dir.z * speed
+		# Smooth blending toward target velocity so oil/ice zones feel slippy.
+		var alpha: float = clampf(ground_friction * delta, 0.0, 1.0)
+		velocity.x = lerpf(velocity.x, target_vx, alpha)
+		velocity.z = lerpf(velocity.z, target_vz, alpha)
+		move_and_slide()
 	# Anti-cheat speed monitor — server-side only. Log a warning if a remote
 	# peer's horizontal speed exceeds SUSPECT_HORIZ_SPEED. Throttled to 1
 	# log every 5s per peer so a sustained speedhack doesn't spam the log.
