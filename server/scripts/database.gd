@@ -329,12 +329,48 @@ static func _s(v, default: String = "") -> String:
 	return str(v)
 
 
+# P2-18: name / handle content validation. Kid-friendly game with a public
+# leaderboard, so reject control chars, zero-width tricks, weird symbol
+# spam, and an English profanity blocklist. CJK / accented letters are
+# allowed (bilingual EN/CN player base) via the \p{L} unicode class.
+const _PROFANITY := [
+	"fuck", "shit", "bitch", "cunt", "nigger", "nigga", "faggot", "rape",
+	"pussy", "asshole", "whore", "slut", "dick", "cock", "penis", "vagina",
+	"retard", "kys", "nazi", "hitler",
+]
+var _name_regex: RegEx = null
+
+
+## Returns true if `name` passes charset + profanity checks. Shared by
+## update_account_name (player_name) and the register handle path.
+func name_is_clean(name: String) -> bool:
+	var trimmed: String = name.strip_edges()
+	if trimmed.is_empty() or trimmed.length() > 24:
+		return false
+	if _name_regex == null:
+		_name_regex = RegEx.new()
+		# Letters (any script), numbers, space, and a small punctuation set.
+		_name_regex.compile("^[\\p{L}\\p{N} _.\\-!]{1,24}$")
+	if _name_regex.search(trimmed) == null:
+		return false
+	# Profanity substring match on a leet-normalized lowercase form so
+	# "sh1t" / "f u c k" don't trivially slip through.
+	var norm: String = trimmed.to_lower()
+	norm = norm.replace("0", "o").replace("1", "i").replace("3", "e") \
+		.replace("4", "a").replace("5", "s").replace("@", "a").replace("$", "s")
+	var collapsed: String = norm.replace(" ", "").replace("_", "").replace(".", "").replace("-", "")
+	for bad in _PROFANITY:
+		if bad in norm or bad in collapsed:
+			return false
+	return true
+
+
 func update_account_name(account_id: int, name: String) -> bool:
 	if not _ready_for_queries:
 		return false
-	var clean: String = name.strip_edges().substr(0, 24)
-	if clean.is_empty():
+	if not name_is_clean(name):
 		return false
+	var clean: String = name.strip_edges().substr(0, 24)
 	return db.query_with_bindings("UPDATE accounts SET player_name = ? WHERE id = ?", [clean, account_id])
 
 
@@ -589,29 +625,84 @@ func _now_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0)
 
 
-## M7: bcrypt password hash + verify. Real account upgrade — uses Godot's
-## Crypto to do a salted SHA256 since bcrypt isn't built-in. NOT the
-## same security level as bcrypt; flagged for upgrade if/when we add a
-## bcrypt gdextension. For Phase 1 anonymous-token flow this is unused.
+## P2-19: PBKDF2-HMAC-SHA256 password hashing. Replaces the old single-round
+## salted SHA-256 (too fast → cheap offline brute-force after a DB leak).
+##
+## Stored formats:
+##   new:  "pbkdf2$<iterations>$<salt_b64>$<hash_b64>"   (4 $-parts)
+##   old:  "<salt_b64>$<hash_b64>"                        (2 $-parts, legacy)
+##
+## verify_password handles both; legacy hashes are transparently rehashed to
+## PBKDF2 on the next successful login (see ProfileService._on_login →
+## rehash_password_if_legacy). bcrypt/argon2 would be stronger still but
+## aren't available without a gdextension — PBKDF2 at 120k iterations is a
+## big step up and uses only built-in Crypto.
+const _PBKDF2_ITERATIONS := 120_000
+
 func hash_password(password: String) -> String:
 	var salt: PackedByteArray = Crypto.new().generate_random_bytes(16)
-	var h: HashingContext = HashingContext.new()
-	h.start(HashingContext.HASH_SHA256)
-	h.update(salt)
-	h.update(password.to_utf8_buffer())
-	var digest: PackedByteArray = h.finish()
-	return "%s$%s" % [Marshalls.raw_to_base64(salt), Marshalls.raw_to_base64(digest)]
+	var digest: PackedByteArray = _pbkdf2_sha256(password.to_utf8_buffer(), salt, _PBKDF2_ITERATIONS)
+	return "pbkdf2$%d$%s$%s" % [_PBKDF2_ITERATIONS, Marshalls.raw_to_base64(salt), Marshalls.raw_to_base64(digest)]
 
 
 func verify_password(password: String, stored: String) -> bool:
 	var parts: PackedStringArray = stored.split("$", false)
-	if parts.size() != 2:
+	if parts.size() == 4 and parts[0] == "pbkdf2":
+		# New format.
+		var iterations: int = int(parts[1])
+		var salt: PackedByteArray = Marshalls.base64_to_raw(parts[2])
+		var expected: PackedByteArray = Marshalls.base64_to_raw(parts[3])
+		var got: PackedByteArray = _pbkdf2_sha256(password.to_utf8_buffer(), salt, iterations)
+		return _constant_time_eq(got, expected)
+	if parts.size() == 2:
+		# Legacy single-round salted SHA-256.
+		var lsalt: PackedByteArray = Marshalls.base64_to_raw(parts[0])
+		var lexpected: PackedByteArray = Marshalls.base64_to_raw(parts[1])
+		var h: HashingContext = HashingContext.new()
+		h.start(HashingContext.HASH_SHA256)
+		h.update(lsalt)
+		h.update(password.to_utf8_buffer())
+		return _constant_time_eq(h.finish(), lexpected)
+	return false
+
+
+## Returns true if a stored hash is in the legacy format (caller should
+## rehash after a successful verify).
+func is_legacy_hash(stored: String) -> bool:
+	return stored.split("$", false).size() == 2
+
+
+## Rewrite an account's password hash to the current format. Called after a
+## successful login that verified against a legacy hash.
+func rehash_password(account_id: int, new_hash: String) -> bool:
+	if not _ready_for_queries:
 		return false
-	var salt: PackedByteArray = Marshalls.base64_to_raw(parts[0])
-	var expected: PackedByteArray = Marshalls.base64_to_raw(parts[1])
-	var h: HashingContext = HashingContext.new()
-	h.start(HashingContext.HASH_SHA256)
-	h.update(salt)
-	h.update(password.to_utf8_buffer())
-	var got: PackedByteArray = h.finish()
-	return got == expected
+	return db.query_with_bindings("UPDATE accounts SET pass_hash = ? WHERE id = ?", [new_hash, account_id])
+
+
+# PBKDF2-HMAC-SHA256, single 32-byte output block (dkLen = hLen = 32, so
+# only block index 1 is needed). T = U1 ^ U2 ^ ... ^ U_iterations, where
+# U1 = HMAC(pw, salt || 0x00000001) and U_i = HMAC(pw, U_{i-1}).
+func _pbkdf2_sha256(password: PackedByteArray, salt: PackedByteArray, iterations: int) -> PackedByteArray:
+	var crypto := Crypto.new()
+	var block_index := PackedByteArray([0, 0, 0, 1])   # INT_32_BE(1)
+	var salted: PackedByteArray = salt.duplicate()
+	salted.append_array(block_index)
+	var u: PackedByteArray = crypto.hmac_digest(HashingContext.HASH_SHA256, password, salted)
+	var t: PackedByteArray = u.duplicate()
+	for _i in range(iterations - 1):
+		u = crypto.hmac_digest(HashingContext.HASH_SHA256, password, u)
+		for j in t.size():
+			t[j] = t[j] ^ u[j]
+	return t
+
+
+# Length-independent compare to avoid leaking match length via timing. Both
+# sides are fixed-length digests so this is belt-and-suspenders.
+func _constant_time_eq(a: PackedByteArray, b: PackedByteArray) -> bool:
+	if a.size() != b.size():
+		return false
+	var diff: int = 0
+	for i in a.size():
+		diff |= a[i] ^ b[i]
+	return diff == 0

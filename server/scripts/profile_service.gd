@@ -39,6 +39,10 @@ var _peer_account: Dictionary = {}   # peer_id (int) → account_id (int)
 # it to user://settings.cfg for the next session.
 var _pending_issued_token: Dictionary = {}   # peer_id → token String
 
+# P2-18: per-account name-change cooldown (anti leaderboard-flash). In-memory.
+const NAME_CHANGE_COOLDOWN_MS := 30_000
+var _name_change_at: Dictionary = {}   # account_id → Time.get_ticks_msec()
+
 # Pricing table — bumped here so we can tune without touching DB schema.
 # Mirror of pvp-game economy values for now. Server-canonical.
 const CHEST_PRICE := {"common": 120, "rare": 400}
@@ -203,10 +207,22 @@ func _on_set_name(peer_id: int, name: String) -> void:
 	if not _peer_ok_for_action(peer_id):
 		_ack(peer_id, "set_name", false, "rate limited")
 		return
-	var db: Node = get_node(^"/root/Database")
-	if not db.update_account_name(_peer_account[peer_id], name):
-		_ack(peer_id, "set_name", false, "name rejected")
+	var account_id: int = _peer_account[peer_id]
+	# P2-18: per-account name-change cooldown on top of the burst limiter.
+	# Stops leaderboard name-flashing abuse. In-memory (resets on restart) —
+	# good enough for anti-churn without a DB column. Keyed by account so a
+	# reconnecting peer can't dodge it by getting a new peer_id.
+	var now: int = Time.get_ticks_msec()
+	var last_change: int = int(_name_change_at.get(account_id, 0))
+	if last_change > 0 and now - last_change < NAME_CHANGE_COOLDOWN_MS:
+		var wait_s: int = (NAME_CHANGE_COOLDOWN_MS - (now - last_change)) / 1000
+		_ack(peer_id, "set_name", false, "wait %ds to change name again" % wait_s)
 		return
+	var db: Node = get_node(^"/root/Database")
+	if not db.update_account_name(account_id, name):
+		_ack(peer_id, "set_name", false, "name rejected (invalid or blocked)")
+		return
+	_name_change_at[account_id] = now
 	_ack(peer_id, "set_name", true, "")
 	_push_profile(peer_id)
 
@@ -416,10 +432,15 @@ func _on_register_account(peer_id: int, device_id: String, handle: String, passw
 	if h.length() < 3 or h.length() > 24:
 		_ack(peer_id, "register", false, "handle 3-24 chars")
 		return
-	if password.length() < 6:
-		_ack(peer_id, "register", false, "password 6+ chars")
+	if password.length() < 8:
+		_ack(peer_id, "register", false, "password 8+ chars")
 		return
 	var db: Node = get_node(^"/root/Database")
+	# P2-18: same content filter as player_name — handles show on the
+	# leaderboard too.
+	if not db.name_is_clean(h):
+		_ack(peer_id, "register", false, "handle has invalid or blocked characters")
+		return
 	# Handle already taken?
 	db.db.query_with_bindings("SELECT id FROM accounts WHERE handle = ? COLLATE NOCASE", [h])
 	if not db.db.query_result.is_empty():
@@ -481,6 +502,10 @@ func _on_login(peer_id: int, handle: String, password: String) -> void:
 	if not db.verify_password(password, stored):
 		_ack(peer_id, "login", false, "wrong password")
 		return
+	# P2-19: transparently upgrade legacy single-round SHA-256 hashes to
+	# PBKDF2 now that we've verified the cleartext password.
+	if db.is_legacy_hash(stored):
+		db.rehash_password(int(row.id), db.hash_password(password))
 	_peer_account[peer_id] = int(row.id)
 	_ack(peer_id, "login", true, "")
 	_push_profile(peer_id)

@@ -155,6 +155,24 @@ func _run() -> void:
 	var hash2: String = db.hash_password("hunter2")
 	if hash1 == hash2:
 		failures.append("two hash_password calls returned same value — salt not random")
+	# P2-19: new hashes are PBKDF2 format
+	if not hash1.begins_with("pbkdf2$"):
+		failures.append("hash_password not using PBKDF2 format: %s" % hash1)
+	if db.is_legacy_hash(hash1):
+		failures.append("PBKDF2 hash misdetected as legacy")
+	# P2-19: legacy single-round SHA-256 hashes must still verify (backward compat)
+	var legacy_salt: PackedByteArray = Crypto.new().generate_random_bytes(16)
+	var lh: HashingContext = HashingContext.new()
+	lh.start(HashingContext.HASH_SHA256)
+	lh.update(legacy_salt)
+	lh.update("hunter2".to_utf8_buffer())
+	var legacy_hash: String = "%s$%s" % [Marshalls.raw_to_base64(legacy_salt), Marshalls.raw_to_base64(lh.finish())]
+	if not db.is_legacy_hash(legacy_hash):
+		failures.append("legacy hash not detected as legacy")
+	if not db.verify_password("hunter2", legacy_hash):
+		failures.append("legacy hash failed to verify correct password (broke backward compat)")
+	if db.verify_password("wrong", legacy_hash):
+		failures.append("legacy hash verified WRONG password (security hole)")
 
 	# --- 11. P0-1 bind_account: fresh device → issues token
 	var bind1: Dictionary = db.bind_account("device-charlie", "", "Charlie", 3)
@@ -186,11 +204,19 @@ func _run() -> void:
 	if not db.account_is_registered(charlie_id):
 		failures.append("registered account flagged as anonymous")
 
+	# --- 13. P2-18 name_is_clean: charset + profanity
+	for good in ["Alice", "玩家小明", "Pro_Gamer-1", "Cool.Kid!", "日本語 name"]:
+		if not db.name_is_clean(good):
+			failures.append("name_is_clean rejected valid name: %s" % good)
+	for bad in ["", "   ", "fuck", "sh1t", "f u c k", "a$$hole", "<script>", "name​with​zwsp", "way_too_long_name_exceeding_24_chars"]:
+		if db.name_is_clean(bad):
+			failures.append("name_is_clean accepted invalid/blocked name: %s" % bad)
+
 	# --- Done
 	db.db.close_db()
 
 	if failures.is_empty():
-		print("  PASS — 12/12 Database DAO assertions (accounts, economy, weapons, upgrades, stats, leaderboard, match history, password hash, bind_account, account_is_registered)")
+		print("  PASS — 13/13 Database DAO assertions (accounts, economy, weapons, upgrades, stats, leaderboard, match history, password hash, bind_account, account_is_registered, name_is_clean)")
 		quit(0)
 	else:
 		for f in failures:
