@@ -2133,14 +2133,7 @@ func _start_killcam(killer_node: Node) -> void:
 		for peer in fr.states.keys():
 			peers_seen[peer] = true
 	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
-	var idx: int = 0
 	for peer in peers_seen.keys():
-		var ghost := MeshInstance3D.new()
-		var cap := CapsuleMesh.new()
-		cap.radius = 0.4
-		cap.height = 1.8
-		ghost.mesh = cap
-		var mat := StandardMaterial3D.new()
 		# Killer = red, victim = cyan, others = dim grey (de-emphasized so the
 		# eye goes to the two that matter).
 		var col: Color
@@ -2151,13 +2144,13 @@ func _start_killcam(killer_node: Node) -> void:
 			col = Color(0.4, 0.85, 1.0)
 		else:
 			col = Color(0.5, 0.5, 0.55)
-		mat.albedo_color = col
-		mat.emission_enabled = true
-		mat.emission = col
-		mat.emission_energy_multiplier = 0.9 if is_principal else 0.25
-		ghost.material_override = mat
+		# Build a little humanoid (head + torso + 2 arms + 2 legs) so the
+		# replay shows recognizable PEOPLE, not pillars. Root origin sits at
+		# the player's body-center (matches recorded global_position), parts
+		# laid out from feet (local -0.9) to head (local +0.9).
+		var ghost: Node3D = _kc_build_humanoid(col, 0.9 if is_principal else 0.25)
 		add_child(ghost)
-		# Floating name tag for the two principals.
+		# Floating name tag for the two principals, above the head.
 		if is_principal:
 			var tag := Label3D.new()
 			tag.text = ("☠ " + _kc_killer_name) if peer == _kc_killer_peer else "你"
@@ -2170,11 +2163,49 @@ func _start_killcam(killer_node: Node) -> void:
 			tag.no_depth_test = true
 			tag.fixed_size = true
 			tag.pixel_size = 0.0016
-			tag.position = Vector3(0, 1.5, 0)
+			tag.position = Vector3(0, 1.15, 0)   # above the head (head ~+0.7)
 			ghost.add_child(tag)
 		_kc_ghosts[peer] = ghost
-		idx += 1
 	_build_killcam_ui()
+
+
+# Build a simple humanoid ghost from primitives, tinted `col`. Root origin =
+# body center (0.9 above the feet) so it can be dropped straight onto a
+# recorded global_position with no floating. Parts span local y -0.9 (feet)
+# to +0.9 (head top).
+func _kc_build_humanoid(col: Color, energy: float) -> Node3D:
+	var root := Node3D.new()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = col
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = energy
+	# part: [mesh, local_pos] — capsules for limbs/torso, sphere for head.
+	# torso
+	var torso := MeshInstance3D.new()
+	var torso_m := CapsuleMesh.new(); torso_m.radius = 0.22; torso_m.height = 0.85
+	torso.mesh = torso_m; torso.material_override = mat; torso.position = Vector3(0, 0.15, 0)
+	root.add_child(torso)
+	# head
+	var head := MeshInstance3D.new()
+	var head_m := SphereMesh.new(); head_m.radius = 0.19; head_m.height = 0.38
+	head.mesh = head_m; head.material_override = mat; head.position = Vector3(0, 0.72, 0)
+	root.add_child(head)
+	# arms
+	for sx in [-1.0, 1.0]:
+		var arm := MeshInstance3D.new()
+		var arm_m := CapsuleMesh.new(); arm_m.radius = 0.075; arm_m.height = 0.6
+		arm.mesh = arm_m; arm.material_override = mat
+		arm.position = Vector3(0.34 * sx, 0.12, 0)
+		root.add_child(arm)
+	# legs
+	for lx in [-1.0, 1.0]:
+		var leg := MeshInstance3D.new()
+		var leg_m := CapsuleMesh.new(); leg_m.radius = 0.1; leg_m.height = 0.8
+		leg.mesh = leg_m; leg.material_override = mat
+		leg.position = Vector3(0.13 * lx, -0.5, 0)
+		root.add_child(leg)
+	return root
 
 
 # Build the cinematic overlay: letterbox bars (top/bottom), a "回放 KILLCAM"
@@ -2335,12 +2366,16 @@ func _tick_killcam(delta: float) -> void:
 			pos = pos.lerp(Vector3(b[0], b[1], b[2]), frac)
 			yaw = lerp_angle(yaw, float(b[3]), frac)
 		g.visible = true
-		g.global_position = pos + Vector3(0, 0.9, 0)
+		# Recorded pos IS the player's body center (CharacterBody3D origin sits
+		# 0.9 above the feet — see player.tscn ModelHolder -0.9). The humanoid
+		# root origin is also body-center, so place it directly — no +0.9 (that
+		# was the "floating" bug).
+		g.global_position = pos
 		g.rotation.y = yaw
 		if peer == _kc_killer_peer:
-			killer_pos = pos + Vector3(0, 1.0, 0)
+			killer_pos = pos + Vector3(0, 0.7, 0)
 		elif peer == _kc_victim_peer:
-			victim_pos = pos + Vector3(0, 1.0, 0)
+			victim_pos = pos + Vector3(0, 0.7, 0)
 	# Cinematic camera: one continuous eased orbit around the kill, pushing
 	# in over time — no hard cuts. Always frames the midpoint so both the
 	# killer (red) and victim (cyan) stay in shot; the smooth sweep lets the
