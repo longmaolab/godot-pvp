@@ -27,6 +27,15 @@ var ground_friction: float = 30.0
 @export var move_speed: float = 5.0
 @export var sprint_multiplier: float = 1.6
 @export var jump_velocity: float = 13.0
+# Crouch: lower the camera/head + slow movement. Server-authoritative via
+# the INPUT_CROUCH bit (DS / listen-host read it from remote input; local
+# human reads the action directly). STAND_HEAD_Y must match the Head node's
+# Y in player.tscn (1.0).
+const STAND_HEAD_Y := 1.0
+const CROUCH_HEAD_Y := 0.55
+const CROUCH_SPEED_MULT := 0.5
+const CROUCH_LERP := 12.0   # head-height ease speed
+var _is_crouching: bool = false
 @export var mouse_sensitivity: float = 0.002
 @export var is_local: bool = true             # set false for remote/networked
 @export var is_human_input: bool = true        # false for bots: skip mouse/key
@@ -341,6 +350,10 @@ func _physics_process(delta: float) -> void:
 			# the player still expects tracer / muzzle flash / sound / recoil
 			# kick / ammo countdown to happen when they pull the trigger.
 			_step_weapon_visuals_only(delta)
+			# Local crouch POV feedback — snapshots don't carry head height, so
+			# dip the camera locally when crouch is held. The server lowers the
+			# authoritative hitbox on its own mirror via _step_movement.
+			_apply_local_crouch_visual(delta)
 		_apply_remote_state(delta)
 		if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 		return
@@ -393,6 +406,7 @@ func _send_input_to_server(include_fire_bit: bool = true) -> void:
 	if Input.is_action_pressed(&"move_right"):   bits |= NetProtocol.INPUT_RIGHT
 	if Input.is_action_pressed(&"jump"):         bits |= NetProtocol.INPUT_JUMP
 	if Input.is_action_pressed(&"sprint"):       bits |= NetProtocol.INPUT_SPRINT
+	if Input.is_action_pressed(&"crouch"):       bits |= NetProtocol.INPUT_CROUCH
 	if include_fire_bit and Input.is_action_pressed(&"fire"):
 		bits |= NetProtocol.INPUT_FIRE
 	if Input.is_action_pressed(&"reload"):       bits |= NetProtocol.INPUT_RELOAD
@@ -562,6 +576,17 @@ func _play_hit_sound() -> void:
 	_play_3d(SFX_HIT)
 
 
+# DS-client local POV crouch. Snapshot-only mode never runs _step_movement,
+# so the local player's own camera wouldn't dip. This mirrors just the
+# head-height ease (no movement / hitbox — server owns those).
+func _apply_local_crouch_visual(delta: float) -> void:
+	if head == null:
+		return
+	var want: bool = Input.is_action_pressed(&"crouch")
+	var target_y: float = CROUCH_HEAD_Y if want else STAND_HEAD_Y
+	head.position.y = lerpf(head.position.y, target_y, clampf(CROUCH_LERP * delta, 0.0, 1.0))
+
+
 func _step_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= GRAVITY * gravity_multiplier * delta
@@ -573,26 +598,48 @@ func _step_movement(delta: float) -> void:
 	var input_z: float = 0.0
 	var jump_pressed: bool = false
 	var sprint_pressed: bool = false
+	var crouch_pressed: bool = false
 	if use_remote_input:
 		var bits: int = _remote_input_bits
 		input_x = float((bits & NetProtocol.INPUT_RIGHT) != 0) - float((bits & NetProtocol.INPUT_LEFT) != 0)
 		input_z = float((bits & NetProtocol.INPUT_BACK) != 0) - float((bits & NetProtocol.INPUT_FORWARD) != 0)
 		jump_pressed = (bits & NetProtocol.INPUT_JUMP) != 0
 		sprint_pressed = (bits & NetProtocol.INPUT_SPRINT) != 0
+		crouch_pressed = (bits & NetProtocol.INPUT_CROUCH) != 0
 	elif is_human_input:
 		input_x = float(Input.is_action_pressed(&"move_right")) - float(Input.is_action_pressed(&"move_left"))
 		input_z = float(Input.is_action_pressed(&"move_back")) - float(Input.is_action_pressed(&"move_forward"))
 		jump_pressed = Input.is_action_pressed(&"jump")
 		sprint_pressed = Input.is_action_pressed(&"sprint")
+		crouch_pressed = Input.is_action_pressed(&"crouch")
 
-	if jump_pressed and is_on_floor():
+	# Can't jump while crouching (you'd un-crouch first). Crouch also wins
+	# over sprint — you move slow when hunkered down.
+	_is_crouching = crouch_pressed and is_on_floor()
+	if jump_pressed and is_on_floor() and not _is_crouching:
 		velocity.y = jump_velocity
+
+	# Ease the head/camera down when crouched, up when standing. Runs on
+	# every instance (local sees own POV drop; remote peers see the enemy's
+	# head dip, which matters for aiming at a crouched target).
+	if head != null:
+		var target_y: float = CROUCH_HEAD_Y if _is_crouching else STAND_HEAD_Y
+		var ease: float = clampf(CROUCH_LERP * delta, 0.0, 1.0)
+		head.position.y = lerpf(head.position.y, target_y, ease)
+		# Keep the headshot hitbox glued to the visible head so a crouched
+		# enemy's head can still be hit where it's drawn (hitbox is a root
+		# sibling, doesn't auto-follow Head). Server resolves hits against
+		# this, so syncing it on the authoritative side is what counts.
+		if head_hitbox != null:
+			head_hitbox.position.y = lerpf(head_hitbox.position.y, target_y, ease)
 
 	var dir: Vector3 = (transform.basis * Vector3(input_x, 0, input_z))
 	if dir.length() > 0.001:
 		dir = dir.normalized()
 	var speed: float = move_speed * move_speed_multiplier
-	if sprint_pressed:
+	if _is_crouching:
+		speed *= CROUCH_SPEED_MULT
+	elif sprint_pressed:
 		speed *= sprint_multiplier
 	var target_vx: float = dir.x * speed
 	var target_vz: float = dir.z * speed

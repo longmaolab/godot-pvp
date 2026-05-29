@@ -1226,6 +1226,9 @@ func _on_server_player_died(victim_peer: int, killer_peer: int, _weapon: StringN
 	if killer_node != null and is_instance_valid(killer_node):
 		victim.last_attacker = killer_node
 	victim._die()
+	# Killcam — if WE got killed, frame the killer from 3 angles.
+	if victim == local_player and killer_node != null and killer_peer != victim_peer:
+		_start_killcam(killer_node)
 	# H10: kill confirm — only when the LOCAL player landed the killing shot.
 	if hud != null and local_player != null \
 			and killer_peer == local_player.get_multiplayer_authority() \
@@ -1326,6 +1329,13 @@ func _on_any_player_died(victim_peer: int, killer: Node) -> void:
 			if players_by_peer[p] == killer:
 				killer_peer = p
 				break
+	# Killcam (practice / listen-host path) — if the LOCAL player is the
+	# victim and there's a real killer, frame them. The networked DS-client
+	# path triggers killcam from _on_server_player_died instead.
+	if not is_dedicated_server and local_player != null \
+			and players_by_peer.get(victim_peer) == local_player \
+			and killer != null and is_instance_valid(killer) and killer != local_player:
+		_start_killcam(killer)
 	# Bot kill speech — if the killer is one of our local bots, push a
 	# trash-talk line so single-player practice isn't dead silent. Filter
 	# to local hud only (DS has no hud). Self-kills don't speak; bot
@@ -1466,6 +1476,10 @@ func _do_local_respawn(victim: Node, pos: Vector3) -> void:
 	if victim == null or not is_instance_valid(victim):
 		return
 	victim.respawn(pos)
+	# Practice / listen-host path: if WE just respawned, kill the killcam and
+	# restore our own camera (DS-client path does this via _on_server_respawn).
+	if victim == local_player:
+		_on_local_respawn()
 	if hud != null:
 		hud.push_feed("respawned -- go!", Color(0.5, 1.0, 0.5))
 
@@ -2009,6 +2023,87 @@ func _on_throwable_explode(proj_id: int, position: Vector3) -> void:
 
 
 # ── Spectator mode (while dead) ──────────────────────────────────────────
+# ── Killcam ─────────────────────────────────────────────────────────────
+# When the LOCAL player dies, frame the killer from 3 camera angles that
+# auto-cut during the respawn window: (0) over the killer's shoulder,
+# (1) side profile of the kill, (2) the victim's last point of view
+# looking back at who shot them. NOT a time-rewind replay — it frames the
+# killer at their live position right after the kill. Player can press
+# [ / ] to drop into free-spectate, which cancels the killcam.
+
+const _KILLCAM_ANGLE_SEC := 1.0   # seconds per camera angle before cutting
+var _killcam_active: bool = false
+var _killcam_cam: Camera3D = null
+var _killcam_killer: Node = null
+var _killcam_death_pos: Vector3 = Vector3.ZERO
+var _killcam_elapsed: float = 0.0
+var _killcam_angle: int = -1
+
+
+func _start_killcam(killer_node: Node) -> void:
+	# Only for the local human, and only with a valid killer that isn't us.
+	if local_player == null or not is_instance_valid(local_player):
+		return
+	if killer_node == null or not is_instance_valid(killer_node) or killer_node == local_player:
+		return
+	_killcam_killer = killer_node
+	_killcam_death_pos = local_player.global_position
+	_killcam_active = true
+	_killcam_elapsed = _KILLCAM_ANGLE_SEC   # force an immediate first cut
+	_killcam_angle = -1
+	if _killcam_cam == null:
+		_killcam_cam = Camera3D.new()
+		add_child(_killcam_cam)
+	if hud != null:
+		var kname: String = String(killer_node.player_name) if "player_name" in killer_node else "敌人"
+		hud.push_feed("🎥 击杀回放: 被 %s 干掉  ([/] 切自由观战)" % kname, Color(1, 0.7, 0.4))
+
+
+func _stop_killcam() -> void:
+	_killcam_active = false
+	_killcam_killer = null
+	if _killcam_cam != null:
+		_killcam_cam.queue_free()
+		_killcam_cam = null
+
+
+func _process(delta: float) -> void:
+	if not _killcam_active or _killcam_cam == null:
+		return
+	# Killer left mid-replay → just hold on the death spot.
+	var killer_pos: Vector3 = _killcam_death_pos + Vector3(0, 1, 0)
+	if _killcam_killer != null and is_instance_valid(_killcam_killer):
+		killer_pos = _killcam_killer.global_position + Vector3(0, 1.0, 0)
+	var victim_pos: Vector3 = _killcam_death_pos + Vector3(0, 1.0, 0)
+	# Cut to the next angle every _KILLCAM_ANGLE_SEC.
+	_killcam_elapsed += delta
+	if _killcam_elapsed >= _KILLCAM_ANGLE_SEC:
+		_killcam_elapsed = 0.0
+		_killcam_angle = (_killcam_angle + 1) % 3
+		_place_killcam_angle(_killcam_angle, killer_pos, victim_pos)
+		_killcam_cam.make_current()
+
+
+func _place_killcam_angle(angle: int, killer_pos: Vector3, victim_pos: Vector3) -> void:
+	var to_victim: Vector3 = victim_pos - killer_pos
+	to_victim.y = 0
+	if to_victim.length() < 0.1:
+		to_victim = Vector3(0, 0, 1)
+	to_victim = to_victim.normalized()
+	var side: Vector3 = to_victim.cross(Vector3.UP).normalized()
+	var mid: Vector3 = killer_pos.lerp(victim_pos, 0.5)
+	match angle:
+		0:   # over the killer's shoulder, looking at the victim
+			_killcam_cam.global_position = killer_pos - to_victim * 2.2 + Vector3(0, 1.4, 0)
+			_killcam_cam.look_at(victim_pos, Vector3.UP)
+		1:   # side profile of the whole kill
+			_killcam_cam.global_position = mid + side * 3.5 + Vector3(0, 1.6, 0)
+			_killcam_cam.look_at(mid, Vector3.UP)
+		_:   # victim's last point of view — looking back at the killer
+			_killcam_cam.global_position = victim_pos - to_victim * 2.5 + Vector3(0, 1.5, 0)
+			_killcam_cam.look_at(killer_pos, Vector3.UP)
+
+
 # While local_player.is_dead, [ / ] keys cycle through alive peers' cameras.
 # Esc / respawn return to own view. Camera switching is local-only — we
 # call camera.make_current() on the chosen player's camera.
@@ -2025,6 +2120,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	if event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
+		_stop_killcam()   # manual spectate overrides the auto killcam
 		_cycle_spectate(1 if event.keycode == KEY_BRACKETRIGHT else -1)
 
 
@@ -2064,7 +2160,8 @@ func _cycle_spectate(direction: int) -> void:
 
 
 func _on_local_respawn() -> void:
-	# Called externally when local player respawns — reset spectate state.
+	# Called externally when local player respawns — reset spectate + killcam.
+	_stop_killcam()
 	_spectate_target = null
 	_spectate_index = -1
 	if local_player != null and local_player.camera != null:
