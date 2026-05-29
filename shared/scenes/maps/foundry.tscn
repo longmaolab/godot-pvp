@@ -1,0 +1,231 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
+[ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
+
+[sub_resource type="StandardMaterial3D" id="mat_floor"]
+albedo_color = Color(0.24, 0.23, 0.25, 1)
+metallic = 0.2
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="mat_steel"]
+albedo_color = Color(0.34, 0.35, 0.4, 1)
+metallic = 0.5
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="mat_ember"]
+albedo_color = Color(0.7, 0.34, 0.12, 1)
+emission_enabled = true
+emission = Color(0.85, 0.35, 0.1, 1)
+emission_energy_multiplier = 0.6
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat_fd"]
+sky_horizon_color = Color(0.4, 0.28, 0.22, 1)
+ground_horizon_color = Color(0.2, 0.15, 0.13, 1)
+sky_top_color = Color(0.15, 0.12, 0.15, 1)
+
+[sub_resource type="Sky" id="sky_fd"]
+sky_material = SubResource("sky_mat_fd")
+
+[sub_resource type="Environment" id="env_fd"]
+background_mode = 2
+sky = SubResource("sky_fd")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.6, 0.55, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 2
+
+[node name="Foundry" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_fd")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 20, 0)
+shadow_enabled = true
+light_energy = 0.9
+light_color = Color(1, 0.85, 0.7, 1)
+
+[node name="Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(70, 1, 70)
+material = SubResource("mat_floor")
+
+[node name="WallN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -35)
+use_collision = true
+collision_layer = 1
+size = Vector3(70, 6, 1)
+material = SubResource("mat_steel")
+
+[node name="WallS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 35)
+use_collision = true
+collision_layer = 1
+size = Vector3(70, 6, 1)
+material = SubResource("mat_steel")
+
+[node name="WallE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35, 3, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 70)
+material = SubResource("mat_steel")
+
+[node name="WallW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -35, 3, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 70)
+material = SubResource("mat_steel")
+
+[node name="CornerNE" type="CSGBox3D" parent="."]
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 30, 3, -30)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 14)
+material = SubResource("mat_steel")
+
+[node name="CornerNW" type="CSGBox3D" parent="."]
+transform = Transform3D(0.707, 0, -0.707, 0, 1, 0, 0.707, 0, 0.707, -30, 3, -30)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 14)
+material = SubResource("mat_steel")
+
+[node name="CornerSE" type="CSGBox3D" parent="."]
+transform = Transform3D(0.707, 0, -0.707, 0, 1, 0, 0.707, 0, 0.707, 30, 3, 30)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 14)
+material = SubResource("mat_steel")
+
+[node name="CornerSW" type="CSGBox3D" parent="."]
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, -30, 3, 30)
+use_collision = true
+collision_layer = 1
+size = Vector3(1, 6, 14)
+material = SubResource("mat_steel")
+
+[node name="Dais" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(16, 1.2, 16)
+material = SubResource("mat_steel")
+
+[node name="DaisCover" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.95, 5)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 1.5, 4)
+material = SubResource("mat_ember")
+
+[node name="PillarNE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 3, -18)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 6, 4)
+material = SubResource("mat_steel")
+
+[node name="PillarNW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 3, -18)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 6, 4)
+material = SubResource("mat_steel")
+
+[node name="PillarSE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 3, 18)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 6, 4)
+material = SubResource("mat_steel")
+
+[node name="PillarSW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 3, 18)
+use_collision = true
+collision_layer = 1
+size = Vector3(4, 6, 4)
+material = SubResource("mat_steel")
+
+[node name="ContainerN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, -18)
+use_collision = true
+collision_layer = 1
+size = Vector3(6, 2.5, 3)
+material = SubResource("mat_ember")
+
+[node name="ContainerS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 18)
+use_collision = true
+collision_layer = 1
+size = Vector3(6, 2.5, 3)
+material = SubResource("mat_ember")
+
+[node name="ContainerE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 1.25, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(3, 2.5, 6)
+material = SubResource("mat_ember")
+
+[node name="ContainerW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 1.25, 0)
+use_collision = true
+collision_layer = 1
+size = Vector3(3, 2.5, 6)
+material = SubResource("mat_ember")
+
+[node name="SpawnPoints" type="Node3D" parent="."]
+
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27, 1, 27)
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -27, 1, -27)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27, 1, -27)
+
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -27, 1, 27)
+
+[node name="DummySpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+
+[node name="HealthDais" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 2.0, -4)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "health"
+heal_amount = 50
+
+[node name="AmmoNE" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 1.0, -24)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="AmmoSW" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 1.0, 24)
+script = ExtResource("2_pickup")
+collision_layer = 0
+collision_mask = 2
+pickup_type = "ammo"
+
+[node name="JumpPadE" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 0.1, 0)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2
+
+[node name="JumpPadW" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -28, 0.1, 0)
+script = ExtResource("1_jump")
+collision_layer = 0
+collision_mask = 2

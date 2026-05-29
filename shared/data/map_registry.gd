@@ -30,6 +30,21 @@ const MAPS := [
 		"path": "res://shared/scenes/maps/skydock.tscn",
 		"desc": "三层垂直结构：底层 + 南北中层平台 + 顶层指挥台。斜坡互联。垂直作战、上下夹击。",
 	},
+	{
+		"name": "Crossfire — 室内近战",
+		"path": "res://shared/scenes/maps/crossfire.tscn",
+		"desc": "46×46 室内十字楼：中央带四门的方形建筑 + 外圈走廊掩体。贴脸近战、卡门、滑铲拐角。霰弹/冲锋枪天堂。",
+	},
+	{
+		"name": "Longshot — 狙击长廊",
+		"path": "res://shared/scenes/maps/longshot.tscn",
+		"desc": "96 米双线长廊，中央长墙分割南北两道、三处缺口可换线。超长视野，狙击与 AR 架枪、控点拉距离。",
+	},
+	{
+		"name": "Foundry — 熔炉竞技场",
+		"path": "res://shared/scenes/maps/foundry.tscn",
+		"desc": "70×70 八角竞技场：中央高台 + 四角立柱 + 四向集装箱。绕柱转点、抢占中央高地，近中距离混战。",
+	},
 ]
 
 
