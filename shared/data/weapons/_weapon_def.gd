@@ -37,6 +37,24 @@ const SLOT_SUPPORT   := &"support"
 @export var bullet_speed: float = 120.0    # 0 = hitscan
 @export_range(5.0, 120.0) var ads_zoom_fov: float = 45.0
 
+@export_group("Recoil / Accuracy")
+## Aim climb per shot (radians) the shooter must control. Accumulates over a
+## burst, auto-recovers when you stop firing. The core "recoil pattern" feel.
+@export var recoil_rise: float = 0.011
+## Random horizontal aim jitter per shot (radians).
+@export var recoil_horiz: float = 0.005
+## Aim auto-recovery rate (rad/sec) once firing stops.
+@export var recoil_recover: float = 5.0
+## Hipfire accuracy cone half-angle (radians) — every shot deviates randomly
+## within this cone. 0 = laser-accurate. ~0.02 ≈ 1.1°. Scaled below.
+@export var accuracy_cone: float = 0.022
+## Cone multiplier while moving fast (hipfire bloom).
+@export var spread_moving_mult: float = 2.6
+## Cone multiplier while crouched (steadier).
+@export var spread_crouch_mult: float = 0.55
+## Cone multiplier while aiming down sights (tight).
+@export var spread_ads_mult: float = 0.18
+
 @export_group("Throwable / AoE")
 ## When true, this weapon spawns a parabolic projectile (server-simulated)
 ## that explodes on contact OR when fuse_seconds elapses, dealing damage

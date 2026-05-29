@@ -110,6 +110,18 @@ signal ability_consumed(ability: Resource)
 var _aim_yaw: float = 0.0
 var _aim_pitch: float = 0.0
 var _camera_kick: Vector2 = Vector2.ZERO
+# Real recoil: each shot climbs the aim (persists, must be controlled);
+# auto-recovers when you stop firing. _recoil_owed tracks how much climb is
+# still pending recovery. The server raycasts along the client's reported
+# aim, so this recoil naturally lands shots higher during sustained fire.
+var _recoil_owed: float = 0.0
+var _recoil_idle: float = 0.0   # seconds since last shot (recovery delay)
+# ADS (aim down sights): zooms FOV, slows movement, tightens spread. Mirror
+# on the server from the INPUT_ADS bit so fire_resolver can read it.
+var _is_ads: bool = false
+var _base_fov: float = 75.0
+const ADS_MOVE_MULT := 0.55
+const ADS_FOV_LERP := 12.0
 
 # DS-M2: latest input frame received from a network client (used only when
 # use_remote_input=true). Tick gates against replay/out-of-order.
@@ -152,6 +164,8 @@ var last_attacker: Node = null
 func _ready() -> void:
 	# Tag for group lookups (jump pads, pickups, AI target search).
 	add_to_group(&"player")
+	if camera != null:
+		_base_fov = camera.fov
 	# Spin up the skin + animation subsystem. apply_skin below delegates here.
 	_skin = _PlayerSkinScript.new()
 	_skin.name = "_PlayerSkin"
@@ -354,6 +368,8 @@ func _physics_process(delta: float) -> void:
 			# dip the camera locally when crouch is held. The server lowers the
 			# authoritative hitbox on its own mirror via _step_movement.
 			_apply_local_crouch_visual(delta)
+			# Recoil recovery + ADS FOV (DS-client local human).
+			_step_local_feel(delta)
 		_apply_remote_state(delta)
 		if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 		return
@@ -362,6 +378,8 @@ func _physics_process(delta: float) -> void:
 	# remote peer from received input RPCs. Mutually exclusive in practice.
 	if is_local:
 		_apply_camera_kick(delta)
+		if is_human_input:
+			_step_local_feel(delta)   # recoil recovery + ADS FOV
 		# Listen-host clients also stream movement input to the host so the host's
 		# mirror of this player runs through CharacterBody3D collision instead of
 		# blindly accepting transform pushes. Keep fire on the existing
@@ -418,6 +436,7 @@ func _send_input_to_server(include_fire_bit: bool = true) -> void:
 	if Input.is_action_pressed(&"jump"):         bits |= NetProtocol.INPUT_JUMP
 	if Input.is_action_pressed(&"sprint"):       bits |= NetProtocol.INPUT_SPRINT
 	if Input.is_action_pressed(&"crouch"):       bits |= NetProtocol.INPUT_CROUCH
+	if Input.is_action_pressed(&"ads"):          bits |= NetProtocol.INPUT_ADS
 	if include_fire_bit and Input.is_action_pressed(&"fire"):
 		bits |= NetProtocol.INPUT_FIRE
 	if Input.is_action_pressed(&"reload"):       bits |= NetProtocol.INPUT_RELOAD
@@ -558,11 +577,42 @@ func _apply_camera_kick(delta: float) -> void:
 	head.rotation.x = clampf(_aim_pitch + _camera_kick.y, -PI * 0.49, PI * 0.49)
 
 
-## Applied on each successful shot — modest upward muzzle climb + a touch of
-## horizontal sway so AR bursts don't feel static.
+## Applied on each successful shot. Two layers:
+##  - a transient camera KICK (snappy visual punch, decays to zero)
+##  - PERSISTENT recoil: the aim actually climbs and you must pull down (or
+##    let it auto-recover). Per-weapon via recoil_rise / recoil_horiz. The
+##    server raycasts along the reported aim, so this recoil moves where
+##    shots land during sustained fire — the learnable "recoil pattern".
 func _apply_recoil_kick() -> void:
-	_camera_kick.y += _RECOIL_KICK_PITCH
-	_camera_kick.x += randf_range(-0.006, 0.006)
+	var rise: float = weapon_def.recoil_rise if (weapon_def != null and "recoil_rise" in weapon_def) else 0.011
+	var horiz: float = weapon_def.recoil_horiz if (weapon_def != null and "recoil_horiz" in weapon_def) else 0.005
+	# Transient punch (visual only).
+	_camera_kick.y += _RECOIL_KICK_PITCH * 0.5
+	_camera_kick.x += randf_range(-horiz, horiz)
+	# Persistent climb — negative pitch = up (matches _RECOIL_KICK_PITCH sign).
+	_aim_pitch = clampf(_aim_pitch - rise, -PI * 0.49, PI * 0.49)
+	_aim_yaw += randf_range(-horiz, horiz)
+	_recoil_owed += rise
+	_recoil_idle = 0.0
+
+
+## Per-frame recoil recovery + ADS handling for the LOCAL human. Eases the
+## accumulated recoil climb back down shortly after firing stops, and lerps
+## the camera FOV / sets the ADS flag. Called from the is_local branch.
+func _step_local_feel(delta: float) -> void:
+	_recoil_idle += delta
+	# Recover the owed recoil once there's a brief gap in fire (~0.12s).
+	if _recoil_owed > 0.0 and _recoil_idle > 0.12:
+		var rate: float = weapon_def.recoil_recover if (weapon_def != null and "recoil_recover" in weapon_def) else 5.0
+		var step: float = minf(rate * delta, _recoil_owed)
+		_aim_pitch = clampf(_aim_pitch + step, -PI * 0.49, PI * 0.49)
+		_recoil_owed -= step
+	# ADS: held aim, but not while sprinting or reloading.
+	_is_ads = is_human_input and Input.is_action_pressed(&"ads") and not is_reloading \
+		and not Input.is_action_pressed(&"sprint")
+	if camera != null:
+		var target_fov: float = (weapon_def.ads_zoom_fov if (weapon_def != null) else 45.0) if _is_ads else _base_fov
+		camera.fov = lerpf(camera.fov, target_fov, clampf(ADS_FOV_LERP * delta, 0.0, 1.0))
 
 
 ## Applied when this player takes damage — small jolt in a random direction.
@@ -610,6 +660,7 @@ func _step_movement(delta: float) -> void:
 	var jump_pressed: bool = false
 	var sprint_pressed: bool = false
 	var crouch_pressed: bool = false
+	var ads_pressed: bool = false
 	if use_remote_input:
 		var bits: int = _remote_input_bits
 		input_x = float((bits & NetProtocol.INPUT_RIGHT) != 0) - float((bits & NetProtocol.INPUT_LEFT) != 0)
@@ -617,13 +668,18 @@ func _step_movement(delta: float) -> void:
 		jump_pressed = (bits & NetProtocol.INPUT_JUMP) != 0
 		sprint_pressed = (bits & NetProtocol.INPUT_SPRINT) != 0
 		crouch_pressed = (bits & NetProtocol.INPUT_CROUCH) != 0
+		ads_pressed = (bits & NetProtocol.INPUT_ADS) != 0
 	elif is_human_input:
 		input_x = float(Input.is_action_pressed(&"move_right")) - float(Input.is_action_pressed(&"move_left"))
 		input_z = float(Input.is_action_pressed(&"move_back")) - float(Input.is_action_pressed(&"move_forward"))
 		jump_pressed = Input.is_action_pressed(&"jump")
 		sprint_pressed = Input.is_action_pressed(&"sprint")
 		crouch_pressed = Input.is_action_pressed(&"crouch")
+		ads_pressed = Input.is_action_pressed(&"ads")
 
+	# Mirror the ADS flag on the authoritative side so fire_resolver can read
+	# it for spread. (_step_local_feel also sets it for the local human's FOV.)
+	_is_ads = ads_pressed
 	# Can't jump while crouching (you'd un-crouch first). Crouch also wins
 	# over sprint — you move slow when hunkered down.
 	_is_crouching = crouch_pressed and is_on_floor()
@@ -650,6 +706,8 @@ func _step_movement(delta: float) -> void:
 	var speed: float = move_speed * move_speed_multiplier
 	if _is_crouching:
 		speed *= CROUCH_SPEED_MULT
+	elif _is_ads:
+		speed *= ADS_MOVE_MULT          # aiming = slow, steady walk
 	elif sprint_pressed:
 		speed *= sprint_multiplier
 	var target_vx: float = dir.x * speed

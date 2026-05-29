@@ -26,6 +26,21 @@ const _SHOOT_MASK_SERVER: int = (1 << 0) | (1 << 2)
 ## DS-M4 fix: the shooter's instantaneous yaw/pitch are sent with the fire RPC,
 ## so the server raycasts at the EXACT direction the client was looking instead
 ## of using its interp-delayed view of the shooter's transform.
+# Deviate `d` by a random direction within a cone of half-angle `half`
+# (radians). sqrt(randf()) gives a roughly uniform disc so shots cluster
+# toward the center rather than the rim.
+static func _apply_cone(d: Vector3, half: float) -> Vector3:
+	if half <= 0.0:
+		return d
+	var ang: float = randf() * TAU
+	var rad: float = sqrt(randf()) * half
+	var up: Vector3 = Vector3.UP if absf(d.y) < 0.99 else Vector3.RIGHT
+	var right: Vector3 = d.cross(up).normalized()
+	var realup: Vector3 = right.cross(d).normalized()
+	var offset: Vector3 = (right * cos(ang) + realup * sin(ang)) * tan(rad)
+	return (d + offset).normalized()
+
+
 static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_yaw: float, fire_pitch: float) -> void:
 	if not host.multiplayer.is_server():
 		return
@@ -202,6 +217,23 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 
 	var origin: Vector3 = shooter.camera.global_position
 	var dir: Vector3 = -shooter.camera.global_transform.basis.z
+	# ── Accuracy cone (server-authoritative spread) ───────────────────────
+	# Every shot deviates randomly within a cone whose size depends on the
+	# shooter's state: tight when crouched / ADS, wide while running. The
+	# server rolls it, so this is the truth — the client's crosshair is no
+	# longer a guarantee of a hit (intended: that's what spread means).
+	var cone: float = weapon.accuracy_cone if "accuracy_cone" in weapon else 0.0
+	if cone > 0.0:
+		var ads: bool = bool(shooter.get("_is_ads"))
+		var crouched: bool = bool(shooter.get("_is_crouching"))
+		var horiz_speed: float = Vector2(shooter.velocity.x, shooter.velocity.z).length()
+		if ads:
+			cone *= (weapon.spread_ads_mult if "spread_ads_mult" in weapon else 0.18)
+		elif crouched:
+			cone *= (weapon.spread_crouch_mult if "spread_crouch_mult" in weapon else 0.55)
+		if horiz_speed > 2.0 and not ads:
+			cone *= (weapon.spread_moving_mult if "spread_moving_mult" in weapon else 2.6)
+		dir = _apply_cone(dir, cone)
 	var max_dist: float = 500.0 if weapon.is_hitscan() else 200.0
 	# F3-M4: use the SHOOTER's World3D (= the room's SubViewport own world
 	# after F3-M3b) rather than the main scene's. Without this, raycasts
