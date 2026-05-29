@@ -2093,7 +2093,8 @@ func _record_kc_buffer(delta: float) -> void:
 			continue
 		seen[id] = true
 		var pos: Vector3 = p.global_position
-		states[id] = [pos.x, pos.y, pos.z, p.rotation.y]
+		var pit: float = p.head.rotation.x if ("head" in p and p.head != null) else 0.0
+		states[id] = [pos.x, pos.y, pos.z, p.rotation.y, pit]
 	for b in bots:
 		if b == null or not is_instance_valid(b):
 			continue
@@ -2102,7 +2103,8 @@ func _record_kc_buffer(delta: float) -> void:
 			continue
 		seen[bid] = true
 		var bpos: Vector3 = b.global_position
-		states[bid] = [bpos.x, bpos.y, bpos.z, b.rotation.y]
+		var bpit: float = b.head.rotation.x if ("head" in b and b.head != null) else 0.0
+		states[bid] = [bpos.x, bpos.y, bpos.z, b.rotation.y, bpit]
 	if states.is_empty():
 		return
 	_kc_buffer.append({"t": Time.get_ticks_msec(), "states": states})
@@ -2394,8 +2396,10 @@ func _tick_killcam(delta: float) -> void:
 		if span > 0.0:
 			frac = clampf((target_ms - float(lo.t)) / span, 0.0, 1.0)
 	var hi_states: Dictionary = hi.get("states", {})
-	var killer_pos: Vector3 = Vector3.ZERO
+	var killer_pos: Vector3 = Vector3.ZERO   # body center
 	var victim_pos: Vector3 = Vector3.ZERO
+	var killer_yaw: float = 0.0
+	var killer_pitch: float = 0.0
 	var have_killer: bool = false
 	var have_victim: bool = false
 	for id in _kc_ghosts.keys():
@@ -2406,55 +2410,46 @@ func _tick_killcam(delta: float) -> void:
 		var a = lo.states[id]
 		var pos := Vector3(a[0], a[1], a[2])
 		var yaw: float = a[3]
+		var pitch: float = a[4] if a.size() > 4 else 0.0
 		if hi_states.has(id):
 			var b = hi_states[id]
 			pos = pos.lerp(Vector3(b[0], b[1], b[2]), frac)
 			yaw = lerp_angle(yaw, float(b[3]), frac)
+			if b.size() > 4:
+				pitch = lerp_angle(pitch, float(b[4]), frac)
 		g.visible = true
 		# Recorded pos IS the body center (origin 0.9 above feet); humanoid
 		# root is also body-center → place directly, no +0.9 (the float bug).
 		g.global_position = pos
 		g.rotation.y = yaw
 		if id == _kc_killer_id:
-			killer_pos = pos + Vector3(0, 0.7, 0); have_killer = true
+			killer_pos = pos; killer_yaw = yaw; killer_pitch = pitch; have_killer = true
 		elif id == _kc_victim_id:
-			victim_pos = pos + Vector3(0, 0.7, 0); have_victim = true
-	# Fallbacks so the camera still frames something if one principal wasn't
-	# in the reel (e.g. killer spawned <buffer-window ago).
+			victim_pos = pos; have_victim = true
+	# Fallbacks if a principal wasn't in the reel window.
 	if not have_killer and have_victim:
 		killer_pos = victim_pos
 	if not have_victim and have_killer:
 		victim_pos = killer_pos
-	# ── 3 distinct camera angles, one per third of the replay ──────────────
-	# 0: over the killer's shoulder, looking at the victim (the incoming shot)
-	# 1: wide side profile of the whole engagement
-	# 2: behind the victim, looking back at the killer (the "who got me")
-	# Each angle eases internally; a quick cut separates them.
-	var to_v: Vector3 = victim_pos - killer_pos
-	to_v.y = 0
-	if to_v.length() < 0.1:
-		to_v = Vector3(0, 0, 1)
-	to_v = to_v.normalized()
-	var side: Vector3 = to_v.cross(Vector3.UP).normalized()
-	var mid: Vector3 = killer_pos.lerp(victim_pos, 0.5)
-	var phase: int = clampi(int(progress * 3.0), 0, 2)
-	var look_at: Vector3 = mid + Vector3(0, 0.2, 0)
-	var want_pos: Vector3
-	match phase:
-		0:   # over killer's shoulder → look at victim
-			want_pos = killer_pos - to_v * 2.6 + side * 0.8 + Vector3(0, 1.0, 0)
-			look_at = victim_pos
-		1:   # wide side profile, slightly high
-			want_pos = mid + side * 5.0 + Vector3(0, 2.6, 0)
-			look_at = mid + Vector3(0, 0.2, 0)
-		_:   # behind victim → look back at killer
-			want_pos = victim_pos + to_v * 2.6 + side * -0.6 + Vector3(0, 1.1, 0)
-			look_at = killer_pos
-	# Smoothly settle toward the target each frame. On a phase change the
-	# bigger delta reads as a quick push rather than a hard teleport.
-	var cam_a: float = clampf(8.0 * delta, 0.0, 1.0)
-	_killcam_cam.global_position = _killcam_cam.global_position.lerp(want_pos, cam_a) if _kc_elapsed > 0.05 else want_pos
-	_killcam_cam.look_at(look_at, Vector3.UP)
+	# ── KILLCAM camera: Call-of-Duty standard — the killer's perspective.
+	# Locked over the killer's shoulder, looking along the killer's actual
+	# recorded aim (yaw+pitch). You watch how the enemy lined you up and
+	# fired. A gentle push-in over the replay + slow-mo (above) sells the
+	# kill; no orbit, no arbitrary angle hunting — this is the genre standard.
+	var killer_head: Vector3 = killer_pos + Vector3(0, 0.65, 0)
+	var aim := Vector3(
+		-sin(killer_yaw) * cos(killer_pitch),
+		sin(killer_pitch),
+		-cos(killer_yaw) * cos(killer_pitch)
+	).normalized()
+	var right := aim.cross(Vector3.UP).normalized()
+	# Behind + above + slightly to the right shoulder. Push in as it plays.
+	var back: float = lerpf(2.2, 1.5, progress)
+	var cam_pos: Vector3 = killer_head - aim * back + Vector3(0, 0.45, 0) + right * 0.45
+	var aim_target: Vector3 = killer_head + aim * 12.0
+	var cam_a: float = clampf(10.0 * delta, 0.0, 1.0)
+	_killcam_cam.global_position = _killcam_cam.global_position.lerp(cam_pos, cam_a) if _kc_elapsed > 0.05 else cam_pos
+	_killcam_cam.look_at(aim_target, Vector3.UP)
 	# Progress bar fill.
 	if _kc_bar_fill != null:
 		_kc_bar_fill.anchor_right = progress
