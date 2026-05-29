@@ -372,6 +372,17 @@ func _physics_process(delta: float) -> void:
 		_step_movement(delta)
 		_step_weapon(delta)
 		_step_net_send(delta)
+	elif has_meta(&"is_bot"):
+		# Bots own their own simulation (BotPlayer overrides _step_movement /
+		# _step_weapon) but must NOT be is_local — that would make their camera
+		# current and steal the human's view (the 4587588 camera-steal fix set
+		# is_local=false, which silently routed bots into the inert
+		# `_apply_remote_state` branch below → frozen, never moving or firing.
+		# This dedicated branch restores bot simulation without the camera.)
+		# MP bot positions reach clients via the DS snapshot broadcast, so no
+		# _step_net_send / camera kick needed here.
+		_step_movement(delta)
+		_step_weapon(delta)
 	elif use_remote_input:
 		# Apply the latest received aim BEFORE _step_movement so transform.basis
 		# (used to compute world-space move vector) reflects the client's look.
@@ -840,18 +851,20 @@ func _spawn_local_throwable() -> void:
 	proj.weapon = weapon_def
 	proj.shooter = self
 	var origin: Vector3 = camera.global_position if camera != null else global_position + Vector3(0, 1, 0)
-	proj.global_position = origin
 	var pitch: float = _aim_pitch + weapon_def.throw_arc_pitch
 	pitch = clampf(pitch, -PI * 0.49, PI * 0.49)
 	var dir := Vector3(-sin(_aim_yaw) * cos(pitch), sin(pitch), -cos(_aim_yaw) * cos(pitch))
 	proj.velocity = dir.normalized() * weapon_def.throw_speed
-	# Use the game controller as parent so the projectile lives in the
-	# main scene's world (matches where players are).
+	# Add to the tree FIRST, THEN set global_position. Setting global_position
+	# on a not-yet-parented Node3D errors ("!is_inside_tree()") and lands the
+	# projectile at the wrong spot. Parent = the game controller so the
+	# projectile lives in the main scene's world (matches where players are).
 	var game: Node = get_tree().root.get_node_or_null(^"Game")
 	if game != null:
 		game.add_child(proj)
 	else:
 		get_tree().root.add_child(proj)
+	proj.global_position = origin
 
 
 ## True when a real network transport is active. Discriminates against

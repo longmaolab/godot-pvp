@@ -34,6 +34,14 @@ func _run_test() -> void:
 
 	var bot: Node = BOT_SCENE.instantiate()
 	bot.weapon_def = AK20
+	# CRITICAL: match real spawn_bot — bots are is_local=false (so their
+	# camera doesn't steal the human's view). The test used to leave the
+	# @export default is_local=true, which masked a bug where is_local=false
+	# bots were routed to the inert _apply_remote_state branch and never
+	# moved or fired. Set false here so this test actually exercises the
+	# path practice/MP use.
+	bot.is_local = false
+	bot.is_human_input = false
 	bot.target = dummy
 	add_child(bot)
 	# Override the difficulty-tier defaults that _ready applies so the test
