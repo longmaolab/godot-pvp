@@ -164,6 +164,13 @@ const LEAN_OFFSET := 0.45   # metres the head shifts sideways at full lean
 const LEAN_ROLL := 0.13     # radians the head/body rolls into the lean
 const LEAN_LERP := 11.0
 
+# How long a corpse stays (playing its death anim) before hiding.
+const CORPSE_LINGER := 2.2
+# Transient crosshair bloom from firing — bumped per shot, decays each frame.
+# Feeds crosshair_spread() so the reticle visibly opens up during sustained
+# fire (matching the server-side accuracy cone).
+var _crosshair_kick: float = 0.0
+
 # DS-M2: latest input frame received from a network client (used only when
 # use_remote_input=true). Tick gates against replay/out-of-order.
 var _remote_input_bits: int = 0
@@ -658,6 +665,7 @@ func _apply_recoil_kick() -> void:
 	_aim_yaw += randf_range(-horiz, horiz)
 	_recoil_owed += rise
 	_recoil_idle = 0.0
+	_crosshair_kick = minf(1.0, _crosshair_kick + 0.35)   # bloom the reticle
 
 
 ## Per-frame recoil recovery + ADS handling for the LOCAL human. Eases the
@@ -665,6 +673,8 @@ func _apply_recoil_kick() -> void:
 ## the camera FOV / sets the ADS flag. Called from the is_local branch.
 func _step_local_feel(delta: float) -> void:
 	_recoil_idle += delta
+	# Decay the firing bloom (≈0.4s back to rest).
+	_crosshair_kick = maxf(0.0, _crosshair_kick - delta * 2.5)
 	# Recover the owed recoil once there's a brief gap in fire (~0.12s).
 	if _recoil_owed > 0.0 and _recoil_idle > 0.12:
 		var rate: float = weapon_def.recoil_recover if (weapon_def != null and "recoil_recover" in weapon_def) else 5.0
@@ -677,6 +687,23 @@ func _step_local_feel(delta: float) -> void:
 	if camera != null:
 		var target_fov: float = (weapon_def.ads_zoom_fov if (weapon_def != null) else 45.0) if _is_ads else _base_fov
 		camera.fov = lerpf(camera.fov, target_fov, clampf(ADS_FOV_LERP * delta, 0.0, 1.0))
+
+
+## Normalized 0..1 reticle bloom for the local human's HUD crosshair — mirrors
+## the server-side accuracy cone so the gap visibly opens when you move / fire /
+## jump and tightens when you ADS or crouch. Pure read of current state.
+func crosshair_spread() -> float:
+	var f: float = 0.0
+	var hs: float = Vector2(velocity.x, velocity.z).length()
+	f += clampf(hs / maxf(move_speed, 0.1), 0.0, 1.0) * 0.5
+	if not is_on_floor():
+		f += 0.4
+	f += _crosshair_kick
+	if _is_ads:
+		f *= 0.2
+	elif _is_crouching:
+		f *= 0.55
+	return clampf(f, 0.0, 1.0)
 
 
 ## Applied when this player takes damage — small jolt in a random direction.
@@ -1221,12 +1248,26 @@ func _die() -> void:
 	if is_dead:
 		return
 	is_dead = true
-	visible = false
 	collision_layer = 0
 	collision_mask = 0
 	head_hitbox.monitoring = false
 	body_hitbox.monitoring = false
 	_play_3d(SFX_DEATH)
+	# Play the death animation and leave the corpse for a beat instead of
+	# vanishing instantly — the classic "drop". _physics_process early-returns
+	# on is_dead so it won't drive the skin anymore; kick the die anim directly
+	# (AnimationPlayer plays it out on its own). Hidden after CORPSE_LINGER
+	# unless we respawn first (the timer re-checks is_dead).
+	if _skin != null:
+		_skin.play_anim(&"die")
+	var tree: SceneTree = get_tree()
+	if tree != null:
+		var t: SceneTreeTimer = tree.create_timer(CORPSE_LINGER)
+		t.timeout.connect(func() -> void:
+			if is_instance_valid(self) and is_dead:
+				visible = false)
+	else:
+		visible = false
 	died.emit(last_attacker)
 
 

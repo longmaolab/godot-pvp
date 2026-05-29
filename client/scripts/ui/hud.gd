@@ -14,6 +14,10 @@ const FEED_LIFETIME_SEC := 6.0
 @onready var round_timer: Label = $TopCenter/RoundTimer
 @onready var mode_badge: Label = $TopCenter/ModeBadge
 @onready var hit_marker: Control = $Crosshair/HitMarker
+@onready var _pip_top: Control = $Crosshair/PipTop
+@onready var _pip_bottom: Control = $Crosshair/PipBottom
+@onready var _pip_left: Control = $Crosshair/PipLeft
+@onready var _pip_right: Control = $Crosshair/PipRight
 @onready var kill_confirm: Label = $KillConfirm
 @onready var resume_prompt: Control = $ResumePrompt
 @onready var credits_pill: Label = $CreditsPill
@@ -32,6 +36,8 @@ var _score_rows: Array = []
 # Track HP delta so we can flash the screen red exactly when damage lands.
 var _last_hp: float = -1.0
 var _dmg_dir_pivot: Node2D = null   # directional damage indicator (built in _ready)
+var _pip_base: Dictionary = {}      # crosshair pip → resting [L,T,R,B] offsets
+const CROSSHAIR_MAX_GAP := 16.0     # px each pip travels outward at full bloom
 
 # Reusable style for feed row backgrounds (cheap — one shared sub-resource).
 var _feed_row_style: StyleBoxFlat
@@ -40,6 +46,11 @@ var _feed_row_style: StyleBoxFlat
 func _ready() -> void:
 	set_process(true)   # for the resume-prompt visibility poll
 	_build_damage_dir_indicator()
+	# Remember each crosshair pip's resting offsets so the dynamic-spread code
+	# can shift them outward from a known baseline.
+	for pip in [_pip_top, _pip_bottom, _pip_left, _pip_right]:
+		if pip != null:
+			_pip_base[pip] = [pip.offset_left, pip.offset_top, pip.offset_right, pip.offset_bottom]
 	_feed_row_style = StyleBoxFlat.new()
 	# Bind the credits pill to the Settings autoload so kills update it live.
 	if has_node(^"/root/Settings"):
@@ -337,6 +348,31 @@ func flash_damage_from(screen_angle: float) -> void:
 	t.tween_property(_dmg_dir_pivot, "modulate:a", 0.0, 0.8)
 
 
+## Dynamic crosshair — push the 4 pips outward by the local player's current
+## bloom (move / fire / jump open it; ADS / crouch tighten it), so the reticle
+## reflects the server-side accuracy cone. Read from the bound local player.
+func _update_crosshair_spread() -> void:
+	if _ability_player == null or not is_instance_valid(_ability_player):
+		return
+	if not _ability_player.has_method(&"crosshair_spread"):
+		return
+	var extra: float = _ability_player.crosshair_spread() * CROSSHAIR_MAX_GAP
+	_shift_pip(_pip_top, 0.0, -extra)
+	_shift_pip(_pip_bottom, 0.0, extra)
+	_shift_pip(_pip_left, -extra, 0.0)
+	_shift_pip(_pip_right, extra, 0.0)
+
+
+func _shift_pip(pip: Control, dx: float, dy: float) -> void:
+	if pip == null or not _pip_base.has(pip):
+		return
+	var b: Array = _pip_base[pip]
+	pip.offset_left = b[0] + dx
+	pip.offset_top = b[1] + dy
+	pip.offset_right = b[2] + dx
+	pip.offset_bottom = b[3] + dy
+
+
 ## Push a kill-feed line. Each entry is a small left-bordered panel; older
 ## lines are auto-removed when count exceeds FEED_MAX_LINES.
 func push_feed(text: String, color: Color = Color.WHITE) -> void:
@@ -413,6 +449,7 @@ func _update_credits(new_total: int) -> void:
 func _process(_delta: float) -> void:
 	if resume_prompt != null and resume_prompt.visible:
 		resume_prompt.visible = false
+	_update_crosshair_spread()
 	# Ability cooldown bar — derived live from the local player's state.
 	if _ability_player != null and is_instance_valid(_ability_player) \
 			and ability_bar != null and ability_label != null:
