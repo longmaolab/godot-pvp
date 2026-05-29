@@ -1,8 +1,15 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
 [ext_resource type="Script" path="res://shared/scripts/world/damage_zone.gd" id="3_damage"]
+[ext_resource type="Texture2D" uid="uid://cie82d87orfa2" path="res://assets/textures/pbr/concrete/concrete_color.png" id="10_cc"]
+[ext_resource type="Texture2D" uid="uid://buo8r2wk64856" path="res://assets/textures/pbr/concrete/concrete_normal.png" id="11_cn"]
+[ext_resource type="Texture2D" uid="uid://bd6o3qybtbq1l" path="res://assets/textures/pbr/concrete/concrete_rough.png" id="12_cr"]
+[ext_resource type="Texture2D" uid="uid://crueph3tndg0k" path="res://assets/textures/pbr/metalplates/metalplates_color.png" id="13_mc"]
+[ext_resource type="Texture2D" uid="uid://d1gklcb3mixbl" path="res://assets/textures/pbr/metalplates/metalplates_normal.png" id="14_mn"]
+[ext_resource type="Texture2D" uid="uid://dxsettxjtxkcl" path="res://assets/textures/pbr/metalplates/metalplates_rough.png" id="15_mr"]
+[ext_resource type="Texture2D" uid="uid://cehvq5htyiah7" path="res://assets/textures/sky/kloofendal_48d_partly_cloudy_puresky.hdr" id="16_sky"]
 
 [sub_resource type="BoxShape3D" id="box_dmg_pit"]
 size = Vector3(5, 1, 5)
@@ -14,14 +21,22 @@ emission = Color(1, 0.5, 0.2, 1)
 emission_energy_multiplier = 2.0
 
 [sub_resource type="StandardMaterial3D" id="mat_floor"]
-albedo_color = Color(0.4, 0.42, 0.45, 1)
+albedo_texture = ExtResource("10_cc")
+normal_enabled = true
+normal_texture = ExtResource("11_cn")
+roughness_texture = ExtResource("12_cr")
+uv1_scale = Vector3(12, 12, 12)
 
 [sub_resource type="StandardMaterial3D" id="mat_wall"]
-albedo_color = Color(0.25, 0.27, 0.3, 1)
+albedo_texture = ExtResource("13_mc")
+metallic = 0.5
+normal_enabled = true
+normal_texture = ExtResource("14_mn")
+roughness_texture = ExtResource("15_mr")
+uv1_scale = Vector3(8, 4, 8)
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_horizon_color = Color(0.55, 0.69, 0.81, 1)
-ground_horizon_color = Color(0.55, 0.69, 0.81, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat"]
+panorama = ExtResource("16_sky")
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
