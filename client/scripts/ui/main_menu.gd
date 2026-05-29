@@ -2,6 +2,8 @@ extends Control
 class_name MainMenu
 
 const GAME_SCENE := preload("res://client/scenes/game.tscn")
+# P1-14: weapon-catalog card rendering extracted here (pure UI, no menu state).
+const _WeaponsDialogBuilder := preload("res://client/scripts/ui/weapons_dialog_builder.gd")
 # Runtime-loaded (not preload) to avoid a circular dependency with shop.tscn,
 # which preloads main_menu.tscn for its back button.
 const SHOP_SCENE_PATH := "res://client/scenes/shop.tscn"
@@ -401,175 +403,10 @@ func _on_open_shop() -> void:
 
 
 func _populate_weapons_dialog() -> void:
-	# Wipe any prior children (re-runs after first time should refresh content).
-	for child in weapons_list.get_children():
-		child.queue_free()
-	# Scan all weapon .tres on disk; same source as in-game registry.
-	var dir := DirAccess.open("res://shared/data/weapons/")
-	if dir == null:
-		return
-	dir.list_dir_begin()
-	while true:
-		var fname: String = dir.get_next()
-		if fname == "":
-			break
-		# Web export rewrites .tres → .tres.remap (path indirection). Without
-		# stripping the suffix the suffix check below rejects everything and
-		# the dialog ends up empty on web. Matches weapon_registry.gd:42.
-		if fname.ends_with(".tres.remap"):
-			fname = fname.substr(0, fname.length() - 6)
-		if dir.current_is_dir() or fname.begins_with("_") or not fname.ends_with(".tres"):
-			continue
-		var wpn: Resource = load("res://shared/data/weapons/" + fname)
-		if wpn == null:
-			continue
-		_append_weapon_row(wpn)
-	dir.list_dir_end()
-
-
-func _append_weapon_row(wpn: Resource) -> void:
-	# ── Card container with cyan border + rounded corners ────────────────────
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(680, 0)
-	card.add_theme_stylebox_override(&"panel", _weapon_card_style(wpn))
-
-	var pad := MarginContainer.new()
-	pad.add_theme_constant_override(&"margin_left", 18)
-	pad.add_theme_constant_override(&"margin_right", 18)
-	pad.add_theme_constant_override(&"margin_top", 14)
-	pad.add_theme_constant_override(&"margin_bottom", 14)
-	card.add_child(pad)
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override(&"separation", 8)
-	pad.add_child(col)
-
-	# Header row: name + type + badges.
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override(&"separation", 12)
-	col.add_child(header)
-
-	var name_lbl := Label.new()
-	name_lbl.text = wpn.display_name
-	name_lbl.add_theme_font_size_override(&"font_size", 22)
-	name_lbl.add_theme_color_override(&"font_color", Color(1, 0.88, 0.42))
-	header.add_child(name_lbl)
-
-	var type_lbl := Label.new()
-	type_lbl.text = "·" + wpn.type_label
-	type_lbl.add_theme_font_size_override(&"font_size", 14)
-	type_lbl.add_theme_color_override(&"font_color", Color(0.55, 0.82, 1, 0.85))
-	header.add_child(type_lbl)
-
-	var header_spacer := Control.new()
-	header_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(header_spacer)
-
-	if wpn.instakill_headshot:
-		header.add_child(_make_badge("☠ 头爆秒杀", Color(1, 0.4, 0.4)))
-	if wpn.scary_close:
-		header.add_child(_make_badge("⚠ 近战凶器", Color(1, 0.7, 0.3)))
-	if wpn.free_starter:
-		header.add_child(_make_badge("FREE", Color(0.5, 1, 0.6)))
-	if wpn.admin_only:
-		header.add_child(_make_badge("ADMIN", Color(1, 0.4, 0.7)))
-
-	# Stat bars row (one per stat, 4 stats).
-	var stats := GridContainer.new()
-	stats.columns = 2
-	stats.add_theme_constant_override(&"h_separation", 16)
-	stats.add_theme_constant_override(&"v_separation", 4)
-	col.add_child(stats)
-
-	stats.add_child(_make_stat_bar("DMG",     int(wpn.damage),       0, 150, Color(1, 0.4, 0.35)))
-	stats.add_child(_make_stat_bar("MAG",     wpn.magazine,           1, 60,  Color(0.5, 0.85, 1)))
-	# Lower fire_interval is FASTER → invert for visual "fire rate" bar.
-	var rof_inv: int = clampi(int(round(1500.0 - wpn.fire_interval_ms)), 0, 1500)
-	stats.add_child(_make_stat_bar("ROF",     rof_inv,                0, 1500, Color(1, 0.85, 0.4)))
-	var bspeed: int = 999 if wpn.is_hitscan() else int(wpn.bullet_speed)
-	stats.add_child(_make_stat_bar("SPEED",   bspeed,                 60, 300, Color(0.6, 1, 0.7)))
-
-	# Ability callout.
-	if wpn.ability != null and not String(wpn.ability.name).is_empty():
-		var ability_box := PanelContainer.new()
-		var abox := StyleBoxFlat.new()
-		abox.bg_color = Color(0.05, 0.1, 0.18, 0.7)
-		abox.border_color = Color(0.5, 0.85, 1, 0.5)
-		abox.border_width_left = 3
-		abox.corner_radius_top_left = 4
-		abox.corner_radius_top_right = 4
-		abox.corner_radius_bottom_left = 4
-		abox.corner_radius_bottom_right = 4
-		abox.content_margin_left = 10
-		abox.content_margin_right = 10
-		abox.content_margin_top = 6
-		abox.content_margin_bottom = 6
-		ability_box.add_theme_stylebox_override(&"panel", abox)
-		var avbox := VBoxContainer.new()
-		avbox.add_theme_constant_override(&"separation", 2)
-		ability_box.add_child(avbox)
-		var ah := Label.new()
-		ah.text = "⚡ %s" % wpn.ability.name
-		ah.add_theme_color_override(&"font_color", Color(0.55, 0.95, 1))
-		ah.add_theme_font_size_override(&"font_size", 13)
-		avbox.add_child(ah)
-		if not String(wpn.ability.description).is_empty():
-			var ad := Label.new()
-			ad.text = wpn.ability.description
-			ad.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			ad.custom_minimum_size = Vector2(620, 0)
-			ad.add_theme_font_size_override(&"font_size", 12)
-			ad.add_theme_color_override(&"font_color", Color(0.85, 0.92, 1))
-			avbox.add_child(ad)
-		col.add_child(ability_box)
-
-	# Description.
-	if "description" in wpn and not wpn.description.is_empty():
-		var desc := Label.new()
-		desc.text = wpn.description
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc.custom_minimum_size = Vector2(640, 0)
-		desc.add_theme_font_size_override(&"font_size", 12)
-		desc.add_theme_color_override(&"font_color", Color(0.78, 0.85, 0.95))
-		col.add_child(desc)
-
-	# ── Upgrade row: three "+ Upgrade" buttons (damage / mag / reload).
-	# Each tier costs 5 fragments per level delta; server caps at 10.
-	col.add_child(_make_upgrade_row(String(wpn.id)))
-
-	weapons_list.add_child(card)
-
-
-# Upgrade row added to every weapon card in the catalog. Reads current level
-# from Settings.upgrades and shows "DMG L3/10  cost 5" buttons. Click → fire
-# request_apply_upgrade RPC, server validates ownership + fragment balance,
-# pushes the new profile back, our credits_changed / upgrades_changed signal
-# will refresh the dialog next time it's opened.
-func _make_upgrade_row(weapon_id: String) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override(&"separation", 8)
-	var settings: Node = get_node_or_null(^"/root/Settings")
-	var upgrades: Dictionary = {}
-	if settings != null and "upgrades" in settings:
-		var all: Dictionary = settings.upgrades
-		upgrades = all.get(weapon_id, {})
-	for stat in ["damage", "mag", "reload"]:
-		var lvl: int = int(upgrades.get(stat, 0))
-		var btn := Button.new()
-		var stat_label: String = {"damage": "DMG", "mag": "MAG", "reload": "RLD"}[stat]
-		if lvl >= 10:
-			btn.text = "%s ★ MAX" % stat_label
-			btn.disabled = true
-		else:
-			btn.text = "%s  L%d/10  +5 碎片" % [stat_label, lvl]
-		btn.custom_minimum_size = Vector2(170, 32)
-		btn.add_theme_font_size_override(&"font_size", 13)
-		btn.add_theme_color_override(&"font_color", Color(0.85, 0.95, 0.55) if lvl < 10 else Color(0.95, 0.7, 0.3))
-		var captured_stat: String = stat
-		var captured_lvl: int = lvl
-		btn.pressed.connect(func(): _on_apply_upgrade(weapon_id, captured_stat, captured_lvl + 1))
-		row.add_child(btn)
-	return row
+	# P1-14: card rendering lives in WeaponsDialogBuilder (pure UI, no menu
+	# state). We pass _on_apply_upgrade as the upgrade-button action so the
+	# builder stays decoupled from networking / Settings.
+	_WeaponsDialogBuilder.populate(weapons_list, get_node_or_null(^"/root/Settings"), _on_apply_upgrade)
 
 
 func _on_apply_upgrade(weapon_id: String, stat: String, target_level: int) -> void:
