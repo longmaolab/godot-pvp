@@ -2046,9 +2046,13 @@ var _killcam_active: bool = false
 var _killcam_cam: Camera3D = null
 var _kc_frames: Array = []            # frozen snapshot of the buffer at death
 var _kc_elapsed: float = 0.0
-var _kc_killer_peer: int = 0
-var _kc_victim_peer: int = 0
-var _kc_ghosts: Dictionary = {}       # peer → MeshInstance3D
+# Identify combatants by NODE instance_id, not multiplayer authority — in
+# practice the local player AND the bot both report authority 1 (no real
+# peer), which collapsed killer/victim into one id and broke the tags.
+var _kc_killer_id: int = 0
+var _kc_victim_id: int = 0
+var _kc_ghosts: Dictionary = {}       # instance_id → ghost Node3D
+var _kc_names: Dictionary = {}        # instance_id → display name (String)
 var _kc_hidden: Array = []            # live players we hid, to restore later
 var _kc_killer_name: String = "敌人"
 var _kc_weapon_name: String = ""
@@ -2069,21 +2073,38 @@ func _process(delta: float) -> void:
 		_record_kc_buffer(delta)
 
 
-# Sample all players' transforms into the ring buffer at _KC_SAMPLE_HZ.
+# Sample EVERY combatant's transform into the ring buffer at _KC_SAMPLE_HZ.
+# Keyed by node instance_id so the local player + a practice bot (which lives
+# in `bots`, not players_by_peer) are both recorded and stay distinct — that's
+# what makes the replay reliably show BOTH the victim and the killer.
 func _record_kc_buffer(delta: float) -> void:
-	if players_by_peer.is_empty():
-		return
 	_kc_sample_accum += delta
 	if _kc_sample_accum < 1.0 / _KC_SAMPLE_HZ:
 		return
 	_kc_sample_accum = 0.0
 	var states: Dictionary = {}
+	var seen: Dictionary = {}
 	for peer in players_by_peer.keys():
 		var p: Node = players_by_peer[peer]
 		if p == null or not is_instance_valid(p):
 			continue
+		var id: int = p.get_instance_id()
+		if seen.has(id):
+			continue
+		seen[id] = true
 		var pos: Vector3 = p.global_position
-		states[peer] = [pos.x, pos.y, pos.z, p.rotation.y]
+		states[id] = [pos.x, pos.y, pos.z, p.rotation.y]
+	for b in bots:
+		if b == null or not is_instance_valid(b):
+			continue
+		var bid: int = b.get_instance_id()
+		if seen.has(bid):
+			continue
+		seen[bid] = true
+		var bpos: Vector3 = b.global_position
+		states[bid] = [bpos.x, bpos.y, bpos.z, b.rotation.y]
+	if states.is_empty():
+		return
 	_kc_buffer.append({"t": Time.get_ticks_msec(), "states": states})
 	# Drop frames older than the history window.
 	var cutoff: int = Time.get_ticks_msec() - int(_KC_HISTORY_SEC * 1000.0)
@@ -2105,12 +2126,31 @@ func _start_killcam(killer_node: Node) -> void:
 		_stop_killcam()
 	# Freeze the buffer as the replay reel.
 	_kc_frames = _kc_buffer.duplicate(true)
-	_kc_killer_peer = killer_node.get_multiplayer_authority()
-	_kc_victim_peer = local_player.get_multiplayer_authority()
+	# Identify by instance_id (collision-free, unlike authority in practice).
+	_kc_killer_id = killer_node.get_instance_id()
+	_kc_victim_id = local_player.get_instance_id()
 	_kc_killer_name = String(killer_node.player_name) if "player_name" in killer_node else "敌人"
 	_kc_weapon_name = ""
 	if "weapon_def" in killer_node and killer_node.weapon_def != null:
 		_kc_weapon_name = String(killer_node.weapon_def.display_name)
+	# Build instance_id → display-name map from the live nodes (still valid
+	# now, at death). Victim shows their own name + "(你)"; everyone else
+	# their player_name.
+	_kc_names.clear()
+	var victim_name: String = String(local_player.player_name) if "player_name" in local_player else "你"
+	_kc_names[_kc_victim_id] = "%s (你)" % victim_name
+	_kc_names[_kc_killer_id] = "☠ %s" % _kc_killer_name
+	for peer in players_by_peer.keys():
+		var pn: Node = players_by_peer[peer]
+		if pn != null and is_instance_valid(pn):
+			var iid: int = pn.get_instance_id()
+			if not _kc_names.has(iid):
+				_kc_names[iid] = String(pn.player_name) if "player_name" in pn else "P"
+	for b in bots:
+		if b != null and is_instance_valid(b):
+			var bid2: int = b.get_instance_id()
+			if not _kc_names.has(bid2):
+				_kc_names[bid2] = String(b.player_name) if "player_name" in b else "Bot"
 	_killcam_active = true
 	_kc_elapsed = 0.0
 	# Camera.
@@ -2118,42 +2158,42 @@ func _start_killcam(killer_node: Node) -> void:
 		_killcam_cam = Camera3D.new()
 		add_child(_killcam_cam)
 	_killcam_cam.make_current()
-	# Hide live player bodies so only the replay ghosts are visible.
+	# Hide live player + bot bodies so only the replay ghosts are visible.
 	_kc_hidden.clear()
 	for peer in players_by_peer.keys():
 		var p: Node = players_by_peer[peer]
 		if p != null and is_instance_valid(p) and p.visible:
 			p.visible = false
 			_kc_hidden.append(p)
-	# Spawn one ghost per peer in the reel, with a floating name tag so the
-	# player can read exactly who's who.
+	for b in bots:
+		if b != null and is_instance_valid(b) and b.visible:
+			b.visible = false
+			_kc_hidden.append(b)
+	# Spawn one humanoid ghost per recorded combatant, with a floating name
+	# tag so the player can read exactly who's who.
 	_kc_ghosts.clear()
-	var peers_seen: Dictionary = {}
+	var ids_seen: Dictionary = {}
 	for fr in _kc_frames:
-		for peer in fr.states.keys():
-			peers_seen[peer] = true
+		for id in fr.states.keys():
+			ids_seen[id] = true
 	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
-	for peer in peers_seen.keys():
-		# Killer = red, victim = cyan, others = dim grey (de-emphasized so the
-		# eye goes to the two that matter).
+	for id in ids_seen.keys():
+		# Killer = red, victim = cyan, others = dim grey.
 		var col: Color
-		var is_principal: bool = (peer == _kc_killer_peer or peer == _kc_victim_peer)
-		if peer == _kc_killer_peer:
+		var is_principal: bool = (id == _kc_killer_id or id == _kc_victim_id)
+		if id == _kc_killer_id:
 			col = Color(1.0, 0.3, 0.3)
-		elif peer == _kc_victim_peer:
+		elif id == _kc_victim_id:
 			col = Color(0.4, 0.85, 1.0)
 		else:
 			col = Color(0.5, 0.5, 0.55)
-		# Build a little humanoid (head + torso + 2 arms + 2 legs) so the
-		# replay shows recognizable PEOPLE, not pillars. Root origin sits at
-		# the player's body-center (matches recorded global_position), parts
-		# laid out from feet (local -0.9) to head (local +0.9).
+		# Humanoid (head + torso + 2 arms + 2 legs), body-center origin.
 		var ghost: Node3D = _kc_build_humanoid(col, 0.9 if is_principal else 0.25)
 		add_child(ghost)
-		# Floating name tag for the two principals, above the head.
+		# Name tag for the two principals, above the head.
 		if is_principal:
 			var tag := Label3D.new()
-			tag.text = ("☠ " + _kc_killer_name) if peer == _kc_killer_peer else "你"
+			tag.text = String(_kc_names.get(id, "?"))
 			if ui_font != null:
 				tag.font = ui_font
 			tag.font_size = 48
@@ -2165,7 +2205,7 @@ func _start_killcam(killer_node: Node) -> void:
 			tag.pixel_size = 0.0016
 			tag.position = Vector3(0, 1.15, 0)   # above the head (head ~+0.7)
 			ghost.add_child(tag)
-		_kc_ghosts[peer] = ghost
+		_kc_ghosts[id] = ghost
 	_build_killcam_ui()
 
 
@@ -2308,6 +2348,9 @@ func _stop_killcam() -> void:
 		var p: Node = players_by_peer[peer]
 		if p != null and is_instance_valid(p):
 			p.visible = not (("is_dead" in p) and p.is_dead)
+	for b in bots:
+		if b != null and is_instance_valid(b):
+			b.visible = not (("is_dead" in b) and b.is_dead)
 	_kc_hidden.clear()
 	_kc_frames = []
 	if _kc_ui != null:
@@ -2353,33 +2396,40 @@ func _tick_killcam(delta: float) -> void:
 	var hi_states: Dictionary = hi.get("states", {})
 	var killer_pos: Vector3 = Vector3.ZERO
 	var victim_pos: Vector3 = Vector3.ZERO
-	for peer in _kc_ghosts.keys():
-		var g: MeshInstance3D = _kc_ghosts[peer]
-		if not lo.states.has(peer):
+	var have_killer: bool = false
+	var have_victim: bool = false
+	for id in _kc_ghosts.keys():
+		var g: Node3D = _kc_ghosts[id]
+		if not lo.states.has(id):
 			g.visible = false
 			continue
-		var a = lo.states[peer]
+		var a = lo.states[id]
 		var pos := Vector3(a[0], a[1], a[2])
 		var yaw: float = a[3]
-		if hi_states.has(peer):
-			var b = hi_states[peer]
+		if hi_states.has(id):
+			var b = hi_states[id]
 			pos = pos.lerp(Vector3(b[0], b[1], b[2]), frac)
 			yaw = lerp_angle(yaw, float(b[3]), frac)
 		g.visible = true
-		# Recorded pos IS the player's body center (CharacterBody3D origin sits
-		# 0.9 above the feet — see player.tscn ModelHolder -0.9). The humanoid
-		# root origin is also body-center, so place it directly — no +0.9 (that
-		# was the "floating" bug).
+		# Recorded pos IS the body center (origin 0.9 above feet); humanoid
+		# root is also body-center → place directly, no +0.9 (the float bug).
 		g.global_position = pos
 		g.rotation.y = yaw
-		if peer == _kc_killer_peer:
-			killer_pos = pos + Vector3(0, 0.7, 0)
-		elif peer == _kc_victim_peer:
-			victim_pos = pos + Vector3(0, 0.7, 0)
-	# Cinematic camera: one continuous eased orbit around the kill, pushing
-	# in over time — no hard cuts. Always frames the midpoint so both the
-	# killer (red) and victim (cyan) stay in shot; the smooth sweep lets the
-	# player read the angle the shot came from.
+		if id == _kc_killer_id:
+			killer_pos = pos + Vector3(0, 0.7, 0); have_killer = true
+		elif id == _kc_victim_id:
+			victim_pos = pos + Vector3(0, 0.7, 0); have_victim = true
+	# Fallbacks so the camera still frames something if one principal wasn't
+	# in the reel (e.g. killer spawned <buffer-window ago).
+	if not have_killer and have_victim:
+		killer_pos = victim_pos
+	if not have_victim and have_killer:
+		victim_pos = killer_pos
+	# ── 3 distinct camera angles, one per third of the replay ──────────────
+	# 0: over the killer's shoulder, looking at the victim (the incoming shot)
+	# 1: wide side profile of the whole engagement
+	# 2: behind the victim, looking back at the killer (the "who got me")
+	# Each angle eases internally; a quick cut separates them.
 	var to_v: Vector3 = victim_pos - killer_pos
 	to_v.y = 0
 	if to_v.length() < 0.1:
@@ -2387,18 +2437,24 @@ func _tick_killcam(delta: float) -> void:
 	to_v = to_v.normalized()
 	var side: Vector3 = to_v.cross(Vector3.UP).normalized()
 	var mid: Vector3 = killer_pos.lerp(victim_pos, 0.5)
-	# Smoothstep the orbit so it eases in and out.
-	var e: float = progress * progress * (3.0 - 2.0 * progress)
-	var ang: float = lerpf(-1.15, 0.45, e)          # sweep around the kill line
-	var radius: float = lerpf(6.5, 2.8, e)          # dolly in
-	var height: float = lerpf(2.8, 1.55, e)         # descend toward eye level
-	var orbit_dir: Vector3 = (side * cos(ang) - to_v * sin(ang)).normalized()
-	var want_pos: Vector3 = mid + orbit_dir * radius + Vector3(0, height, 0)
-	# Lerp the camera toward the target for extra smoothness (kills any
-	# residual jitter from per-frame ghost interpolation).
-	var cam_a: float = clampf(12.0 * delta, 0.0, 1.0)
+	var phase: int = clampi(int(progress * 3.0), 0, 2)
+	var look_at: Vector3 = mid + Vector3(0, 0.2, 0)
+	var want_pos: Vector3
+	match phase:
+		0:   # over killer's shoulder → look at victim
+			want_pos = killer_pos - to_v * 2.6 + side * 0.8 + Vector3(0, 1.0, 0)
+			look_at = victim_pos
+		1:   # wide side profile, slightly high
+			want_pos = mid + side * 5.0 + Vector3(0, 2.6, 0)
+			look_at = mid + Vector3(0, 0.2, 0)
+		_:   # behind victim → look back at killer
+			want_pos = victim_pos + to_v * 2.6 + side * -0.6 + Vector3(0, 1.1, 0)
+			look_at = killer_pos
+	# Smoothly settle toward the target each frame. On a phase change the
+	# bigger delta reads as a quick push rather than a hard teleport.
+	var cam_a: float = clampf(8.0 * delta, 0.0, 1.0)
 	_killcam_cam.global_position = _killcam_cam.global_position.lerp(want_pos, cam_a) if _kc_elapsed > 0.05 else want_pos
-	_killcam_cam.look_at(mid + Vector3(0, 0.2, 0), Vector3.UP)
+	_killcam_cam.look_at(look_at, Vector3.UP)
 	# Progress bar fill.
 	if _kc_bar_fill != null:
 		_kc_bar_fill.anchor_right = progress
