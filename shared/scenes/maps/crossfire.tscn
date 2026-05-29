@@ -78,60 +78,36 @@ collision_layer = 1
 size = Vector3(1, 5, 46)
 material = SubResource("mat_wall")
 
-[node name="BldgN_A" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 2, -8)
+# Center cover is a PINWHEEL of 4 freestanding walls (not a sealed building):
+# lots of corners to peek/slide around for the CQB feel, but every region is
+# open so players AND navmesh-free bots can always route through. (A closed
+# building trapped bots — they have no pathfinding, only steering.)
+[node name="PinwheelN" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 2, -6.5)
 use_collision = true
 collision_layer = 1
-size = Vector3(6, 4, 1)
+size = Vector3(1, 4, 9)
 material = SubResource("mat_wall")
 
-[node name="BldgN_B" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 2, -8)
+[node name="PinwheelS" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 2, 6.5)
 use_collision = true
 collision_layer = 1
-size = Vector3(6, 4, 1)
+size = Vector3(1, 4, 9)
 material = SubResource("mat_wall")
 
-[node name="BldgS_A" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 2, 8)
+[node name="PinwheelE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 2, 4)
 use_collision = true
 collision_layer = 1
-size = Vector3(6, 4, 1)
+size = Vector3(9, 4, 1)
 material = SubResource("mat_wall")
 
-[node name="BldgS_B" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 2, 8)
+[node name="PinwheelW" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 2, -4)
 use_collision = true
 collision_layer = 1
-size = Vector3(6, 4, 1)
-material = SubResource("mat_wall")
-
-[node name="BldgE_A" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, -5)
-use_collision = true
-collision_layer = 1
-size = Vector3(1, 4, 6)
-material = SubResource("mat_wall")
-
-[node name="BldgE_B" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 5)
-use_collision = true
-collision_layer = 1
-size = Vector3(1, 4, 6)
-material = SubResource("mat_wall")
-
-[node name="BldgW_A" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, -5)
-use_collision = true
-collision_layer = 1
-size = Vector3(1, 4, 6)
-material = SubResource("mat_wall")
-
-[node name="BldgW_B" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 5)
-use_collision = true
-collision_layer = 1
-size = Vector3(1, 4, 6)
+size = Vector3(9, 4, 1)
 material = SubResource("mat_wall")
 
 [node name="CenterPillar" type="CSGBox3D" parent="."]

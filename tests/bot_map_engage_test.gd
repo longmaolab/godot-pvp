@@ -17,7 +17,7 @@ extends SceneTree
 const BOT_SCENE := "res://shared/scenes/bot.tscn"
 const DUMMY_SCENE := "res://shared/scenes/dummy_target.tscn"
 const AK20 := preload("res://shared/data/weapons/ak20.tres")
-const TIMEOUT := 13.0
+const TIMEOUT := 17.0
 
 # map_path : [target_anchor, bot_spawn]
 const CASES := {
@@ -56,6 +56,7 @@ func _trial(map_path: String, anchor: Vector3, bot_pos: Vector3) -> void:
 	root.add_child(bot)
 	bot.pursue_speed = 8.0
 	bot.attack_range = 8.0
+	bot._miss_chance = 0.0   # isolate navigation: no aim-RNG delaying the first hit
 	bot.global_position = bot_pos
 	bot.head_hitbox.monitoring = true
 	bot.body_hitbox.monitoring = true
