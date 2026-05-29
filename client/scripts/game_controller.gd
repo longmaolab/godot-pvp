@@ -2050,6 +2050,14 @@ var _kc_killer_peer: int = 0
 var _kc_victim_peer: int = 0
 var _kc_ghosts: Dictionary = {}       # peer → MeshInstance3D
 var _kc_hidden: Array = []            # live players we hid, to restore later
+var _kc_killer_name: String = "敌人"
+var _kc_weapon_name: String = ""
+# Cinematic UI overlay (letterbox + banner + progress). Built on first use.
+var _kc_ui: CanvasLayer = null
+var _kc_bar_fill: ColorRect = null
+var _kc_subtitle: Label = null
+var _kc_bar_top: ColorRect = null
+var _kc_bar_bot: ColorRect = null
 
 
 func _process(delta: float) -> void:
@@ -2099,6 +2107,10 @@ func _start_killcam(killer_node: Node) -> void:
 	_kc_frames = _kc_buffer.duplicate(true)
 	_kc_killer_peer = killer_node.get_multiplayer_authority()
 	_kc_victim_peer = local_player.get_multiplayer_authority()
+	_kc_killer_name = String(killer_node.player_name) if "player_name" in killer_node else "敌人"
+	_kc_weapon_name = ""
+	if "weapon_def" in killer_node and killer_node.weapon_def != null:
+		_kc_weapon_name = String(killer_node.weapon_def.display_name)
 	_killcam_active = true
 	_kc_elapsed = 0.0
 	# Camera.
@@ -2113,12 +2125,14 @@ func _start_killcam(killer_node: Node) -> void:
 		if p != null and is_instance_valid(p) and p.visible:
 			p.visible = false
 			_kc_hidden.append(p)
-	# Spawn one ghost per peer in the reel.
+	# Spawn one ghost per peer in the reel, with a floating name tag so the
+	# player can read exactly who's who.
 	_kc_ghosts.clear()
 	var peers_seen: Dictionary = {}
 	for fr in _kc_frames:
 		for peer in fr.states.keys():
 			peers_seen[peer] = true
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
 	var idx: int = 0
 	for peer in peers_seen.keys():
 		var ghost := MeshInstance3D.new()
@@ -2127,25 +2141,120 @@ func _start_killcam(killer_node: Node) -> void:
 		cap.height = 1.8
 		ghost.mesh = cap
 		var mat := StandardMaterial3D.new()
-		# Killer = red, victim = cyan, others = palette.
+		# Killer = red, victim = cyan, others = dim grey (de-emphasized so the
+		# eye goes to the two that matter).
 		var col: Color
+		var is_principal: bool = (peer == _kc_killer_peer or peer == _kc_victim_peer)
 		if peer == _kc_killer_peer:
-			col = Color(1.0, 0.35, 0.35)
+			col = Color(1.0, 0.3, 0.3)
 		elif peer == _kc_victim_peer:
 			col = Color(0.4, 0.85, 1.0)
 		else:
-			col = _KC_GHOST_COLORS[idx % _KC_GHOST_COLORS.size()]
+			col = Color(0.5, 0.5, 0.55)
 		mat.albedo_color = col
 		mat.emission_enabled = true
 		mat.emission = col
-		mat.emission_energy_multiplier = 0.5
+		mat.emission_energy_multiplier = 0.9 if is_principal else 0.25
 		ghost.material_override = mat
 		add_child(ghost)
+		# Floating name tag for the two principals.
+		if is_principal:
+			var tag := Label3D.new()
+			tag.text = ("☠ " + _kc_killer_name) if peer == _kc_killer_peer else "你"
+			if ui_font != null:
+				tag.font = ui_font
+			tag.font_size = 48
+			tag.outline_size = 12
+			tag.modulate = col
+			tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			tag.no_depth_test = true
+			tag.fixed_size = true
+			tag.pixel_size = 0.0016
+			tag.position = Vector3(0, 1.5, 0)
+			ghost.add_child(tag)
 		_kc_ghosts[peer] = ghost
 		idx += 1
-	if hud != null:
-		var kname: String = String(killer_node.player_name) if "player_name" in killer_node else "敌人"
-		hud.push_feed("🎥 击杀回放: 被 %s 干掉  ([/] 跳过)" % kname, Color(1, 0.7, 0.4))
+	_build_killcam_ui()
+
+
+# Build the cinematic overlay: letterbox bars (top/bottom), a "回放 KILLCAM"
+# label, a subtitle "被 X 用 Y 击杀", and a thin progress bar. Created once,
+# reused; shown for the duration of the replay.
+func _build_killcam_ui() -> void:
+	if _kc_ui == null:
+		_kc_ui = CanvasLayer.new()
+		_kc_ui.layer = 80
+		add_child(_kc_ui)
+		var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+		# Letterbox bars.
+		_kc_bar_top = ColorRect.new()
+		_kc_bar_top.color = Color(0, 0, 0, 0.9)
+		_kc_bar_top.anchor_right = 1.0
+		_kc_bar_top.offset_bottom = 64.0
+		_kc_ui.add_child(_kc_bar_top)
+		_kc_bar_bot = ColorRect.new()
+		_kc_bar_bot.color = Color(0, 0, 0, 0.9)
+		_kc_bar_bot.anchor_top = 1.0
+		_kc_bar_bot.anchor_right = 1.0
+		_kc_bar_bot.anchor_bottom = 1.0
+		_kc_bar_bot.offset_top = -72.0
+		_kc_ui.add_child(_kc_bar_bot)
+		# Title "回放 / KILLCAM" centered in the top bar.
+		var title := Label.new()
+		title.text = "◉ 回放 · KILLCAM"
+		if ui_font != null:
+			title.add_theme_font_override(&"font", ui_font)
+		title.add_theme_font_size_override(&"font_size", 22)
+		title.add_theme_color_override(&"font_color", Color(1, 0.85, 0.4))
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.anchor_right = 1.0
+		title.offset_top = 16.0
+		_kc_ui.add_child(title)
+		# Subtitle in the bottom bar — who killed you + weapon.
+		_kc_subtitle = Label.new()
+		if ui_font != null:
+			_kc_subtitle.add_theme_font_override(&"font", ui_font)
+		_kc_subtitle.add_theme_font_size_override(&"font_size", 20)
+		_kc_subtitle.add_theme_color_override(&"font_color", Color(1, 0.55, 0.55))
+		_kc_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_kc_subtitle.anchor_top = 1.0
+		_kc_subtitle.anchor_right = 1.0
+		_kc_subtitle.anchor_bottom = 1.0
+		_kc_subtitle.offset_top = -56.0
+		_kc_ui.add_child(_kc_subtitle)
+		# Hint line.
+		var hint := Label.new()
+		hint.text = "[ / ] 跳过观战"
+		if ui_font != null:
+			hint.add_theme_font_override(&"font", ui_font)
+		hint.add_theme_font_size_override(&"font_size", 12)
+		hint.add_theme_color_override(&"font_color", Color(0.7, 0.7, 0.75))
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.anchor_top = 1.0
+		hint.anchor_right = 1.0
+		hint.anchor_bottom = 1.0
+		hint.offset_top = -28.0
+		_kc_ui.add_child(hint)
+		# Progress bar (thin, just below the top bar).
+		var bar_bg := ColorRect.new()
+		bar_bg.color = Color(1, 1, 1, 0.15)
+		bar_bg.anchor_right = 1.0
+		bar_bg.offset_top = 64.0
+		bar_bg.offset_bottom = 67.0
+		_kc_ui.add_child(bar_bg)
+		_kc_bar_fill = ColorRect.new()
+		_kc_bar_fill.color = Color(1, 0.85, 0.4, 0.9)
+		_kc_bar_fill.anchor_top = 0.0
+		_kc_bar_fill.offset_top = 64.0
+		_kc_bar_fill.offset_bottom = 67.0
+		_kc_bar_fill.anchor_right = 0.0
+		_kc_ui.add_child(_kc_bar_fill)
+	_kc_ui.visible = true
+	if _kc_subtitle != null:
+		if _kc_weapon_name.is_empty():
+			_kc_subtitle.text = "☠ 被 %s 击杀" % _kc_killer_name
+		else:
+			_kc_subtitle.text = "☠ 被 %s 用 %s 击杀" % [_kc_killer_name, _kc_weapon_name]
 
 
 func _stop_killcam() -> void:
@@ -2170,6 +2279,8 @@ func _stop_killcam() -> void:
 			p.visible = not (("is_dead" in p) and p.is_dead)
 	_kc_hidden.clear()
 	_kc_frames = []
+	if _kc_ui != null:
+		_kc_ui.visible = false
 	# Hand the view back so the screen isn't black after the reel ends but
 	# before respawn. _on_local_respawn re-asserts this too — idempotent.
 	if local_player != null and is_instance_valid(local_player) and local_player.camera != null:
@@ -2182,11 +2293,19 @@ func _tick_killcam(delta: float) -> void:
 		return
 	_kc_elapsed += delta
 	var progress: float = clampf(_kc_elapsed / _KC_REPLAY_SEC, 0.0, 1.0)
-	# Map replay progress → buffer wall-time, then place each ghost by
+	# Slow-mo on the kill: the first 70% of wall-time covers 82% of the reel,
+	# the last 30% stretches the final 18% — so the moment of death plays in
+	# dramatic slow motion instead of flashing by.
+	var warped: float
+	if progress < 0.7:
+		warped = (progress / 0.7) * 0.82
+	else:
+		warped = 0.82 + ((progress - 0.7) / 0.3) * 0.18
+	# Map warped reel-time → buffer wall-time, then place each ghost by
 	# interpolating between the two bracketing frames.
 	var t_first: int = int(_kc_frames[0].t)
 	var t_last: int = int(_kc_frames[_kc_frames.size() - 1].t)
-	var target_ms: float = lerpf(float(t_first), float(t_last), progress)
+	var target_ms: float = lerpf(float(t_first), float(t_last), warped)
 	var lo: Dictionary = _kc_frames[0]
 	var hi: Dictionary = {}
 	for i in range(_kc_frames.size()):
@@ -2222,20 +2341,32 @@ func _tick_killcam(delta: float) -> void:
 			killer_pos = pos + Vector3(0, 1.0, 0)
 		elif peer == _kc_victim_peer:
 			victim_pos = pos + Vector3(0, 1.0, 0)
-	# Cinematic camera: track the killer→victim line. First 55% over the
-	# killer's shoulder looking at the victim, then swing to the victim's
-	# POV looking back at the killer (the "who got me" reveal).
+	# Cinematic camera: one continuous eased orbit around the kill, pushing
+	# in over time — no hard cuts. Always frames the midpoint so both the
+	# killer (red) and victim (cyan) stay in shot; the smooth sweep lets the
+	# player read the angle the shot came from.
 	var to_v: Vector3 = victim_pos - killer_pos
 	to_v.y = 0
 	if to_v.length() < 0.1:
 		to_v = Vector3(0, 0, 1)
 	to_v = to_v.normalized()
-	if progress < 0.55:
-		_killcam_cam.global_position = killer_pos - to_v * 2.4 + Vector3(0, 1.5, 0)
-		_killcam_cam.look_at(victim_pos, Vector3.UP)
-	else:
-		_killcam_cam.global_position = victim_pos + to_v * 0.5 + Vector3(0, 1.6, 0)
-		_killcam_cam.look_at(killer_pos, Vector3.UP)
+	var side: Vector3 = to_v.cross(Vector3.UP).normalized()
+	var mid: Vector3 = killer_pos.lerp(victim_pos, 0.5)
+	# Smoothstep the orbit so it eases in and out.
+	var e: float = progress * progress * (3.0 - 2.0 * progress)
+	var ang: float = lerpf(-1.15, 0.45, e)          # sweep around the kill line
+	var radius: float = lerpf(6.5, 2.8, e)          # dolly in
+	var height: float = lerpf(2.8, 1.55, e)         # descend toward eye level
+	var orbit_dir: Vector3 = (side * cos(ang) - to_v * sin(ang)).normalized()
+	var want_pos: Vector3 = mid + orbit_dir * radius + Vector3(0, height, 0)
+	# Lerp the camera toward the target for extra smoothness (kills any
+	# residual jitter from per-frame ghost interpolation).
+	var cam_a: float = clampf(12.0 * delta, 0.0, 1.0)
+	_killcam_cam.global_position = _killcam_cam.global_position.lerp(want_pos, cam_a) if _kc_elapsed > 0.05 else want_pos
+	_killcam_cam.look_at(mid + Vector3(0, 0.2, 0), Vector3.UP)
+	# Progress bar fill.
+	if _kc_bar_fill != null:
+		_kc_bar_fill.anchor_right = progress
 	# Replay finished → hold the live spectate view (camera freed on respawn).
 	if progress >= 1.0:
 		_stop_killcam()
