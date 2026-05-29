@@ -15,7 +15,11 @@ tests/.logs/
 # in carrying them in git.
 docs/*.br
 
-# Internal working state — not for public repo
-.agent/
+# Internal working state — not for public repo.
+# Exception: codexreview.md is tracked so the scheduled review-fix routine
+# (remote agent, clones from GitHub) can read the outstanding P0/P1/P2 list.
+# todo.md / test.md stay local-only.
+.agent/*
+!.agent/codexreview.md
 fix-local-camera-current.patch
 builds/
