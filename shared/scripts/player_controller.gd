@@ -123,6 +123,19 @@ var _base_fov: float = 75.0
 const ADS_MOVE_MULT := 0.55
 const ADS_FOV_LERP := 12.0
 
+# ── Client-side prediction (DS-client local human only) ──────────────────
+# The local player runs the SAME _step_movement the server runs, on the SAME
+# map, so it responds to input THIS frame instead of ~150ms later when the
+# snapshot lands. _reconcile_prediction then compares against the server
+# snapshot and only corrects on genuine divergence — normal play stays inside
+# the deadzone (no rubber-band), large desyncs (respawn/teleport) snap.
+# Flip PREDICT_LOCAL_MOVEMENT to false for a one-line revert to pure snapshot
+# rendering if live testing shows any rubber-banding.
+const PREDICT_LOCAL_MOVEMENT := true
+const PRED_SOFT_M := 2.5    # within this of the server: trust prediction fully
+const PRED_HARD_M := 5.0    # beyond this: snap (respawn / teleport / big desync)
+const PRED_EASE_RATE := 6.0 # soft-band correction lerp rate toward the server
+
 # DS-M2: latest input frame received from a network client (used only when
 # use_remote_input=true). Tick gates against replay/out-of-order.
 var _remote_input_bits: int = 0
@@ -364,13 +377,24 @@ func _physics_process(delta: float) -> void:
 			# the player still expects tracer / muzzle flash / sound / recoil
 			# kick / ammo countdown to happen when they pull the trigger.
 			_step_weapon_visuals_only(delta)
-			# Local crouch POV feedback — snapshots don't carry head height, so
-			# dip the camera locally when crouch is held. The server lowers the
-			# authoritative hitbox on its own mirror via _step_movement.
-			_apply_local_crouch_visual(delta)
 			# Recoil recovery + ADS FOV (DS-client local human).
 			_step_local_feel(delta)
-		_apply_remote_state(delta)
+			if PREDICT_LOCAL_MOVEMENT:
+				# Predict our own movement locally (same code + map as the
+				# server) so input feels instant, then reconcile against the
+				# authoritative snapshot. _step_movement also dips the head for
+				# crouch, so _apply_local_crouch_visual isn't needed here.
+				_step_movement(delta)
+				_reconcile_prediction(delta)
+			else:
+				# Pure snapshot rendering. Crouch head-dip is cosmetic-only here
+				# (snapshots don't carry head height); position comes from the
+				# server via _apply_remote_state.
+				_apply_local_crouch_visual(delta)
+				_apply_remote_state(delta)
+		else:
+			# Ghosts / bots on the DS client: position straight from snapshots.
+			_apply_remote_state(delta)
 		if _skin != null: _skin.play_anim(_skin.select_anim(is_dead, velocity))
 		return
 	# Authoritative branch — this controller owns simulation.
@@ -1273,6 +1297,36 @@ func _apply_remote_state(delta: float) -> void:
 	if not preserve_aim:
 		rotation.y = lerp_angle(rotation.y, _net_remote_yaw, t)
 		head.rotation.x = lerpf(head.rotation.x, _net_remote_pitch, t)
+
+
+## Client-side prediction reconciliation (DS-client local human only).
+## After we predict our own movement with _step_movement, compare where the
+## server says we are (the buffered snapshot) and correct ONLY on genuine
+## divergence. The deadzone is the whole point: in normal play our prediction
+## matches the server (identical code + map), and the snapshot is naturally
+## ~150ms stale, so a small position gap is EXPECTED and must NOT be
+## "corrected" or the player rubber-bands. We only act when the gap is too big
+## to be latency: ease it in past PRED_SOFT_M, hard-snap past PRED_HARD_M
+## (respawn / teleport / a mispredicted collision that actually diverged).
+func _reconcile_prediction(_delta: float) -> void:
+	if _interpolator == null:
+		return
+	var sample = _interpolator.sample(0, float(Time.get_ticks_msec()))
+	if sample == null:
+		return   # no authoritative data yet — predict freely from spawn
+	var auth: Vector3 = sample.pos
+	var d: float = auth.distance_to(global_position)
+	if d >= PRED_HARD_M:
+		# Too far to be latency — snap. Kill velocity so we don't keep
+		# integrating away from the corrected spot.
+		global_position = auth
+		velocity = Vector3.ZERO
+	elif d > PRED_SOFT_M:
+		# Drifting beyond the trust band — ease toward the server smoothly so
+		# the correction reads as a gentle pull, not a teleport.
+		var t: float = clampf(PRED_EASE_RATE * _delta, 0.0, 1.0)
+		global_position = global_position.lerp(auth, t)
+	# else: within PRED_SOFT_M → trust local prediction entirely. No correction.
 
 
 @rpc("any_peer", "unreliable_ordered", "call_remote")
