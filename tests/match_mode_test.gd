@@ -12,6 +12,10 @@ const MODE_GUNGAME := preload("res://shared/data/modes/gungame.tres")
 const MODE_INFECTION := preload("res://shared/data/modes/infection.tres")
 const MODE_OITC := preload("res://shared/data/modes/oitc.tres")
 const MODE_KOTH := preload("res://shared/data/modes/koth.tres")
+const MODE_BR := preload("res://shared/data/modes/br.tres")
+const MODE_DDAY := preload("res://shared/data/modes/dday.tres")
+const MODE_FRONTLINES := preload("res://shared/data/modes/frontlines.tres")
+const MODE_LASTSTAND := preload("res://shared/data/modes/laststand.tres")
 const AK20 := preload("res://shared/data/weapons/ak20.tres")
 
 var failed: int = 0
@@ -33,6 +37,10 @@ func _ready() -> void:
 	await _test_infection_propagation()
 	await _test_oitc_ammo_refund()
 	await _test_koth_hold_advances()
+	await _test_br_zone_and_last_man()
+	await _test_dday_attacker_capture()
+	await _test_frontlines_uncontested_hold()
+	await _test_laststand_all_dead_ends()
 	print("\n=== result: %s (%d failures) ===" % ["PASS" if failed == 0 else "FAIL", failed])
 	get_tree().quit(0 if failed == 0 else 1)
 
@@ -388,6 +396,152 @@ func _make_fake_player() -> Node3D:
 	var n := Node3D.new()
 	n.set_script(_FAKE_PLAYER)
 	return n
+
+
+# ── Battle Royale ──────────────────────────────────────────────────────────
+# Player outside the shrinking zone takes ZONE_DPS dmg; last alive wins.
+func _test_br_zone_and_last_man() -> void:
+	var inside: Node = _make_fake_player()    # at origin = always inside
+	var outside: Node = _make_fake_player()   # far away = always outside
+	players_by_peer = {100: inside, 200: outside}
+	add_child(inside); add_child(outside)
+	inside.global_position = Vector3.ZERO
+	outside.global_position = Vector3(100, 0, 0)
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_BR
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("BR: rule_script not instantiated")
+		_cleanup_simple(mc, [inside, outside]); return
+	# One tick: outside player should take zone damage, inside player should not.
+	var hp_in_before: float = inside.hp
+	var hp_out_before: float = outside.hp
+	rule._process(1.0)   # 1s → ZONE_DPS dmg to the outside player
+	if outside.hp >= hp_out_before:
+		_fail("BR: outside-zone player took no damage (%.1f → %.1f)" % [hp_out_before, outside.hp])
+	elif inside.hp < hp_in_before:
+		_fail("BR: inside-zone player wrongly took damage (%.1f → %.1f)" % [hp_in_before, inside.hp])
+	else:
+		# Now kill the outside player → only 1 alive → match ends with inside.
+		outside.is_dead = true
+		rule._process(0.1)
+		if not captured["match_ended"]:
+			_fail("BR: match did not end with 1 survivor")
+		elif captured["winner"] != 100:
+			_fail("BR winner expected 100, got %d" % captured["winner"])
+		else:
+			print("  [ok] BR: zone dmg outside / safe inside + last-man-standing wins")
+	_cleanup_simple(mc, [inside, outside])
+
+
+# ── D-Day ──────────────────────────────────────────────────────────────────
+# Attacker (odd peer) standing uncontested on the bunker for CAPTURE_SECONDS
+# wins. Even peer = defender.
+func _test_dday_attacker_capture() -> void:
+	var attacker: Node = _make_fake_player()   # peer 101 (odd) = attacker
+	players_by_peer = {101: attacker}
+	add_child(attacker)
+	# Bunker defaults to origin (no DDayBunker marker on our fake map).
+	attacker.global_position = Vector3.ZERO
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_DDAY
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("DDay: rule_script not instantiated")
+		_cleanup_simple(mc, [attacker]); return
+	# Drive enough seconds for capture_progress to exceed CAPTURE_SECONDS.
+	rule._process(rule.CAPTURE_SECONDS + 0.1)
+	if not captured["match_ended"]:
+		_fail("DDay: attacker capture did not end match")
+	elif captured["winner"] != 101:
+		_fail("DDay winner expected attacker 101, got %d" % captured["winner"])
+	else:
+		print("  [ok] DDay: uncontested attacker capture → attacker wins")
+	_cleanup_simple(mc, [attacker])
+
+
+# ── Frontlines ─────────────────────────────────────────────────────────────
+# Team A (even peer) uncontested on team B's base for HOLD_TO_WIN wins.
+func _test_frontlines_uncontested_hold() -> void:
+	var team_a: Node = _make_fake_player()   # peer 100 (even) = team A
+	players_by_peer = {100: team_a}
+	add_child(team_a)
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_FRONTLINES
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("Frontlines: rule_script not instantiated")
+		_cleanup_simple(mc, [team_a]); return
+	# Stand team A on team B's base (defaults to +15,0,0).
+	team_a.global_position = rule._base_b
+	rule._process(rule.HOLD_TO_WIN + 0.1)
+	if not captured["match_ended"]:
+		_fail("Frontlines: uncontested hold did not end match")
+	elif captured["winner"] != 100:
+		_fail("Frontlines winner expected team-A 100, got %d" % captured["winner"])
+	else:
+		print("  [ok] Frontlines: uncontested enemy-base hold → team wins")
+	_cleanup_simple(mc, [team_a])
+
+
+# ── LastStand ──────────────────────────────────────────────────────────────
+# Match ends when all humans (peer > 0) are dead. Winner = top killer.
+func _test_laststand_all_dead_ends() -> void:
+	var human: Node = _make_fake_player()    # peer 100 (human)
+	players_by_peer = {100: human}
+	add_child(human)
+	human.global_position = Vector3.ZERO
+
+	var mc: Node = MC_SCRIPT.new()
+	mc.mode_def = MODE_LASTSTAND
+	add_child(mc)
+	var captured := {"match_ended": false, "winner": 0}
+	mc.match_ended.connect(func(w, _f):
+		captured["match_ended"] = true
+		captured["winner"] = w)
+	mc.start()
+	var rule: Node = mc.get_node_or_null(^"RuleScript")
+	if rule == null:
+		_fail("LastStand: rule_script not instantiated")
+		_cleanup_simple(mc, [human]); return
+	# Kill the only human → next tick should end the match.
+	human.is_dead = true
+	rule._process(0.1)
+	if not captured["match_ended"]:
+		_fail("LastStand: match did not end when all humans dead")
+	else:
+		print("  [ok] LastStand: all humans dead → match ends (winner=%d)" % captured["winner"])
+	_cleanup_simple(mc, [human])
+
+
+# Shared cleanup for the _process-driven rule tests.
+func _cleanup_simple(mc: Node, players: Array) -> void:
+	players_by_peer = {}
+	mc.queue_free()
+	for p in players:
+		if is_instance_valid(p):
+			p.queue_free()
 
 
 func _fail(msg: String) -> void:
