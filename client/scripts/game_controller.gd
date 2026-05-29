@@ -2090,6 +2090,11 @@ func _start_killcam(killer_node: Node) -> void:
 		return
 	if _kc_buffer.size() < 2:
 		return   # nothing recorded yet (match just started) — skip replay
+	# Re-entry guard: if a previous killcam is somehow still active, tear it
+	# down cleanly first (restores visibility) so this one starts fresh and
+	# can't orphan hidden players.
+	if _killcam_active:
+		_stop_killcam()
 	# Freeze the buffer as the replay reel.
 	_kc_frames = _kc_buffer.duplicate(true)
 	_kc_killer_peer = killer_node.get_multiplayer_authority()
@@ -2152,10 +2157,17 @@ func _stop_killcam() -> void:
 		if is_instance_valid(g):
 			g.queue_free()
 	_kc_ghosts.clear()
-	# Restore the live bodies we hid (only those still valid + not dead).
-	for p in _kc_hidden:
-		if is_instance_valid(p) and not (("is_dead" in p) and p.is_dead):
-			p.visible = true
+	# Restore visibility by SWEEPING every current player to the game's
+	# invariant (alive → visible, dead → hidden) rather than trusting the
+	# _kc_hidden list. The list-based restore could permanently hide a peer
+	# if a second killcam cleared the list before this ran, or if a peer
+	# joined mid-replay — exactly the "B died once and now can't see A"
+	# asymmetry. The invariant sweep can't leak: it re-derives the correct
+	# state for ALL players regardless of what the killcam touched.
+	for peer in players_by_peer.keys():
+		var p: Node = players_by_peer[peer]
+		if p != null and is_instance_valid(p):
+			p.visible = not (("is_dead" in p) and p.is_dead)
 	_kc_hidden.clear()
 	_kc_frames = []
 	# Hand the view back so the screen isn't black after the reel ends but
