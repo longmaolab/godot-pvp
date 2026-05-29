@@ -38,6 +38,8 @@ var _last_hp: float = -1.0
 var _dmg_dir_pivot: Node2D = null   # directional damage indicator (built in _ready)
 var _pip_base: Dictionary = {}      # crosshair pip → resting [L,T,R,B] offsets
 const CROSSHAIR_MAX_GAP := 16.0     # px each pip travels outward at full bloom
+var _netstat_label: Label = null    # FPS + ping readout (built in _ready)
+var _ping_ms: int = -1              # set by game_controller; <0 = no measurement
 
 # Reusable style for feed row backgrounds (cheap — one shared sub-resource).
 var _feed_row_style: StyleBoxFlat
@@ -51,6 +53,7 @@ func _ready() -> void:
 	for pip in [_pip_top, _pip_bottom, _pip_left, _pip_right]:
 		if pip != null:
 			_pip_base[pip] = [pip.offset_left, pip.offset_top, pip.offset_right, pip.offset_bottom]
+	_build_netstat_label()
 	_feed_row_style = StyleBoxFlat.new()
 	# Bind the credits pill to the Settings autoload so kills update it live.
 	if has_node(^"/root/Settings"):
@@ -373,6 +376,35 @@ func _shift_pip(pip: Control, dx: float, dy: float) -> void:
 	pip.offset_bottom = b[3] + dy
 
 
+# ── Net stats (FPS + ping) ──────────────────────────────────────────────────
+func _build_netstat_label() -> void:
+	_netstat_label = Label.new()
+	_netstat_label.add_theme_font_size_override(&"font_size", 12)
+	_netstat_label.add_theme_color_override(&"font_color", Color(0.6, 0.95, 0.75, 0.7))
+	# Bottom-left, above the kill feed, out of the way.
+	_netstat_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_netstat_label.offset_left = 12
+	_netstat_label.offset_top = -20
+	_netstat_label.offset_bottom = -4
+	_netstat_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_netstat_label)
+
+
+func _update_netstat() -> void:
+	if _netstat_label == null:
+		return
+	var fps: int = int(round(Engine.get_frames_per_second()))
+	if _ping_ms >= 0:
+		_netstat_label.text = "%d FPS · %d ms" % [fps, _ping_ms]
+	else:
+		_netstat_label.text = "%d FPS" % fps
+
+
+## Called by game_controller with the smoothed round-trip latency.
+func set_ping(ms: int) -> void:
+	_ping_ms = ms
+
+
 ## Push a kill-feed line. Each entry is a small left-bordered panel; older
 ## lines are auto-removed when count exceeds FEED_MAX_LINES.
 func push_feed(text: String, color: Color = Color.WHITE) -> void:
@@ -450,6 +482,7 @@ func _process(_delta: float) -> void:
 	if resume_prompt != null and resume_prompt.visible:
 		resume_prompt.visible = false
 	_update_crosshair_spread()
+	_update_netstat()
 	# Ability cooldown bar — derived live from the local player's state.
 	if _ability_player != null and is_instance_valid(_ability_player) \
 			and ability_bar != null and ability_label != null:

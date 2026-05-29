@@ -88,6 +88,8 @@ var _pending_respawn: Dictionary = {}   # peer_id → SceneTreeTimer
 # ordering but a late packet can still arrive after a fresh one is applied,
 # so we monotonically gate the consumer.
 var _last_snapshot_tick: int = -1
+var _ping_send_accum: float = 0.0
+var _ping_ms: float = -1.0   # smoothed round-trip latency; <0 = unmeasured
 
 @onready var players_root: Node3D = Node3D.new()
 
@@ -610,6 +612,8 @@ func _enter_client_mode() -> void:
 			net_rpc.server_throwable_explode_received.connect(_on_throwable_explode)
 		if not net_rpc.server_snapshot_received.is_connected(_on_server_snapshot):
 			net_rpc.server_snapshot_received.connect(_on_server_snapshot)
+		if not net_rpc.server_pong_received.is_connected(_on_server_pong):
+			net_rpc.server_pong_received.connect(_on_server_pong)
 		if not net_rpc.server_respawn_received.is_connected(_on_server_respawn):
 			net_rpc.server_respawn_received.connect(_on_server_respawn)
 		# C6: explicit death broadcast — single source of truth for kills.
@@ -2134,6 +2138,34 @@ func _process(delta: float) -> void:
 		_tick_killcam(delta)
 	else:
 		_record_kc_buffer(delta)
+	_tick_ping(delta)
+
+
+# Send a ping to the server roughly once a second and let _on_server_pong
+# compute the round-trip. Only on a real connection to a dedicated server.
+func _tick_ping(delta: float) -> void:
+	if not _server_is_dedicated or hud == null:
+		return
+	if not multiplayer.has_multiplayer_peer():
+		return
+	var peer = multiplayer.multiplayer_peer
+	if peer == null or peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	_ping_send_accum += delta
+	if _ping_send_accum < 1.0:
+		return
+	_ping_send_accum = 0.0
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null:
+		net_rpc.client_ping.rpc_id(1, Time.get_ticks_msec())
+
+
+func _on_server_pong(client_time_ms: int) -> void:
+	var rtt: float = float(Time.get_ticks_msec() - client_time_ms)
+	# Exponential smoothing so the readout doesn't jitter shot-to-shot.
+	_ping_ms = rtt if _ping_ms < 0.0 else lerpf(_ping_ms, rtt, 0.4)
+	if hud != null and hud.has_method(&"set_ping"):
+		hud.set_ping(int(round(_ping_ms)))
 
 
 # Sample EVERY combatant's transform into the ring buffer at _KC_SAMPLE_HZ.

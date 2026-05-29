@@ -414,6 +414,21 @@ func server_send_snapshot(tick: int, entities: Array) -> void:
 	server_snapshot_received.emit(tick, entities)
 
 
+# ── Latency probe ───────────────────────────────────────────────────────────
+# Client sends its local timestamp; server echoes it straight back to that peer
+# so the client can compute round-trip time. Client throttles, so no rate-gate.
+signal server_pong_received(client_time_ms: int)
+
+@rpc("any_peer", "unreliable", "call_remote")
+func client_ping(client_time_ms: int) -> void:
+	var peer: int = multiplayer.get_remote_sender_id()
+	server_pong.rpc_id(peer, client_time_ms)
+
+@rpc("authority", "unreliable", "call_remote")
+func server_pong(client_time_ms: int) -> void:
+	server_pong_received.emit(client_time_ms)
+
+
 @rpc("authority", "reliable", "call_remote")
 func server_apply_damage(target: int, new_hp: float, src: int, weapon: StringName, headshot: bool) -> void:
 	server_damage_received.emit(target, new_hp, src, weapon, headshot)

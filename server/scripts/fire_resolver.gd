@@ -41,6 +41,20 @@ static func _apply_cone(d: Vector3, half: float) -> Vector3:
 	return (d + offset).normalized()
 
 
+# Distance damage multiplier: 1.0 within falloff_start, ramping linearly down
+# to falloff_min_mult at falloff_end (and held there beyond). Lets SMGs/shotguns
+# fall off hard at range while snipers stay lethal — set per weapon.
+static func _falloff_mult(weapon: Resource, dist: float) -> float:
+	var start: float = weapon.falloff_start if "falloff_start" in weapon else 30.0
+	var end: float = weapon.falloff_end if "falloff_end" in weapon else 70.0
+	var minm: float = weapon.falloff_min_mult if "falloff_min_mult" in weapon else 0.55
+	if end <= start or dist <= start:
+		return 1.0
+	if dist >= end:
+		return minm
+	return lerpf(1.0, minm, (dist - start) / (end - start))
+
+
 static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_yaw: float, fire_pitch: float) -> void:
 	if not host.multiplayer.is_server():
 		return
@@ -301,6 +315,8 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 			if victim.is_dead:
 				return
 			var dmg: float = PlayerController._compute_damage(weapon, is_head)
+			# Distance falloff — closer hits hurt more (per-weapon curve).
+			dmg *= _falloff_mult(weapon, origin.distance_to(hit.position))
 			# Apply buff + powershot damage multipliers from the SERVER's view
 			# of the shooter. The mirror is kept in sync via client_use_ability
 			# (listen-host) or the INPUT_ABILITY edge (DS). Skipping these in

@@ -55,6 +55,16 @@ const SLOT_SUPPORT   := &"support"
 ## Cone multiplier while aiming down sights (tight).
 @export var spread_ads_mult: float = 0.18
 
+@export_group("Range / Falloff")
+## Full damage within this distance (metres).
+@export var falloff_start: float = 30.0
+## Damage reaches falloff_min_mult of base at/after this distance. Linearly
+## interpolated between falloff_start and falloff_end. Set falloff_end <=
+## falloff_start to disable (lasers / railguns).
+@export var falloff_end: float = 70.0
+## Minimum damage fraction at/after falloff_end (0..1). 1.0 = no falloff.
+@export_range(0.0, 1.0) var falloff_min_mult: float = 0.55
+
 @export_group("Throwable / AoE")
 ## When true, this weapon spawns a parabolic projectile (server-simulated)
 ## that explodes on contact OR when fuse_seconds elapses, dealing damage
