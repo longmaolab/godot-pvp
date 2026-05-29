@@ -179,6 +179,17 @@ var _foot_accum: float = 0.0
 var _foot_audio: AudioStreamPlayer3D = null
 var footstep_count: int = 0   # test hook
 static var _footstep_wav: AudioStreamWAV = null
+
+# ── Viewmodel (first-person weapon) animation ────────────────────────────
+# Local cosmetic: the held weapon bobs while walking, sways opposite to aim,
+# pulls toward center when ADS, and kicks back per shot. Subtle amplitudes so
+# it reads as life, not seasickness. Local human only.
+@onready var weapon_visual: Node3D = get_node_or_null(^"Head/Camera3D/WeaponVisual")
+var _vm_rest_pos: Vector3 = Vector3.ZERO
+var _vm_bob_phase: float = 0.0
+var _vm_kick: float = 0.0
+var _vm_prev_yaw: float = 0.0
+var _vm_prev_pitch: float = 0.0
 # Transient crosshair bloom from firing — bumped per shot, decays each frame.
 # Feeds crosshair_spread() so the reticle visibly opens up during sustained
 # fire (matching the server-side accuracy cone).
@@ -234,6 +245,10 @@ func _ready() -> void:
 		_base_fov = camera.fov
 	_foot_prev_xz = Vector2(global_position.x, global_position.z)
 	_setup_footstep_audio()
+	if weapon_visual != null:
+		_vm_rest_pos = weapon_visual.position
+	_vm_prev_yaw = _aim_yaw
+	_vm_prev_pitch = _aim_pitch
 	# Spin up the skin + animation subsystem. apply_skin below delegates here.
 	_skin = _PlayerSkinScript.new()
 	_skin.name = "_PlayerSkin"
@@ -683,6 +698,7 @@ func _apply_recoil_kick() -> void:
 	_recoil_owed += rise
 	_recoil_idle = 0.0
 	_crosshair_kick = minf(1.0, _crosshair_kick + 0.35)   # bloom the reticle
+	_vm_kick = minf(1.0, _vm_kick + 0.6)                  # punch the viewmodel
 
 
 ## Per-frame recoil recovery + ADS handling for the LOCAL human. Eases the
@@ -704,6 +720,33 @@ func _step_local_feel(delta: float) -> void:
 	if camera != null:
 		var target_fov: float = (weapon_def.ads_zoom_fov if (weapon_def != null) else 45.0) if _is_ads else _base_fov
 		camera.fov = lerpf(camera.fov, target_fov, clampf(ADS_FOV_LERP * delta, 0.0, 1.0))
+	_step_viewmodel(delta)
+
+
+## First-person weapon juice: walk bob + aim sway + ADS centering + recoil
+## kick, blended toward a target each frame. Subtle on purpose. Local only.
+func _step_viewmodel(delta: float) -> void:
+	if weapon_visual == null:
+		return
+	_vm_kick = maxf(0.0, _vm_kick - delta * 5.0)
+	var hs: float = Vector2(velocity.x, velocity.z).length()
+	var move_frac: float = clampf(hs / maxf(move_speed, 0.1), 0.0, 1.0)
+	# Walk bob — figure-8: x sways at half rate, y bobs at full rate.
+	_vm_bob_phase += delta * (6.0 + hs * 1.2)
+	var bob_amp: float = (0.10 if _is_ads else 0.5) * move_frac
+	var bob: Vector3 = Vector3(cos(_vm_bob_phase) * 0.010, -absf(sin(_vm_bob_phase)) * 0.012, 0.0) * bob_amp
+	# Sway — weapon lags behind aim changes, then eases back.
+	var dyaw: float = wrapf(_aim_yaw - _vm_prev_yaw, -PI, PI)
+	var dpitch: float = _aim_pitch - _vm_prev_pitch
+	_vm_prev_yaw = _aim_yaw
+	_vm_prev_pitch = _aim_pitch
+	var sway: Vector3 = Vector3(clampf(dyaw, -0.05, 0.05), clampf(-dpitch, -0.05, 0.05), 0.0)
+	# ADS — pull the weapon toward the screen centre (kill the rest x offset).
+	var ads_off: Vector3 = Vector3(-_vm_rest_pos.x * 0.85, -_vm_rest_pos.y * 0.3, 0.02) if _is_ads else Vector3.ZERO
+	# Recoil — punch back toward the camera (+z) and up.
+	var kick: Vector3 = Vector3(0.0, _vm_kick * 0.008, _vm_kick * 0.05)
+	var target: Vector3 = _vm_rest_pos + bob + sway + ads_off + kick
+	weapon_visual.position = weapon_visual.position.lerp(target, clampf(delta * 16.0, 0.0, 1.0))
 
 
 ## Normalized 0..1 reticle bloom for the local human's HUD crosshair — mirrors

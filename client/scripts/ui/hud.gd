@@ -40,6 +40,8 @@ var _pip_base: Dictionary = {}      # crosshair pip → resting [L,T,R,B] offset
 const CROSSHAIR_MAX_GAP := 16.0     # px each pip travels outward at full bloom
 var _netstat_label: Label = null    # FPS + ping readout (built in _ready)
 var _ping_ms: int = -1              # set by game_controller; <0 = no measurement
+var _radar: Control = null          # proximity radar (built in _ready)
+const _RADAR_SCRIPT := preload("res://client/scripts/ui/radar.gd")
 
 # Reusable style for feed row backgrounds (cheap — one shared sub-resource).
 var _feed_row_style: StyleBoxFlat
@@ -54,6 +56,7 @@ func _ready() -> void:
 		if pip != null:
 			_pip_base[pip] = [pip.offset_left, pip.offset_top, pip.offset_right, pip.offset_bottom]
 	_build_netstat_label()
+	_build_radar()
 	_feed_row_style = StyleBoxFlat.new()
 	# Bind the credits pill to the Settings autoload so kills update it live.
 	if has_node(^"/root/Settings"):
@@ -405,6 +408,23 @@ func set_ping(ms: int) -> void:
 	_ping_ms = ms
 
 
+# ── Radar ───────────────────────────────────────────────────────────────────
+func _build_radar() -> void:
+	_radar = _RADAR_SCRIPT.new()
+	_radar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_radar.offset_left = -128
+	_radar.offset_top = 84       # below the top-right scoreboard
+	_radar.offset_right = -16
+	_radar.offset_bottom = 196
+	add_child(_radar)
+
+
+## blips: Array of { x, y (-1..1 radar space), enemy: bool }. Fed each frame.
+func update_radar(blips: Array) -> void:
+	if _radar != null:
+		_radar.set_blips(blips)
+
+
 ## Push a kill-feed line. Each entry is a small left-bordered panel; older
 ## lines are auto-removed when count exceeds FEED_MAX_LINES.
 func push_feed(text: String, color: Color = Color.WHITE) -> void:
@@ -519,7 +539,7 @@ var _streak_last_kill_ms: int = -10000
 
 ## Big screen-center "ELIMINATED" pop when local player drops an enemy.
 ## Also tracks streak counter and triggers escalation banners.
-func show_kill_confirm(victim_name: String) -> void:
+func show_kill_confirm(victim_name: String, weapon_label: String = "", headshot: bool = false) -> void:
 	if kill_confirm == null:
 		return
 	var now_ms: int = Time.get_ticks_msec()
@@ -551,8 +571,11 @@ func show_kill_confirm(victim_name: String) -> void:
 	t.tween_property(kill_confirm, "modulate:a", 1.0, 0.05)
 	t.chain().tween_interval(0.55)
 	t.chain().tween_property(kill_confirm, "modulate:a", 0.0, 0.25)
-	push_feed("[X] killed %s%s" % [victim_name, "" if streak_label == "" else "-" + streak_label],
-		Color(1, 0.6, 0.4))
+	# Kill-feed line with weapon + headshot info: "☠ Bob · AR 💀 -DOUBLE".
+	var wpn: String = (" · %s" % weapon_label) if weapon_label != "" else ""
+	var hs: String = " 💀" if headshot else ""
+	var streak_suffix: String = "" if streak_label == "" else "  -" + streak_label
+	push_feed("☠ %s%s%s%s" % [victim_name, wpn, hs, streak_suffix], Color(1, 0.6, 0.4))
 	_play_audio(&"play_kill")
 
 

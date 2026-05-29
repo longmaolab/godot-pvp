@@ -1265,7 +1265,15 @@ func _on_server_player_died(victim_peer: int, killer_peer: int, _weapon: StringN
 			and killer_peer == local_player.get_multiplayer_authority() \
 			and killer_peer != victim_peer:
 		var vname: String = victim.player_name if "player_name" in victim else "enemy"
-		hud.show_kill_confirm(vname)
+		hud.show_kill_confirm(vname, _kill_weapon_label(_weapon), _headshot)
+
+
+## Resolve a weapon id to its short type label (e.g. "AR") for the kill feed.
+func _kill_weapon_label(id: StringName) -> String:
+	var w: Resource = _resolve_weapon(id)
+	if w != null and "type_label" in w and w.type_label != "":
+		return w.type_label
+	return ""
 
 
 func _resolve_weapon(id: StringName) -> Resource:
@@ -1346,7 +1354,8 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 		var already_down: bool = (("is_dead" in victim) and victim.is_dead) or (("is_down" in victim) and victim.is_down)
 		if victim != null and "hp" in victim and not already_down and victim.hp - dmg <= 0.0:
 			var vname: String = victim.player_name if "player_name" in victim else "enemy"
-			hud.show_kill_confirm(vname)
+			var wlabel: String = weapon.type_label if (weapon != null and "type_label" in weapon) else ""
+			hud.show_kill_confirm(vname, wlabel, is_head)
 
 
 func _spawn_damage_label(world_pos: Vector3, dmg: int, is_head: bool) -> void:
@@ -2139,6 +2148,43 @@ func _process(delta: float) -> void:
 	else:
 		_record_kc_buffer(delta)
 	_tick_ping(delta)
+	_update_radar()
+
+
+const RADAR_RANGE := 32.0   # metres a blip is detectable within
+
+# Build proximity-radar blips: nearby players/bots in the local player's frame
+# (forward = up). Range-limited so it's situational awareness, not omniscience.
+func _update_radar() -> void:
+	if hud == null or local_player == null or not is_instance_valid(local_player):
+		return
+	if not hud.has_method(&"update_radar"):
+		return
+	var fwd: Vector3 = -local_player.transform.basis.z
+	var right: Vector3 = local_player.transform.basis.x
+	var origin: Vector3 = local_player.global_position
+	var blips: Array = []
+	var others: Array = players_by_peer.values()
+	for b in bots:
+		others.append(b)
+	for o in others:
+		if o == null or not is_instance_valid(o) or o == local_player:
+			continue
+		if "is_dead" in o and o.is_dead:
+			continue
+		var rel: Vector3 = o.global_position - origin
+		rel.y = 0.0
+		var dist: float = rel.length()
+		if dist < 0.1 or dist > RADAR_RANGE:
+			continue
+		var f: float = rel.dot(fwd)
+		var r: float = rel.dot(right)
+		blips.append({
+			"x": clampf(r / RADAR_RANGE, -1.0, 1.0),
+			"y": clampf(-f / RADAR_RANGE, -1.0, 1.0),
+			"enemy": true,
+		})
+	hud.update_radar(blips)
 
 
 # Send a ping to the server roughly once a second and let _on_server_pong
