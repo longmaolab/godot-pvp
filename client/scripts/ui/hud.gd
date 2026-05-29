@@ -31,6 +31,7 @@ var _score_rows: Array = []
 
 # Track HP delta so we can flash the screen red exactly when damage lands.
 var _last_hp: float = -1.0
+var _dmg_dir_pivot: Node2D = null   # directional damage indicator (built in _ready)
 
 # Reusable style for feed row backgrounds (cheap — one shared sub-resource).
 var _feed_row_style: StyleBoxFlat
@@ -38,6 +39,7 @@ var _feed_row_style: StyleBoxFlat
 
 func _ready() -> void:
 	set_process(true)   # for the resume-prompt visibility poll
+	_build_damage_dir_indicator()
 	_feed_row_style = StyleBoxFlat.new()
 	# Bind the credits pill to the Settings autoload so kills update it live.
 	if has_node(^"/root/Settings"):
@@ -296,6 +298,43 @@ func flash_hit(headshot: bool) -> void:
 		if is_instance_valid(hit_marker):
 			hit_marker.scale = Vector2.ONE)
 	_play_audio(&"play_hitmarker")
+
+
+## Directional damage indicator — a red arc wedge that flashes at the screen
+## edge in the direction the hit came from, then fades. `screen_angle` is 0 for
+## "dead ahead" (arc at top), +PI/2 for "to my right", ±PI for "behind me".
+## Built once in code so we don't have to touch the HUD .tscn.
+func _build_damage_dir_indicator() -> void:
+	_dmg_dir_pivot = Node2D.new()
+	add_child(_dmg_dir_pivot)
+	var wedge := Polygon2D.new()
+	var pts := PackedVector2Array()
+	var r_in := 95.0
+	var r_out := 155.0
+	var half := deg_to_rad(26.0)
+	var steps := 8
+	# Outer arc, left → right (centered on "up" = -Y).
+	for i in range(steps + 1):
+		var a: float = -PI * 0.5 - half + (2.0 * half) * float(i) / float(steps)
+		pts.append(Vector2(cos(a), sin(a)) * r_out)
+	# Inner arc, right → left, to close the ribbon.
+	for i in range(steps + 1):
+		var a: float = -PI * 0.5 + half - (2.0 * half) * float(i) / float(steps)
+		pts.append(Vector2(cos(a), sin(a)) * r_in)
+	wedge.polygon = pts
+	wedge.color = Color(1.0, 0.16, 0.13, 1.0)
+	_dmg_dir_pivot.add_child(wedge)
+	_dmg_dir_pivot.modulate.a = 0.0
+
+
+func flash_damage_from(screen_angle: float) -> void:
+	if _dmg_dir_pivot == null:
+		return
+	_dmg_dir_pivot.position = get_viewport().get_visible_rect().size * 0.5
+	_dmg_dir_pivot.rotation = screen_angle
+	_dmg_dir_pivot.modulate.a = 0.85
+	var t: Tween = create_tween()
+	t.tween_property(_dmg_dir_pivot, "modulate:a", 0.0, 0.8)
 
 
 ## Push a kill-feed line. Each entry is a small left-bordered panel; older

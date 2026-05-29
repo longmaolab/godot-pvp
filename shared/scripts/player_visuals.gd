@@ -128,6 +128,45 @@ static func spawn_wall_impact(tree: SceneTree, world_pos: Vector3, normal: Vecto
 	tp.tween_callback(sparks.queue_free)
 
 
+## Blood / hit burst at the point a bullet strikes a PLAYER body. The classic-
+## shooter "you connected" world-space cue that wall impact deliberately skips.
+## `dir` is the bullet's travel direction so the spray kicks away from the
+## shooter; `headshot` makes it bigger + brighter (the satisfying headshot pop).
+static func spawn_body_impact(tree: SceneTree, world_pos: Vector3, dir: Vector3, headshot: bool = false) -> void:
+	var spray := CPUParticles3D.new()
+	spray.amount = 14 if headshot else 9
+	spray.lifetime = 0.45
+	spray.one_shot = true
+	spray.explosiveness = 1.0
+	spray.emission_shape = CPUParticles3D.EMISSION_SHAPE_POINT
+	# Spray roughly along the bullet's path (away from the shooter), fanned out.
+	spray.direction = dir.normalized() if dir.length_squared() > 0.0001 else Vector3.UP
+	spray.spread = 55.0
+	spray.initial_velocity_min = 2.5
+	spray.initial_velocity_max = 6.5 if headshot else 5.0
+	spray.gravity = Vector3(0, -9.0, 0)
+	spray.scale_amount_min = 0.03
+	spray.scale_amount_max = 0.075 if headshot else 0.06
+	var smat := StandardMaterial3D.new()
+	# Deep arterial red, emissive so it reads against dark maps.
+	var red: Color = Color(1.0, 0.15, 0.12) if headshot else Color(0.75, 0.05, 0.05)
+	smat.albedo_color = red
+	smat.emission_enabled = true
+	smat.emission = red
+	smat.emission_energy_multiplier = 3.5 if headshot else 2.2
+	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var drop := SphereMesh.new()
+	drop.radius = 0.03
+	drop.height = 0.06
+	spray.mesh = drop
+	spray.material_override = smat
+	tree.root.add_child(spray)
+	spray.global_position = world_pos
+	var tp: Tween = spray.create_tween()
+	tp.tween_interval(spray.lifetime + 0.1)
+	tp.tween_callback(spray.queue_free)
+
+
 ## Traveling-bullet tracer adapted from arena-shooter-3d/scripts/player.gd
 ## (line 635). A glowing sphere head flies from muzzle to impact over
 ## 0.05-0.25s (distance-scaled) with a thin streak fading behind it. This

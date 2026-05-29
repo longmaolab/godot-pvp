@@ -170,6 +170,11 @@ signal hp_changed(new_hp: float, max: float)
 signal ammo_changed(in_mag: int, reserve: int)
 signal weapon_switched(new_weapon: Resource)
 signal died(killer: Node)
+## Emitted whenever this player actually loses HP, carrying who did it. Used by
+## the HUD's directional damage indicator on the local player. Fires wherever
+## apply_damage runs locally (practice, listen-host-as-victim); pure DS-client
+## victims get the same cue from the server_apply_damage broadcast instead.
+signal took_damage(attacker: Node)
 
 var last_attacker: Node = null
 
@@ -1077,6 +1082,8 @@ func apply_damage(dmg: float, attacker: Node) -> void:
 	last_attacker = attacker
 	hp = maxf(0.0, hp - dmg)
 	hp_changed.emit(hp, max_hp)
+	if dmg > 0.0 and attacker != null:
+		took_damage.emit(attacker)
 	_play_hit_sound()
 	if is_local:
 		_apply_hit_shake()

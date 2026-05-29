@@ -24,6 +24,7 @@ const DEFAULT_LOADOUT: Array[Resource] = [AK20, SG8, SRX, RAILGUN]
 const BOT_LOADOUT: Array[Resource] = [AK20, GRENADE]
 
 const _WEAPON_REGISTRY := preload("res://shared/scripts/weapon_registry.gd")
+const PlayerVisuals = preload("res://shared/scripts/player_visuals.gd")
 const _BOT_SPEECH := preload("res://client/scripts/data/bot_speech.gd")
 var weapon_registry: Node
 
@@ -1054,6 +1055,11 @@ func _local_spawn(peer_id: int, spawn_pos: Vector3, remote_name: String = "", re
 		if hud != null:
 			hud.bind_player(p)
 		p.fired.connect(_on_local_fired)
+		# Directional damage cue when WE get hit and apply_damage ran locally
+		# (practice, listen-host-as-victim). Pure DS-client victims get it from
+		# the server_apply_damage broadcast instead.
+		if not p.took_damage.is_connected(_on_local_took_damage):
+			p.took_damage.connect(_on_local_took_damage)
 		# Once our local player materializes, we're definitely past the connection
 		# phase — dismiss the spinner if it's up.
 		if connecting_overlay != null:
@@ -1204,6 +1210,10 @@ func _on_server_damage_broadcast(target: int, new_hp: float, src: int, _weapon: 
 	# Optional UI feedback for the local player.
 	if local_player != null and target == local_player.get_multiplayer_authority():
 		hud.push_feed("hit by %d (-%d)" % [src, int(maxf(0.0, prev_hp - new_hp))], Color(1, 0.4, 0.4))
+		# Directional damage indicator — point the red arc at the attacker.
+		# (Pure-client victims don't run apply_damage, so the took_damage signal
+		# doesn't fire here; this broadcast is their cue.)
+		_show_damage_direction(players_by_peer.get(src))
 
 
 ## C6: single death entrypoint on every non-server peer. Server already ran
@@ -1253,6 +1263,35 @@ func _resolve_weapon(id: StringName) -> Resource:
 
 
 # ── Feedback ──────────────────────────────────────────────────────────────
+func _on_local_took_damage(attacker: Node) -> void:
+	_show_damage_direction(attacker)
+
+
+## Flash the HUD's directional damage arc toward `attacker`, in screen space
+## relative to where the local player is looking. No-op if we can't resolve a
+## direction (unknown attacker, no camera, or attacker == self).
+func _show_damage_direction(attacker: Node) -> void:
+	if hud == null or local_player == null or not is_instance_valid(local_player):
+		return
+	if attacker == null or not is_instance_valid(attacker) or attacker == local_player:
+		return
+	if not (attacker is Node3D):
+		return
+	var cam: Camera3D = local_player.camera
+	if cam == null:
+		return
+	var to_atk: Vector3 = (attacker as Node3D).global_position - local_player.global_position
+	to_atk.y = 0.0
+	if to_atk.length_squared() < 0.0001:
+		return
+	# Decompose the attacker direction onto the camera's forward/right axes to
+	# get a screen-space bearing: 0 = ahead, +PI/2 = right, ±PI = behind.
+	var fwd: Vector3 = -cam.global_transform.basis.z
+	var right: Vector3 = cam.global_transform.basis.x
+	var screen_angle: float = atan2(to_atk.dot(right), to_atk.dot(fwd))
+	hud.flash_damage_from(screen_angle)
+
+
 func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 	# Play the fire blip regardless of hit/miss.
 	var proc_audio: Node = get_node_or_null(^"/root/ProcAudio")
@@ -1266,6 +1305,13 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 		return
 	var is_head: bool = collider.get_meta(&"is_head", false)
 	hud.flash_hit(is_head)
+	# Blood / hit burst at the impact point on the body — the world-space "you
+	# connected" cue. Spray along the bullet's travel direction.
+	var impact_pos: Vector3 = hit_info.position
+	var bullet_dir: Vector3 = Vector3.FORWARD
+	if local_player != null and local_player.camera != null:
+		bullet_dir = (impact_pos - local_player.camera.global_position)
+	PlayerVisuals.spawn_body_impact(get_tree(), impact_pos, bullet_dir, is_head)
 	# Floating damage number in 3D world space.
 	var dmg: float = PlayerController._compute_damage(weapon, is_head) if weapon != null else 0.0
 	if dmg > 0.5:
