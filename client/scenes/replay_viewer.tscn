@@ -1,0 +1,52 @@
+[gd_scene load_steps=7 format=3 uid="uid://replayviewer01"]
+
+[ext_resource type="Script" path="res://client/scripts/ui/replay_viewer.gd" id="1_rv"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_horizon_color = Color(0.55, 0.6, 0.7, 1)
+ground_horizon_color = Color(0.3, 0.32, 0.36, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.6, 0.65, 0.72, 1)
+ambient_light_energy = 0.6
+
+[sub_resource type="PlaneMesh" id="ground_mesh"]
+size = Vector2(120, 120)
+
+[sub_resource type="StandardMaterial3D" id="ground_mat"]
+albedo_color = Color(0.18, 0.2, 0.24, 1)
+
+[node name="ReplayViewer" type="Node3D"]
+script = ExtResource("1_rv")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.7, -0.5, 0.5, 0, 0.7, 0.7, -0.7, -0.5, 0.5, 0, 20, 0)
+shadow_enabled = true
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("ground_mesh")
+surface_material_override/0 = SubResource("ground_mat")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 30)
+current = true
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Info" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 1200.0
+offset_bottom = 60.0
+text = "加载录像中…"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.9, 0.95, 1, 1)
