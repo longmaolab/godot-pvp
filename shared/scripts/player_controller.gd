@@ -166,6 +166,19 @@ const LEAN_LERP := 11.0
 
 # How long a corpse stays (playing its death anim) before hiding.
 const CORPSE_LINGER := 2.2
+
+# ── Footsteps (positional) ───────────────────────────────────────────────
+# Distance-accumulator footsteps: a step fires every FOOTSTEP_STRIDE metres of
+# horizontal travel, so cadence scales with speed automatically and works for
+# BOTH locally-simulated and snapshot-driven (remote) players — the whole point
+# is hearing enemies move. Played through a dedicated 3D emitter so it doesn't
+# fight the gunshot/hit channel. Own steps are quieter; enemy steps carry.
+const FOOTSTEP_STRIDE := 2.0
+var _foot_prev_xz: Vector2 = Vector2.ZERO
+var _foot_accum: float = 0.0
+var _foot_audio: AudioStreamPlayer3D = null
+var footstep_count: int = 0   # test hook
+static var _footstep_wav: AudioStreamWAV = null
 # Transient crosshair bloom from firing — bumped per shot, decays each frame.
 # Feeds crosshair_spread() so the reticle visibly opens up during sustained
 # fire (matching the server-side accuracy cone).
@@ -219,6 +232,8 @@ func _ready() -> void:
 	add_to_group(&"player")
 	if camera != null:
 		_base_fov = camera.fov
+	_foot_prev_xz = Vector2(global_position.x, global_position.z)
+	_setup_footstep_audio()
 	# Spin up the skin + animation subsystem. apply_skin below delegates here.
 	_skin = _PlayerSkinScript.new()
 	_skin.name = "_PlayerSkin"
@@ -411,6 +426,8 @@ func _physics_process(delta: float) -> void:
 	# model toward the snapshot-driven _lean_target. _lean_target is set by
 	# _step_movement (local/mirror) or set_remote_lean (remote enemies).
 	_apply_lean(delta)
+	# Positional footsteps for every moving player (own + enemies you hear).
+	_step_footsteps(delta)
 	# DS-M3: snapshot-only mode — never simulate locally. If we're the local
 	# human, send our input bits up to the server each tick. Either way, we
 	# just render whatever the server tells us via push_snapshot.
@@ -750,6 +767,68 @@ func lean_sign() -> int:
 	if _lean_target < -0.5:
 		return -1
 	return 0
+
+
+# ── Footsteps ─────────────────────────────────────────────────────────────
+## Bake a short scuff/thump once (shared by every player). Filtered noise + a
+## low thump under a fast-decay envelope. 16-bit mono PCM (statically
+## sampleable — same reason proc_audio uses AudioStreamWAV, no mixer warnings).
+static func _get_footstep_wav() -> AudioStreamWAV:
+	if _footstep_wav != null:
+		return _footstep_wav
+	var rate: int = 22050
+	var n: int = int(rate * 0.11)
+	var data: PackedByteArray = PackedByteArray()
+	data.resize(n * 2)
+	var lcg: int = 0x2545F49
+	for i in n:
+		var t: float = float(i) / float(rate)
+		var env: float = exp(-t * 36.0)
+		lcg = (lcg * 1103515245 + 12345) & 0x7FFFFFFF
+		var noise: float = float(lcg) / 1073741823.0 - 1.0
+		var thump: float = sin(TAU * 95.0 * t)
+		var s: float = (noise * 0.55 + thump * 0.45) * env * 0.5
+		var v: int = int(clampf(s, -1.0, 1.0) * 32767.0)
+		data[i * 2] = v & 0xFF
+		data[i * 2 + 1] = (v >> 8) & 0xFF
+	var wav: AudioStreamWAV = AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.stereo = false
+	wav.data = data
+	_footstep_wav = wav
+	return wav
+
+
+func _setup_footstep_audio() -> void:
+	if NetProtocol.is_dedicated_server_boot():
+		return   # headless server makes no sound
+	_foot_audio = AudioStreamPlayer3D.new()
+	_foot_audio.stream = _get_footstep_wav()
+	_foot_audio.unit_size = 6.0          # full volume within ~6m, audible ~15m
+	_foot_audio.max_distance = 28.0
+	# Own steps subtle; enemy steps carry so you can hear them coming.
+	_foot_audio.volume_db = -15.0 if (is_local and is_human_input) else -3.0
+	add_child(_foot_audio)
+
+
+## Distance-accumulator footsteps — a step every FOOTSTEP_STRIDE metres of
+## horizontal travel (longer stride when crouch-sneaking). Runs on every
+## instance so remote enemies' steps play at their world position.
+func _step_footsteps(_delta: float) -> void:
+	var here: Vector2 = Vector2(global_position.x, global_position.z)
+	var moved: float = here.distance_to(_foot_prev_xz)
+	_foot_prev_xz = here
+	if moved > 3.0:
+		return   # teleport / respawn — don't count it as a stride
+	_foot_accum += moved
+	var stride: float = FOOTSTEP_STRIDE * (1.7 if _is_crouching else 1.0)
+	if _foot_accum >= stride:
+		_foot_accum = 0.0
+		footstep_count += 1
+		if _foot_audio != null:
+			_foot_audio.pitch_scale = randf_range(0.9, 1.12)
+			_foot_audio.play()
 
 
 # ── Audio helpers ─────────────────────────────────────────────────────────
