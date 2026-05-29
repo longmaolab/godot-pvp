@@ -151,6 +151,19 @@ const SLIDE_SPEED_MULT := 1.9   # × move_speed at slide start (decays to CROUCH
 const SLIDE_COOLDOWN := 0.7     # after a slide ends, before another can start
 const SLIDE_ENTRY_FRAC := 0.8   # must be moving > this × move_speed to slide
 
+# ── Lean / peek (server-authoritative) ───────────────────────────────────
+# Holding lean shifts the head sideways + rolls the view so you can peek a
+# corner with less body exposed. The SERVER mirror runs _step_movement too, so
+# it offsets head_hitbox the same way → an enemy hits your peeking head where
+# it's drawn (fair). Remote clients learn the peek from the snapshot lean flags
+# and tilt the visible model to match the hitbox. _lean is the smoothed value;
+# _lean_target is the instantaneous intent (-1 left / 0 / +1 right).
+var _lean: float = 0.0
+var _lean_target: float = 0.0
+const LEAN_OFFSET := 0.45   # metres the head shifts sideways at full lean
+const LEAN_ROLL := 0.13     # radians the head/body rolls into the lean
+const LEAN_LERP := 11.0
+
 # DS-M2: latest input frame received from a network client (used only when
 # use_remote_input=true). Tick gates against replay/out-of-order.
 var _remote_input_bits: int = 0
@@ -386,6 +399,11 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 	_step_invincibility_blink(delta)
+	# Lean runs on every instance every frame: local human peeks (POV), the
+	# server mirror offsets head_hitbox (fair hit-reg), remote clients tilt the
+	# model toward the snapshot-driven _lean_target. _lean_target is set by
+	# _step_movement (local/mirror) or set_remote_lean (remote enemies).
+	_apply_lean(delta)
 	# DS-M3: snapshot-only mode — never simulate locally. If we're the local
 	# human, send our input bits up to the server each tick. Either way, we
 	# just render whatever the server tells us via push_snapshot.
@@ -481,6 +499,8 @@ func _send_input_to_server(include_fire_bit: bool = true) -> void:
 	if Input.is_action_pressed(&"sprint"):       bits |= NetProtocol.INPUT_SPRINT
 	if Input.is_action_pressed(&"crouch"):       bits |= NetProtocol.INPUT_CROUCH
 	if Input.is_action_pressed(&"ads"):          bits |= NetProtocol.INPUT_ADS
+	if Input.is_action_pressed(&"lean_left"):    bits |= NetProtocol.INPUT_LEAN_LEFT
+	if Input.is_action_pressed(&"lean_right"):   bits |= NetProtocol.INPUT_LEAN_RIGHT
 	if include_fire_bit and Input.is_action_pressed(&"fire"):
 		bits |= NetProtocol.INPUT_FIRE
 	if Input.is_action_pressed(&"reload"):       bits |= NetProtocol.INPUT_RELOAD
@@ -665,6 +685,46 @@ func _apply_hit_shake() -> void:
 	_camera_kick.y += randf_range(-_HIT_SHAKE_AMOUNT, _HIT_SHAKE_AMOUNT)
 
 
+# ── Lean / peek ───────────────────────────────────────────────────────────
+## Smooth the lean toward _lean_target and apply it to the head (POV + camera),
+## the head hitbox (so the server hits where the head is drawn), and the visible
+## body (so remote clients see the peek). Runs on every instance every frame.
+func _apply_lean(delta: float) -> void:
+	_lean = lerpf(_lean, _lean_target, clampf(LEAN_LERP * delta, 0.0, 1.0))
+	if absf(_lean) < 0.0005 and absf(_lean_target) < 0.0005:
+		_lean = 0.0
+	var ox: float = _lean * LEAN_OFFSET   # +x = player's right
+	var rz: float = -_lean * LEAN_ROLL    # roll the view into the lean
+	if head != null:
+		head.position.x = ox
+		head.rotation.z = rz
+	# Server resolves hits against head_hitbox, so shifting it with the head is
+	# what makes a peek fair — the enemy hits the head where it appears.
+	if head_hitbox != null:
+		head_hitbox.position.x = ox
+	# Tilt the visible body so remote clients see the lean aligned with the
+	# hitbox (own model is hidden first-person, so this is a no-op locally).
+	var visuals: Node3D = get_node_or_null(^"Visuals") as Node3D
+	if visuals != null:
+		visuals.rotation.z = rz
+
+
+## Remote enemies don't run _step_movement, so the snapshot's lean flags drive
+## their peek through this setter (called from game_controller._on_server_snapshot).
+func set_remote_lean(dir: int) -> void:
+	_lean_target = float(clampi(dir, -1, 1))
+
+
+## Current lean intent as a sign (-1/0/+1) — read by the snapshot builder to
+## pack the lean flags for remote clients.
+func lean_sign() -> int:
+	if _lean_target > 0.5:
+		return 1
+	if _lean_target < -0.5:
+		return -1
+	return 0
+
+
 # ── Audio helpers ─────────────────────────────────────────────────────────
 func _play_3d(stream: AudioStream) -> void:
 	if audio_3d == null or stream == null:
@@ -705,6 +765,7 @@ func _step_movement(delta: float) -> void:
 	var sprint_pressed: bool = false
 	var crouch_pressed: bool = false
 	var ads_pressed: bool = false
+	var lean_dir: float = 0.0
 	if use_remote_input:
 		var bits: int = _remote_input_bits
 		input_x = float((bits & NetProtocol.INPUT_RIGHT) != 0) - float((bits & NetProtocol.INPUT_LEFT) != 0)
@@ -713,6 +774,7 @@ func _step_movement(delta: float) -> void:
 		sprint_pressed = (bits & NetProtocol.INPUT_SPRINT) != 0
 		crouch_pressed = (bits & NetProtocol.INPUT_CROUCH) != 0
 		ads_pressed = (bits & NetProtocol.INPUT_ADS) != 0
+		lean_dir = float((bits & NetProtocol.INPUT_LEAN_RIGHT) != 0) - float((bits & NetProtocol.INPUT_LEAN_LEFT) != 0)
 	elif is_human_input:
 		input_x = float(Input.is_action_pressed(&"move_right")) - float(Input.is_action_pressed(&"move_left"))
 		input_z = float(Input.is_action_pressed(&"move_back")) - float(Input.is_action_pressed(&"move_forward"))
@@ -720,6 +782,7 @@ func _step_movement(delta: float) -> void:
 		sprint_pressed = Input.is_action_pressed(&"sprint")
 		crouch_pressed = Input.is_action_pressed(&"crouch")
 		ads_pressed = Input.is_action_pressed(&"ads")
+		lean_dir = float(Input.is_action_pressed(&"lean_right")) - float(Input.is_action_pressed(&"lean_left"))
 
 	# Mirror the ADS flag on the authoritative side so fire_resolver can read
 	# it for spread. (_step_local_feel also sets it for the local human's FOV.)
@@ -739,6 +802,13 @@ func _step_movement(delta: float) -> void:
 		_slide_dir = vdir.normalized() if vdir.length() > 0.1 else (-transform.basis.z)
 	_slide_crouch_was_down = crouch_pressed
 	var is_sliding: bool = _slide_timer > 0.0
+
+	# Lean intent — peek left/right, but not while sprinting or sliding (you're
+	# committed to moving then) or airborne. _apply_lean smooths + applies it.
+	if is_sliding or sprint_pressed or not is_on_floor():
+		_lean_target = 0.0
+	else:
+		_lean_target = lean_dir
 
 	# Can't jump while crouching (you'd un-crouch first). Crouch also wins
 	# over sprint — you move slow when hunkered down. A slide also lowers the
@@ -1166,6 +1236,19 @@ func respawn(at: Vector3) -> void:
 	hp = max_hp
 	is_reloading = false
 	time_until_next_shot = 0.0
+	# Never respawn mid-peek — reset lean + its applied offsets immediately.
+	_lean = 0.0
+	_lean_target = 0.0
+	if head != null:
+		head.position.x = 0.0
+		head.rotation.z = 0.0
+	if head_hitbox != null:
+		head_hitbox.position.x = 0.0
+	var _vis: Node3D = get_node_or_null(^"Visuals") as Node3D
+	if _vis != null:
+		_vis.rotation.z = 0.0
+	_slide_timer = 0.0
+	_slide_cooldown = 0.0
 	# Reset remote-input tick baseline so a client that just reconnected
 	# (re-entered the game scene after match-end / Play Again) gets a fresh
 	# input stream accepted. Without this, push_remote_input rejects all the

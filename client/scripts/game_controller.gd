@@ -331,6 +331,12 @@ func _build_snapshot_entities(peer_ids) -> Array:
 			flags |= NetProtocol.ENTITY_FLAG_DEAD
 		if "is_reloading" in p and p.is_reloading:
 			flags |= NetProtocol.ENTITY_FLAG_RELOADING
+		if p.has_method(&"lean_sign"):
+			var ls: int = p.lean_sign()
+			if ls < 0:
+				flags |= NetProtocol.ENTITY_FLAG_LEAN_LEFT
+			elif ls > 0:
+				flags |= NetProtocol.ENTITY_FLAG_LEAN_RIGHT
 		# No mag/res: server doesn't track per-weapon ammo, and pushing its
 		# (stale) ammo down to the client overwrites whatever weapon the
 		# client locally switched to. See _on_server_snapshot for context.
@@ -819,6 +825,17 @@ func _on_server_snapshot(tick: int, entities: Array) -> void:
 		var pitch: float = float(e.get("pitch", 0.0))
 		if p.has_method(&"push_snapshot"):
 			p.push_snapshot(now_ms, pos, yaw, pitch)
+		# Remote enemies don't simulate locally — drive their lean (head offset +
+		# body tilt) from the snapshot flags so what we SEE matches the server's
+		# head hitbox we have to hit.
+		if not p.is_local and p.has_method(&"set_remote_lean"):
+			var flags: int = int(e.get("flags", 0))
+			var ld: int = 0
+			if flags & NetProtocol.ENTITY_FLAG_LEAN_LEFT:
+				ld = -1
+			elif flags & NetProtocol.ENTITY_FLAG_LEAN_RIGHT:
+				ld = 1
+			p.set_remote_lean(ld)
 		# Sync HP from server-authoritative snapshot to the local view so the
 		# HUD reflects the actual game state.
 		#

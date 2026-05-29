@@ -28,7 +28,7 @@ const MAX_INPUT_TICK_JUMP := 240                # 8s of catchup at 30Hz
 # Lower 16 bits of the bitfield are defined (see INPUT_* below). Mask client
 # input to ignore unknown bits — defends against a peer setting high bits to
 # trigger nothing-visible side effects in future RPC fields.
-const INPUT_BITS_MASK := 0xFFFF
+const INPUT_BITS_MASK := 0x3FFFF   # 18 bits — bits 16/17 are LEAN_LEFT/RIGHT
 # Max aim delta between successive accepted input frames AND between the last
 # input frame and a fire RPC's yaw/pitch. PI ≈ 180° per ~33ms is well above
 # real human flick speed, so this only flags obvious snap-aim teleports.
@@ -107,6 +107,8 @@ const INPUT_SWAP_1   := 1 << 12
 const INPUT_SWAP_2   := 1 << 13
 const INPUT_SWAP_3   := 1 << 14
 const INPUT_SWAP_4   := 1 << 15
+const INPUT_LEAN_LEFT  := 1 << 16
+const INPUT_LEAN_RIGHT := 1 << 17
 
 
 # ── Schema helpers ─────────────────────────────────────────────────────────
@@ -118,3 +120,5 @@ const ENTITY_FLAG_RELOADING := 1 << 1
 const ENTITY_FLAG_DEAD      := 1 << 2
 const ENTITY_FLAG_INVULN    := 1 << 3   # spawn shield
 const ENTITY_FLAG_BOT       := 1 << 4
+const ENTITY_FLAG_LEAN_LEFT  := 1 << 5   # peeking left  — remote clients tilt the model
+const ENTITY_FLAG_LEAN_RIGHT := 1 << 6   # peeking right

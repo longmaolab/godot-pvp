@@ -15,6 +15,10 @@ const ACTIONS := {
 	&"ads":           [KEY_E],
 	&"ability":       [KEY_Q],
 	&"melee":         [KEY_F],
+	# Lean / peek. Q/E (the genre default) are taken by ability/ADS here, so
+	# lean uses C/V (free, left-hand) with the arrow keys as intuitive alts.
+	&"lean_left":     [KEY_C, KEY_LEFT],
+	&"lean_right":    [KEY_V, KEY_RIGHT],
 	&"comms_primary": [KEY_Z],
 	&"comms_secondary": [KEY_X],
 	&"scoreboard":    [KEY_TAB],
