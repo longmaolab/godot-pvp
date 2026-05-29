@@ -90,6 +90,58 @@ func set_difficulty(d: StringName) -> void:
 	_apply_difficulty(d)
 
 
+# Whisker-ray obstacle avoidance (navmesh-free). Probe `desired` ahead; if a
+# wall is close, fan out to the nearest clear angle and steer that way so the
+# bot rounds cover instead of pressing into it. Side hysteresis (_avoid_side)
+# stops left/right jitter at a corner. mask=1 = static world only, so the probe
+# never trips on the target (players/hitboxes are on other layers — same reason
+# _has_line_of_sight works).
+var _avoid_side: int = 0
+# Stuck-escape: whisker steering can stall in a concave trap (e.g. a closed
+# building's far wall). If we stop making progress toward the target, commit to
+# a sideways escape heading for a moment to break out. General — works for any
+# map's local minima, not just one hand-tuned spot.
+var _best_dist: float = INF
+var _stuck_time: float = 0.0
+var _escape_until: float = 0.0
+var _escape_dir: Vector3 = Vector3.ZERO
+
+func _dir_clear(origin: Vector3, d: Vector3, probe: float) -> bool:
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if space == null:
+		return true
+	var q := PhysicsRayQueryParameters3D.create(origin, origin + d * probe)
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	return space.intersect_ray(q).is_empty()
+
+
+func _steer_around_obstacles(desired: Vector3) -> Vector3:
+	var probe: float = 4.0
+	var origin: Vector3 = global_position
+	# Once committed to a detour, only release when the way to the target is
+	# clear for a LONGER confirm distance. Without this the bot re-hugs the same
+	# wall it's rounding (the straight line briefly clears, it turns in, hits the
+	# wall again) and stalls in a concave corner. The commitment makes it follow
+	# the wall around closed cover instead.
+	var release_probe: float = probe if _avoid_side == 0 else probe * 2.0
+	if _dir_clear(origin, desired, release_probe):
+		_avoid_side = 0
+		return desired
+	# Blocked ahead — fan out, trying the committed side first to avoid jitter.
+	for a in [30, 55, 80, 110, 140, 165]:
+		var first: int = a if _avoid_side >= 0 else -a
+		var c1: Vector3 = desired.rotated(Vector3.UP, deg_to_rad(first))
+		if _dir_clear(origin, c1, probe):
+			_avoid_side = 1 if first > 0 else -1
+			return c1
+		var c2: Vector3 = desired.rotated(Vector3.UP, deg_to_rad(-first))
+		if _dir_clear(origin, c2, probe):
+			_avoid_side = 1 if -first > 0 else -1
+			return c2
+	return desired   # boxed in on all sides — just push and let move_and_slide slide
+
+
 func _step_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -111,14 +163,42 @@ func _step_movement(delta: float) -> void:
 	var fleeing: bool = (hp / max_hp) < flee_hp_ratio
 
 	if fleeing:
-		# Walk away from target.
-		velocity.x = -dir.x * pursue_speed
-		velocity.z = -dir.z * pursue_speed
+		# Walk away from target, steering around walls so we don't back into one.
+		_best_dist = INF   # reset progress tracking; we're not closing now
+		_stuck_time = 0.0
+		var flee_dir: Vector3 = _steer_around_obstacles(-dir)
+		velocity.x = flee_dir.x * pursue_speed
+		velocity.z = flee_dir.z * pursue_speed
 	elif dist > attack_range:
-		# Pursue.
-		velocity.x = dir.x * pursue_speed
-		velocity.z = dir.z * pursue_speed
+		# Track progress toward the target; if we stall (trapped behind cover),
+		# break out with a committed sideways escape before resuming pursuit.
+		var now_s: float = Time.get_ticks_msec() / 1000.0
+		if dist < _best_dist - 0.5:
+			_best_dist = dist
+			_stuck_time = 0.0
+		else:
+			_stuck_time += delta
+		if now_s < _escape_until:
+			# Mid-escape: keep the sideways heading (still avoid walls).
+			var e: Vector3 = _steer_around_obstacles(_escape_dir)
+			velocity.x = e.x * pursue_speed
+			velocity.z = e.z * pursue_speed
+		else:
+			if _stuck_time > 2.5:
+				# Stalled — commit to a perpendicular detour for ~1.3s. Side
+				# follows the avoidance bias (or left if none) so it's decisive.
+				var side: float = 1.0 if _avoid_side >= 0 else -1.0
+				_escape_dir = Vector3(-dir.z, 0.0, dir.x) * side
+				_escape_until = now_s + 1.3
+				_stuck_time = 0.0
+				_best_dist = dist
+			var move_dir: Vector3 = _steer_around_obstacles(dir)
+			velocity.x = move_dir.x * pursue_speed
+			velocity.z = move_dir.z * pursue_speed
 	else:
+		# In range — reset progress tracking so a later re-pursuit starts fresh.
+		_best_dist = INF
+		_stuck_time = 0.0
 		# In range: gentle sidestep so we're not a stationary punching bag.
 		var t: float = Time.get_ticks_msec() / 1000.0
 		var oscillation: float = sin(t * 1.7 + float(get_instance_id() % 100))
