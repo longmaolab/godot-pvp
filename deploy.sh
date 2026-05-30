@@ -121,31 +121,35 @@ EOF
     docs/index.html
   echo "→ splash/icon 加缓存版本号 ?v=$BUST"
 
-  # 关键性能注入:封顶渲染 DPR。Godot web canvasResizePolicy=2 把 canvas
-  # 渲染到 clientWidth × devicePixelRatio。cap=1 时手机(DPR 3)只按 1x 渲染
-  # → 字糊。cap=2:PC(DPR 1-2)不变,3x 手机 1x→2x = 文字/UI 清晰很多。
-  # 2x 手机 3D 的发热由「游戏内 3D 渲染缩放」(game_controller,只缩 3D 不缩
-  # UI)+ FpsGovernor 限帧抵消,所以 2D 文字保持锐利、3D 开销受控。
+  # 关键性能注入:封顶渲染 DPR(设备感知)。Godot web canvasResizePolicy=2 把
+  # canvas 渲染到 clientWidth × devicePixelRatio。实测铁证:5K×DPR2 = 1290 万
+  # 像素的巨型 canvas,浏览器按显示器 60Hz 合成它就把 GPU 打满 → 风扇狂转
+  # (缩小窗口画布 → Chrome 渲染进程 83%→6%,与 Godot 帧率无关)。
+  #   · 手机(DPR3,小屏):cap=2 → 文字清晰(cap=1 会糊,用户验证过)
+  #   · 桌面高分屏(5K Mac,DPR2):cap=1.5 → 画布像素砍 44%、文字仍 165ppi 锐利
+  # 手机端不受影响。这是唯一对风扇有效的杠杆(降帧率实测无效)。
   python3 - <<'PYEOF'
 import re
 html = open("docs/index.html", encoding="utf-8").read()
-# 升级旧的 cap=1(幂等:已是 cap=2 就跳过,旧 cap=1 就替换)
+snippet = ('<script>/*__dpr_cap__ cap render DPR: touch(phone)=2 crisp text, '
+           'desktop HiDPI=1.5 to cut the 5K canvas fill/compositing that pegs '
+           'the GPU (the fan). Fps does NOT help — compositing is per-pixel @60Hz*/'
+           '(function(){var touch=("ontouchstart" in window)||(navigator.maxTouchPoints>0);'
+           'var cap=touch?2:1.5;try{var d=Math.min(window.devicePixelRatio||1,cap);'
+           'Object.defineProperty(window,"devicePixelRatio",'
+           '{configurable:true,get:function(){return d;}});}catch(e){}})();</script>')
+# 幂等:已注入则整段替换为最新版(升级旧的 cap=2 全局版 → 设备感知版)
 if '/*__dpr_cap__' in html:
-    html2 = re.sub(r'var cap=\d+(\.\d+)?;', 'var cap=2;', html, count=1)
+    html2 = re.sub(r'<script>/\*__dpr_cap__.*?</script>', snippet, html, count=1, flags=re.S)
     if html2 != html:
         open("docs/index.html","w",encoding="utf-8").write(html2)
-        print("→ DPR cap 升级到 2x(手机字清晰)")
+        print("→ DPR cap 升级到设备感知(桌面 1.5 / 手机 2)")
     else:
-        print("→ DPR cap 已是 2x,跳过")
+        print("→ DPR cap 已是设备感知版,跳过")
 else:
-    snippet = ('<script>/*__dpr_cap__ Retina web pegs the WASM core '
-               'rendering px/frame; cap render DPR*/'
-               '(function(){var cap=2;try{var d=Math.min(window.devicePixelRatio||1,cap);'
-               'Object.defineProperty(window,"devicePixelRatio",'
-               '{configurable:true,get:function(){return d;}});}catch(e){}})();</script>')
     html = html.replace("<head>", "<head>\n" + snippet, 1)
     open("docs/index.html","w",encoding="utf-8").write(html)
-    print("→ 注入 DPR cap (2x)")
+    print("→ 注入 DPR cap(桌面 1.5 / 手机 2)")
 PYEOF
 
   # 注入战斗主题的加载页动画(web/loading_overlay.html → 在 </body> 前)。

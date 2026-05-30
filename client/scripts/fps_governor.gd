@@ -14,14 +14,13 @@ extends Node
 ## fixed tick for 30Hz snapshots + physics.
 
 const FPS_UNFOCUSED := 8
-const FPS_MENU := 10         # MEASURED root cause of the fan: the main menu's
-                             # full-screen bg + ~874 translucent UI panels overdraw
-                             # the 12.9M-px (5K, DPR2) canvas → GPU fill + compositor
-                             # pegged ~81% CPU + 37% WindowServer at 20fps, while the
-                             # menu's own CPU work is tiny (process 2.8ms, 185 draw
-                             # calls). The menu is static, so 10fps halves the fill
-                             # cost with no real interactivity loss. (In-game is only
-                             # ~34% — opaque 3D has far less overdraw — so it stays 60.)
+const FPS_MENU := 30         # NOTE: lowering this does NOT help the fan. MEASURED:
+                             # the heat is the browser compositing the huge 5K canvas
+                             # at the display's 60Hz, which is independent of how often
+                             # Godot draws (menu 20fps and 10fps measured identical CPU).
+                             # The real fix is the device-aware DPR cap in deploy.sh
+                             # (fewer canvas pixels). So menu fps is purely a UX/smooth-
+                             # ness knob — keep it at a comfortable 30.
 const FPS_PLAY_WEB := 60     # gameplay stays 60 until the perf overlay proves the
                              # machine can't sustain it (capping below the actual
                              # frame-rate does nothing but hurt feel)
