@@ -101,29 +101,39 @@ if command -v brotli >/dev/null 2>&1; then
   ls -lh docs/index.pck docs/index.pck.br | awk '{printf "  %s  %s\n", $5, $9}'
 fi
 
-# ---- 4. git 检查 + commit ----
+# ---- 4. git 检查 + commit(只提交代码,不提交 docs/ 构建产物) ----
+# docs/ 已 .gitignore —— web 构建用 rsync 直传 VPS(见步骤 6),不进 git,
+# 避免每次 Build 把 28MB 的 pck 灌进仓库历史。
 if [ ! -d .git ]; then
   echo "⚠️  这个项目还没用 git 初始化。"
   exit 1
 fi
 
-git add docs/ export_presets.cfg server.json .gitignore client/scripts/build_info.gd 2>/dev/null || true
+git add export_presets.cfg server.json .gitignore client/scripts/build_info.gd 2>/dev/null || true
 if git diff --cached --quiet; then
-  echo "(docs/ 没有变化,跳过 commit)"
+  echo "(代码无变化,跳过 commit)"
 else
   git commit -m "Build $(date '+%Y-%m-%d %H:%M')"
 fi
 
-# ---- 5. 推到 GitHub ----
+# ---- 5. 推代码到 GitHub ----
 echo ""
-echo "→ 推送到 GitHub..."
+echo "→ 推送代码到 GitHub..."
 git push
 
-# ---- 6. 通知服务器:pull + import + restart ----
+# ---- 6. 部署到服务器 ----
+# (a) 先让 VPS 拉代码(DS 用)+ 清掉历史上 git 跟踪过的 docs/(首次切换时)。
+# (b) rsync web 构建到 VPS:docs/(原始文件,排除本地 .br)。
+# (c) import + VPS 端 brotli q11 重压 + 重启 DS。
 echo ""
-echo "→ 通知服务器拉取、import、重启 ..."
+echo "→ (a) VPS 拉代码 ..."
+ssh "$SERVER_HOST" "cd '$SERVER_PATH' && git pull --rebase 2>&1 | tail -2"
+
+echo "→ (b) rsync web 构建 → VPS:docs/ ..."
+rsync -az --exclude='*.br' docs/ "$SERVER_HOST:$SERVER_PATH/docs/"
+
+echo "→ (c) VPS import + brotli + 重启 ..."
 ssh "$SERVER_HOST" "cd '$SERVER_PATH' \
-  && git pull --rebase \
   && godot --headless --path . --import 2>&1 | tail -3 \
   && brotli -q 11 -f docs/index.pck -o docs/index.pck.br \
   && brotli -q 11 -f docs/index.wasm -o docs/index.wasm.br \

@@ -14,6 +14,10 @@ config/name="DADABOOM"
 config/description="DADABOOM — server-authoritative multiplayer arena shooter built in Godot 4.6 (lag-compensated netcode)."
 run/main_scene="res://client/scenes/main_menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
+boot_splash/bg_color=Color(0.141, 0.141, 0.141, 1)
+boot_splash/image="res://assets/ui/generated/logo_dadaboom.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=true
 
 [autoload]
 
