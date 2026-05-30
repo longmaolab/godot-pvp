@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="Godot PVP"
-config/description="Full-parity Godot 4.6 port of VideoGameTips/pvp-game with server-authoritative netcode."
+config/name="DADABOOM"
+config/description="DADABOOM — server-authoritative multiplayer arena shooter built in Godot 4.6 (lag-compensated netcode)."
 run/main_scene="res://client/scenes/main_menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 

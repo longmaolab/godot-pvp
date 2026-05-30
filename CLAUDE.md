@@ -1,4 +1,9 @@
-# godot-pvp — Claude 工作流约定
+# DADABOOM (godot-pvp) — Claude 工作流约定
+
+> 游戏展示名 = **DADABOOM**。代码仓库 / 目录 / 线上 URL / systemd 服务
+> 仍用 `godot-pvp` 这个 slug（基础设施未迁移，改 slug 要动 DNS/VPS/tunnel）。
+> 玩家看到的标题、窗口名、产品名都是 DADABOOM。
+
 
 ## `.agent/` 三件套
 
