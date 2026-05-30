@@ -13,8 +13,8 @@ extends CanvasLayer
 ##                bake). Resolution scaling can NEVER help this.
 ##   process ms — high         => game logic / script cost.
 ##
-## Toggle: F3. Visible by default on web so the user can read it back without
-## needing any key. Autoloaded → available on BOTH the menu and in-match.
+## Toggle: F3. Hidden by default — press F3 to show (dev diagnostic only).
+## Autoloaded → available on BOTH the menu and in-match.
 
 var _label: Label
 var _accum: float = 0.0
@@ -28,8 +28,9 @@ func _ready() -> void:
 	_label.add_theme_constant_override(&"outline_size", 6)
 	_label.add_theme_font_size_override(&"font_size", 15)
 	_label.position = Vector2(12, 10)
-	# On by default on web (this is an active diagnosis); off on native.
-	_label.visible = OS.has_feature("web")
+	# Hidden by default — players must never see it. Was on-by-default-on-web
+	# during the 2026-05-30 fan/CPU diagnosis (now concluded); F3 reveals it for dev.
+	_label.visible = false
 	add_child(_label)
 	_refresh()
 
