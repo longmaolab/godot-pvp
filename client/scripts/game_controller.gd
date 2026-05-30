@@ -122,6 +122,11 @@ func _ready() -> void:
 	if not is_dedicated_server:
 		hud = hud_scene.instantiate()
 		add_child(hud)
+		# Active gameplay — unlock render FPS (FpsGovernor caps it back down
+		# when we return to the menu). DS / headless is skipped automatically.
+		var fg: Node = get_node_or_null(^"/root/FpsGovernor")
+		if fg != null and fg.has_method(&"set_playing"):
+			fg.set_playing(true)
 
 		# Mobile touch overlay — self-hides on desktop, auto-shows on touch.
 		add_child(TOUCH_CONTROLS_SCENE.instantiate())

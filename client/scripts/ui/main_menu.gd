@@ -157,6 +157,10 @@ func _ready() -> void:
 	# user can't see the cursor or click ANY button on this menu — looks
 	# like the menu "froze" the second time they try to launch practice.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Menu is idle — drop render FPS to cut heat/fan (FpsGovernor).
+	var fg: Node = get_node_or_null(^"/root/FpsGovernor")
+	if fg != null and fg.has_method(&"set_playing"):
+		fg.set_playing(false)
 	# Responsive layout: portrait phones get the two cards stacked vertically
 	# and full-width (instead of the desktop side-by-side 560px columns that
 	# squish to ~1/3 size on a tall narrow screen). Recompute on rotate/resize.
