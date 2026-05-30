@@ -239,7 +239,7 @@ func _ready() -> void:
 	# Stat pills along the top of the right card.
 	stat_weapons.text = "▣ %d 武器" % weapon_count
 	stat_modes.text = "◇ %d 模式" % MODES.size()
-	stat_maps.text = "◈ %d 地图" % MAPS.size()
+	stat_maps.text = "◇ %d 地图" % MAPS.size()
 	status_label.text = "M3 vertical slice · server-authoritative · 9 test suites green"
 	# Invite-link auto-join: if launched in the browser with ?room=AXJ7
 	# in the URL, pre-fill the code field and fire the join flow. Deferred

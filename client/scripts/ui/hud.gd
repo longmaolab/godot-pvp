@@ -208,6 +208,14 @@ func _render_scoreboard() -> void:
 		var is_me: bool = int(row.get("peer", 0)) == my_peer
 		var row_color: Color = Color(1, 0.85, 0.4, 1) if is_me else Color(0.92, 0.95, 1, 1)
 		# Skin letter (tight column).
+		# Rank badge by this-match kills (bronze→diamond). Gives the badge art
+		# a real home without a full ranking backend.
+		var badge := TextureRect.new()
+		badge.texture = _rank_badge_for(kills)
+		badge.custom_minimum_size = Vector2(20, 20)
+		badge.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		badge.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hb.add_child(badge)
 		var letter := Label.new()
 		letter.text = "[%s]" % SKIN_LETTERS.substr(skin_idx, 1)
 		letter.custom_minimum_size.x = 26
@@ -563,6 +571,19 @@ const STREAK_TIERS := [
 ]
 var _streak_count: int = 0
 var _streak_last_kill_ms: int = -10000
+
+# Rank badges shown in the scoreboard, tiered by this-match kills.
+const _RANK_BRONZE := preload("res://assets/ui/generated/rank_bronze.png")
+const _RANK_SILVER := preload("res://assets/ui/generated/rank_silver.png")
+const _RANK_GOLD := preload("res://assets/ui/generated/rank_gold.png")
+const _RANK_PLATINUM := preload("res://assets/ui/generated/rank_platinum.png")
+const _RANK_DIAMOND := preload("res://assets/ui/generated/rank_diamond.png")
+func _rank_badge_for(kills: int) -> Texture2D:
+	if kills >= 20: return _RANK_DIAMOND
+	if kills >= 15: return _RANK_PLATINUM
+	if kills >= 10: return _RANK_GOLD
+	if kills >= 5: return _RANK_SILVER
+	return _RANK_BRONZE
 
 # Kill-confirm icon (skull / headshot / streak flame) shown above the
 # "ELIMINATED" pop. Built lazily so the HUD .tscn doesn't need to know it.
