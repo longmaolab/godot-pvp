@@ -276,6 +276,9 @@ var last_attacker: Node = null
 func _ready() -> void:
 	# Tag for group lookups (jump pads, pickups, AI target search).
 	add_to_group(&"player")
+	# The touch overlay finds the human's own controller via this group.
+	if is_local and is_human_input:
+		add_to_group(&"local_player")
 	if camera != null:
 		_base_fov = camera.fov
 	_foot_prev_xz = Vector2(global_position.x, global_position.z)
@@ -749,6 +752,13 @@ func _step_invincibility_blink(delta: float) -> void:
 		var v2: Node = get_node_or_null(^"Visuals")
 		if v2 != null:
 			v2.visible = true
+
+
+## Touch look — the mobile overlay feeds drag deltas (already × sensitivity)
+## here, mirroring the mouse-look in _unhandled_input so aim stays consistent.
+func apply_touch_look(delta: Vector2) -> void:
+	_aim_yaw -= delta.x
+	_aim_pitch = clampf(_aim_pitch - delta.y, -PI * 0.49, PI * 0.49)
 
 
 ## Single entry point for setting aim from outside (bots, tests, AI). Always

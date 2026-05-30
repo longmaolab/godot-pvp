@@ -45,6 +45,7 @@ const PAUSE_SCENE := preload("res://client/scenes/hud/pause_menu.tscn")
 const MATCH_END_SCENE := preload("res://client/scenes/hud/match_end.tscn")
 const CONNECTING_SCENE := preload("res://client/scenes/hud/connecting_overlay.tscn")
 const COMMS_WHEEL_SCENE := preload("res://client/scenes/hud/comms_wheel.tscn")
+const TOUCH_CONTROLS_SCENE := preload("res://client/scenes/hud/touch_controls.tscn")
 const ADMIN_PANEL_SCENE := preload("res://client/scenes/hud/admin_panel.tscn")
 
 var pause_menu: Node = null
@@ -111,6 +112,9 @@ func _ready() -> void:
 	if not is_dedicated_server:
 		hud = hud_scene.instantiate()
 		add_child(hud)
+
+		# Mobile touch overlay — self-hides on desktop, auto-shows on touch.
+		add_child(TOUCH_CONTROLS_SCENE.instantiate())
 
 		# Pause overlay (Esc) — runs even when SceneTree is paused (process_mode=3).
 		pause_menu = PAUSE_SCENE.instantiate()
