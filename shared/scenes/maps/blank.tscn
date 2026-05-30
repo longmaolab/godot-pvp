@@ -118,6 +118,46 @@ collision_mask = 0
 size = Vector3(4, 2, 1)
 material = SubResource("mat_wall")
 
+[node name="CoverC" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0.75, -12)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(3, 1.5, 3)
+material = SubResource("mat_wall")
+
+[node name="CoverD" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.75, 12)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(3, 1.5, 3)
+material = SubResource("mat_wall")
+
+[node name="LowWallE" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(10, 1.2, 0.6)
+material = SubResource("mat_wall")
+
+[node name="CenterPlatform" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -16)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(8, 0.5, 6)
+material = SubResource("mat_floor")
+
+[node name="RampToCenter" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 0.7, -11.5)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(4, 0.4, 6)
+material = SubResource("mat_floor")
+
 [node name="SpawnPoints" type="Node3D" parent="."]
 
 [node name="Spawn0" type="Marker3D" parent="SpawnPoints"]

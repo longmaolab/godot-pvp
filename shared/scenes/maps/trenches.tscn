@@ -186,3 +186,35 @@ tick_interval_sec = 0.4
 
 [node name="NoMansLandShape" type="CollisionShape3D" parent="NoMansLandDmg"]
 shape = SubResource("box_noman_dmg")
+
+[node name="ExtraCoverA" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.9, -15)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_concrete")
+
+[node name="ExtraCoverB" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0.9, -15)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_concrete")
+
+[node name="ExtraCoverC" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.9, 15)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_concrete")
+
+[node name="ExtraCoverD" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0.9, 15)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_concrete")

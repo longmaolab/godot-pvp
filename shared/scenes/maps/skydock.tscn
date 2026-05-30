@@ -193,3 +193,35 @@ gravity_mult = 0.35
 
 [node name="LowGravShape" type="CollisionShape3D" parent="LowGravUpper"]
 shape = SubResource("box_lowgrav")
+
+[node name="ExtraCoverA" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0.9, 18)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_metalplates")
+
+[node name="ExtraCoverB" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 0.9, 18)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_metalplates")
+
+[node name="ExtraCoverC" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0.9, -18)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_metalplates")
+
+[node name="ExtraCoverD" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 0.9, -18)
+use_collision = true
+collision_layer = 1
+collision_mask = 0
+size = Vector3(2.5, 1.8, 2.5)
+material = ExtResource("m_metalplates")
