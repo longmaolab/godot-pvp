@@ -14,6 +14,12 @@ class_name PlayerController
 const GRAVITY: float = 28.0
 const SHOOT_MASK: int = (1 << 0) | (1 << 2)   # world + hitboxes
 const SHOOT_RANGE: float = 500.0
+# Reach NetProtocol constants + is_dedicated_server_boot() via preload (the
+# script class) rather than the autoload global. Constants resolve identically,
+# is_dedicated_server_boot() is a static call (no STATIC_CALLED_ON_INSTANCE
+# warning), and the whole file then parses cleanly when loaded outside the
+# autoload-registered runtime (e.g. the smoke test's --script pass).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 # Multiplicative environment effects. Map gimmick zones write to these on
 # enter and reset to 1.0 on exit. Multiple overlapping zones stack.
@@ -543,7 +549,15 @@ func _physics_process(delta: float) -> void:
 	if is_snapshot_only:
 		if is_local and is_human_input:
 			_apply_camera_kick(delta)
-			_send_input_to_server()
+			# Only stream input up when actually attached to a real server.
+			# Without this gate a snapshot-only predictor running with the
+			# default OfflineMultiplayerPeer (e.g. the prediction unit test)
+			# reaches rpc_id(1) — and since the offline peer reports
+			# CONNECTED with unique_id 1, that's an RPC to ourselves, which the
+			# engine rejects with "RPC 'client_send_input' on yourself is not
+			# allowed". _is_networked() is false for OfflineMultiplayerPeer.
+			if _is_networked():
+				_send_input_to_server()
 			# Local cosmetic fire feedback — server is the damage authority, but
 			# the player still expects tracer / muzzle flash / sound / recoil
 			# kick / ammo countdown to happen when they pull the trigger.

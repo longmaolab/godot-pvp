@@ -48,10 +48,19 @@ func _run_test() -> void:
 	if not p.is_dead:
 		_fail("player should be dead after 9999 damage")
 		return
-	if p.visible:
-		_fail("dead player should be invisible")
+	# Corpse-linger contract (player_controller._die): the body stays VISIBLE
+	# for CORPSE_LINGER seconds (the death-drop animation) and is hidden by a
+	# timer afterward — so we no longer assert immediate invisibility. What MUST
+	# flip the instant the player dies is the gameplay-relevant state: collision
+	# off (can't block/be-blocked) and both hitboxes stop monitoring (can't be
+	# hit again while a corpse). That's the regression worth pinning.
+	if p.collision_layer != 0 or p.collision_mask != 0:
+		_fail("dead player collision not cleared (layer=%d mask=%d)" % [p.collision_layer, p.collision_mask])
 		return
-	print("  [ok] died signal fired without HUD signature error")
+	if p.head_hitbox.monitoring or p.body_hitbox.monitoring:
+		_fail("dead player hitboxes still monitoring (head=%s body=%s)" % [p.head_hitbox.monitoring, p.body_hitbox.monitoring])
+		return
+	print("  [ok] died signal fired; collision + hitboxes disabled on death")
 
 	# 3. Verify respawn restores state cleanly.
 	# Pre-decrement ammo to confirm respawn refills it.

@@ -43,6 +43,14 @@
 - 修测试：`smoke_test` 需要把 Godot error stack 里的 compile/parse failure 当成 hard fail，不能只信 threaded status。
 - 修脚本：这些文件里把裸 `NetProtocol` 改成显式 `const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")`，或改成不依赖全局类注册的访问方式。
 
+### [x] 已修复（2026-05-30）—— 改了 shared/scripts/network/net_protocol.gd、client/scripts/audio/proc_audio.gd、client/scripts/persistence/{server_discovery,settings,stats_store}.gd、server/scripts/{replay_recorder,database}.gd、shared/scripts/player_controller.gd、tests/run_quick.sh
+
+**根因（两条）**：
+1. **false-green**：`run_quick.sh` 直接 `--script tests/smoke_test.gd` 跑，**绕过了 `tests/run_smoke_test.sh` 包装层**——而正是那个包装层把 stderr 里的 `SCRIPT ERROR / Parse Error / Failed to load script` 当 hard fail。`run_all.sh` 一直走包装层（所以那边能拦），只有 `run_quick.sh` 漏了。已把 `run_quick.sh` 的 smoke 改为调用 `tests/run_smoke_test.sh`，两个入口现在都对编译错误硬失败。
+2. **裸全局类依赖**：`is_dedicated_server_boot()` 是个纯函数（只读 `OS.get_cmdline_user_args()`），却被这 5 个脚本经由 `NetProtocol` autoload **全局名**调用；在 `--script` / 冷启动 / 独立加载路径下 autoload 没注册 → 编译失败。已把该函数改为 `static func`，5 个文件（+ `player_controller`、`database` 两个旧 caller）改用 `const NetProtocol = preload(...)` 静态调用（与仓库里 `profile_service.gd` 既有的 `const Database = preload(...)` 同款写法，无新 warning）。这几个文件现在能脱离 autoload 独立解析。
+
+**未做/边界说明**：`smoke_test.gd` 自身在 `--script` 模式下**无法**区分「真 bug」与「有状态 autoload（Settings/NetRpc 等，无法 preload 替换）在脚本模式天然不可见」——所以门禁仍只能放在包装层的 grep 排除策略里，这是结构性限制。`game_controller/fire_resolver/profile_service` 仍裸用 NetProtocol 常量（运行时 autoload 一定在，不是 bug），故包装层对 `Identifier not found: NetProtocol` 的排除保留。**需人工验证**：本环境无 Godot 二进制，未能实跑 `run_smoke_test.sh` / `run_quick.sh`；请手动确认这两个入口对真实编译错误现在会红、且 5 个脚本不再打印 `Identifier not found: NetProtocol`。
+
 ### [P1] `replay_player.gd` 仍然在读错 fire bit，回放统计结论是错的
 **文件**：`client/scripts/ui/replay_player.gd:62-65, 87-91`  
 **关联文件**：`shared/scripts/network/net_protocol.gd:98-101`
@@ -52,6 +60,10 @@
 **为什么重要**：这个工具被注释明确定位为 replay/anti-cheat 审查入口；现在它会直接给出错误结论。任何拿它看“某玩家开火频率/可疑输入”的人，都会基于假数据判断。
 
 **建议**：统一改为显式引用 `NetProtocol.INPUT_FIRE`，不要再在 replay 工具里复制 bit 常量。
+
+### [x] 已修复（2026-05-30）—— 改了 client/scripts/ui/replay_player.gd
+
+**根因**：fire bit 在工具里写死成 `1 << 4`，而 `1 << 4` 实际是 `INPUT_JUMP`；`INPUT_FIRE` 是 `1 << 7`。所以 per-peer 的 fires% 和 first-10-fire-events 全在统计跳跃。已加 `const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")`（工具走 `--script`，autoload 不可见，必须 preload），两处 `1 << 4` 改成 `NetProtocol.INPUT_FIRE`，从此跟协议单一真相同步、不再复制常量。**需人工验证**：本环境无 Godot，未实跑；建议拿一段含开火的真实 recording 跑 `replay_player.gd` 确认 fires% 合理（不再等于 jump 频率）。
 
 ### [P2] 新的 corpse linger 改动打破了现有 death/respawn 回归测试
 **文件**：`shared/scripts/player_controller.gd:1256-1270`  
@@ -65,6 +77,10 @@
 - 要保留尸体：更新 `death_respawn_test`，改成断言“死亡时 collision/hitbox 关闭，尸体在 linger 后隐藏”。
 - 仍要求立即隐藏：把 `_die()` 恢复为立即 `visible = false`，死亡动画另走 `Visuals`/corpse proxy。
 
+### [x] 已修复（2026-05-30）—— 改了 tests/death_respawn_test.gd
+
+**根因 + 取舍**：corpse linger 是**有意的产品行为**——`_die()` 里有大段注释解释「the classic drop」死亡动画 + 程序化倒地，`CORPSE_LINGER=2.2s` 后才由 timer 隐藏；`respawn()` 会重新 `visible=true`。所以选「保留尸体」分支：测试里那条「死亡后必须立刻 invisible」的断言已过时，删掉。改成断言死亡瞬间真正该翻转的**玩法状态**——`collision_layer/mask == 0`（不再挡路/被挡）+ `head_hitbox/body_hitbox.monitoring == false`（成尸体后不可再被命中）。这几项 `_die()` 里无条件设置，是更该被 pin 的回归点。**需人工验证**：本环境无 Godot，未实跑 `run_quick.sh`；建议确认 `death_respawn_test` 现在 PASS（不再卡在 invisible 断言）。
+
 ### [P2] `prediction_reconcile_test` 仍然 PASS 掉真实 RPC 错误
 **文件**：`shared/scripts/player_controller.gd:417-423, 495-522`  
 **关联文件**：`tests/prediction_reconcile_test.gd:130-137`
@@ -76,6 +92,10 @@
 **建议**：
 - 测试侧：给 predictor 注入 fake network peer，或让测试禁掉 `_send_input_to_server()`，只测 reconcile/predict 分支。
 - 运行时侧：在 snapshot-only 分支调用 `_send_input_to_server()` 前，加 `_is_networked()` / `not multiplayer.is_server()` 之类的显式门。
+
+### [x] 已修复（2026-05-30）—— 改了 shared/scripts/player_controller.gd
+
+**根因**：选了运行时侧的根因修法。snapshot-only 分支无脑调用 `_send_input_to_server()`；`_send_input_to_server()` 内部那道 `peer.get_connection_status() != CONNECTION_CONNECTED` 守卫**拦不住**测试，因为默认的 `OfflineMultiplayerPeer` 报告 `CONNECTED` 且 `unique_id == 1` → `rpc_id(1, ...)` 变成「对自己发 RPC」→ 引擎报 `RPC 'client_send_input' on yourself is not allowed`。已在 snapshot-only 分支的 `_send_input_to_server()` 调用外加 `if _is_networked():` 门（`_is_networked()` 对 OfflineMultiplayerPeer 返回 false，与权威分支 line ~583 已有的 `_is_networked()` 门一致）。真实 DS 客户端用 ENet peer，照常发；离线预测器（含本测试）不再自发 RPC。预测/reconcile 数学路径不依赖该调用，断言不受影响。**需人工验证**：本环境无 Godot，未实跑 `run_prediction_test.sh`；建议确认现在 PASS 且 stderr 不再出现 self-RPC 错误。
 
 ### 验证
 

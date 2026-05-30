@@ -14,6 +14,9 @@ signal resolved(url: String)
 const DEFAULT_URL := "ws://127.0.0.1:7777"
 const REMOTE_HINT_FILE := "res://server.json"   # optional, ship in export
 const FETCH_TIMEOUT_SEC := 3.0
+# Reach NetProtocol via preload (the script class) not the autoload global so
+# is_dedicated_server_boot() resolves under smoke test --script loading.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 var url: String = DEFAULT_URL
 

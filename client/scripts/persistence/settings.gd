@@ -14,6 +14,9 @@ extends Node
 ## practice mode still works.
 
 const FILE := "user://settings.cfg"
+# Reach NetProtocol via preload (the script class) not the autoload global so
+# is_dedicated_server_boot() resolves under smoke test --script loading.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 signal changed()
 
