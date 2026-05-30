@@ -1257,6 +1257,9 @@ func _on_server_player_died(victim_peer: int, killer_peer: int, _weapon: StringN
 	if killer_node != null and is_instance_valid(killer_node):
 		victim.last_attacker = killer_node
 	victim._die()
+	# Global kill feed — every kill is shown, not just yours (local kills are
+	# fed by show_kill_confirm below, so skip those here to avoid a dupe).
+	_push_kill_feed(killer_peer, victim_peer, _weapon, _headshot)
 	# Killcam — if WE got killed, frame the killer from 3 angles.
 	if victim == local_player and killer_node != null and killer_peer != victim_peer:
 		_start_killcam(killer_node)
@@ -1266,6 +1269,36 @@ func _on_server_player_died(victim_peer: int, killer_peer: int, _weapon: StringN
 			and killer_peer != victim_peer:
 		var vname: String = victim.player_name if "player_name" in victim else "enemy"
 		hud.show_kill_confirm(vname, _kill_weapon_label(_weapon), _headshot)
+
+
+## Global kill-feed line for ANY death. Local kills are skipped here (the big
+## kill-confirm pop feeds those). Greens/reds the line when it involves you.
+func _push_kill_feed(killer_peer: int, victim_peer: int, weapon: StringName, headshot: bool) -> void:
+	if hud == null:
+		return
+	var local_auth: int = local_player.get_multiplayer_authority() if (local_player != null and is_instance_valid(local_player)) else -999999
+	if killer_peer == local_auth and killer_peer != victim_peer:
+		return   # your kill — show_kill_confirm already feeds it
+	var vn: String = _peer_name(victim_peer)
+	# Suicide / environment / unknown killer.
+	if killer_peer == victim_peer or not players_by_peer.has(killer_peer):
+		hud.push_feed("☠ %s 阵亡" % vn, Color(0.72, 0.72, 0.78))
+		return
+	var kn: String = _peer_name(killer_peer)
+	var wl: String = _kill_weapon_label(weapon)
+	var wtag: String = (" · %s" % wl) if wl != "" else ""
+	var hs: String = " 💀" if headshot else ""
+	var col: Color = Color(0.86, 0.86, 0.92)
+	if victim_peer == local_auth:
+		col = Color(1.0, 0.5, 0.45)   # you died — red
+	hud.push_feed("%s ➤ %s%s%s" % [kn, vn, wtag, hs], col)
+
+
+func _peer_name(peer_id: int) -> String:
+	var n: Node = players_by_peer.get(peer_id)
+	if n != null and is_instance_valid(n) and "player_name" in n and n.player_name != "":
+		return n.player_name
+	return "P%d" % peer_id
 
 
 ## Resolve a weapon id to its short type label (e.g. "AR") for the kill feed.

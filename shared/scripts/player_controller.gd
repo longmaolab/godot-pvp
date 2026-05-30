@@ -164,6 +164,17 @@ const LEAN_OFFSET := 0.45   # metres the head shifts sideways at full lean
 const LEAN_ROLL := 0.13     # radians the head/body rolls into the lean
 const LEAN_LERP := 11.0
 
+# ── Melee ────────────────────────────────────────────────────────────────
+# Quick close-range strike (F). Server-authoritative via the INPUT_MELEE edge
+# (no new RPC — flows through the existing input pipeline like ability). A
+# short forward ray against the hitbox layer applies MELEE_DAMAGE; HP syncs to
+# the victim via snapshot, kills via the existing died→server_death broadcast.
+const MELEE_RANGE := 2.6
+const MELEE_DAMAGE := 55.0
+const MELEE_COOLDOWN := 0.6
+const MELEE_HITBOX_MASK := 4   # HeadHitbox/BodyHitbox collision_layer
+var _melee_until: float = 0.0
+
 # How long a corpse stays (playing its death anim) before hiding.
 const CORPSE_LINGER := 2.2
 
@@ -179,6 +190,7 @@ var _foot_accum: float = 0.0
 var _foot_audio: AudioStreamPlayer3D = null
 var footstep_count: int = 0   # test hook
 static var _footstep_wav: AudioStreamWAV = null
+static var _reload_wav: AudioStreamWAV = null
 
 # ── Viewmodel (first-person weapon) animation ────────────────────────────
 # Local cosmetic: the held weapon bobs while walking, sways opposite to aim,
@@ -540,6 +552,7 @@ func _send_input_to_server(include_fire_bit: bool = true) -> void:
 	if Input.is_action_pressed(&"ads"):          bits |= NetProtocol.INPUT_ADS
 	if Input.is_action_pressed(&"lean_left"):    bits |= NetProtocol.INPUT_LEAN_LEFT
 	if Input.is_action_pressed(&"lean_right"):   bits |= NetProtocol.INPUT_LEAN_RIGHT
+	if Input.is_action_pressed(&"melee"):        bits |= NetProtocol.INPUT_MELEE
 	if include_fire_bit and Input.is_action_pressed(&"fire"):
 		bits |= NetProtocol.INPUT_FIRE
 	if Input.is_action_pressed(&"reload"):       bits |= NetProtocol.INPUT_RELOAD
@@ -624,6 +637,8 @@ func push_remote_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 			start_reload()
 		if (just_pressed & NetProtocol.INPUT_ABILITY) != 0:
 			try_activate_ability()
+		if (just_pressed & NetProtocol.INPUT_MELEE) != 0:
+			try_melee()
 
 
 func _apply_aim_from_remote_input() -> void:
@@ -843,6 +858,44 @@ static func _get_footstep_wav() -> AudioStreamWAV:
 	return wav
 
 
+## Bake a mechanical "cha-chunk" reload sound once: two short noise clicks
+## (mag out / mag in) under fast-decay envelopes. Shared across players.
+static func _get_reload_wav() -> AudioStreamWAV:
+	if _reload_wav != null:
+		return _reload_wav
+	var rate: int = 22050
+	var n: int = int(rate * 0.28)
+	var data: PackedByteArray = PackedByteArray()
+	data.resize(n * 2)
+	var lcg: int = 0x9E3779B
+	for i in n:
+		var t: float = float(i) / float(rate)
+		# Two clicks: one at t≈0, one at t≈0.16s.
+		var e1: float = exp(-t * 55.0)
+		var e2: float = exp(-maxf(0.0, t - 0.16) * 60.0) if t >= 0.16 else 0.0
+		var env: float = maxf(e1, e2 * 0.85)
+		lcg = (lcg * 1103515245 + 12345) & 0x7FFFFFFF
+		var noise: float = float(lcg) / 1073741823.0 - 1.0
+		var s: float = (noise * 0.7 + sin(TAU * 140.0 * t) * 0.3) * env * 0.45
+		var v: int = int(clampf(s, -1.0, 1.0) * 32767.0)
+		data[i * 2] = v & 0xFF
+		data[i * 2 + 1] = (v >> 8) & 0xFF
+	var wav: AudioStreamWAV = AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.stereo = false
+	wav.data = data
+	_reload_wav = wav
+	return wav
+
+
+func _play_reload_sound() -> void:
+	if NetProtocol.is_dedicated_server_boot():
+		return
+	var s: AudioStream = weapon_def.reload_sound if (weapon_def != null and weapon_def.reload_sound != null) else _get_reload_wav()
+	_play_3d(s)
+
+
 func _setup_footstep_audio() -> void:
 	if NetProtocol.is_dedicated_server_boot():
 		return   # headless server makes no sound
@@ -878,12 +931,32 @@ func _step_footsteps(_delta: float) -> void:
 func _play_3d(stream: AudioStream) -> void:
 	if audio_3d == null or stream == null:
 		return
+	audio_3d.pitch_scale = 1.0
 	audio_3d.stream = stream
 	audio_3d.play()
 
 
+func _play_3d_pitched(stream: AudioStream, pitch: float) -> void:
+	if audio_3d == null or stream == null:
+		return
+	audio_3d.pitch_scale = clampf(pitch, 0.5, 2.0)
+	audio_3d.stream = stream
+	audio_3d.play()
+
+
+## Per-weapon fire sound. Uses weapon_def.fire_sound if an asset is assigned;
+## otherwise gives the shared SFX_SHOOT weapon IDENTITY by pitch — fast guns
+## (SMG, low fire_interval) snap higher, slow heavy guns (sniper) boom lower —
+## so every weapon sounds distinct without per-weapon audio files.
 func _play_shoot_sound() -> void:
-	_play_3d(SFX_SHOOT)
+	if weapon_def != null and weapon_def.fire_sound != null:
+		_play_3d(weapon_def.fire_sound)
+		return
+	var pitch: float = 1.0
+	if weapon_def != null:
+		var ms: float = float(weapon_def.fire_interval_ms)
+		pitch = clampf(remap(ms, 60.0, 600.0, 1.32, 0.72), 0.72, 1.35)
+	_play_3d_pitched(SFX_SHOOT, pitch * randf_range(0.97, 1.03))
 
 
 func _play_hit_sound() -> void:
@@ -1105,6 +1178,8 @@ func _step_weapon_server(delta: float) -> void:
 
 func _step_weapon(delta: float) -> void:
 	time_until_next_shot = maxf(0.0, time_until_next_shot - delta)
+	if Input.is_action_just_pressed(&"melee"):
+		try_melee()
 	if is_reloading:
 		reload_remaining -= delta
 		if reload_remaining <= 0.0:
@@ -1129,6 +1204,53 @@ func _step_weapon(delta: float) -> void:
 
 	if should_fire:
 		try_fire()
+
+
+# Close-range melee strike. Returns true if the swing happened (regardless of
+# hit). Damage is resolved only on the authority (server mirror, or offline /
+# practice); on a DS client this just plays the swing feedback and the
+# INPUT_MELEE bit drives the server's mirror to resolve the actual hit.
+func try_melee() -> bool:
+	if is_dead:
+		return false
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now < _melee_until:
+		return false
+	_melee_until = now + MELEE_COOLDOWN
+	# Local swing feedback.
+	if is_local:
+		_play_3d_pitched(SFX_SHOOT, 0.55)   # heavy thunk
+		if is_human_input:
+			_vm_kick = minf(1.0, _vm_kick + 0.8)
+	# Only the authority deals damage.
+	if _is_networked() and not multiplayer.is_server():
+		return true
+	if camera == null:
+		return true
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if space == null:
+		return true
+	var from: Vector3 = camera.global_position
+	var to: Vector3 = from - camera.global_transform.basis.z * MELEE_RANGE
+	var q := PhysicsRayQueryParameters3D.create(from, to)
+	q.collide_with_areas = true
+	q.collide_with_bodies = false
+	q.collision_mask = MELEE_HITBOX_MASK
+	q.exclude = [head_hitbox.get_rid(), body_hitbox.get_rid()]
+	var hit: Dictionary = space.intersect_ray(q)
+	if hit.is_empty():
+		return true
+	var col: Node = hit.get("collider")
+	if col == null or not col.has_meta(&"owner_player"):
+		return true
+	var victim: Node = col.get_meta(&"owner_player")
+	if victim == null or victim == self or not victim.has_method(&"apply_damage"):
+		return true
+	if "is_dead" in victim and victim.is_dead:
+		return true
+	var is_head: bool = col.get_meta(&"is_head", false)
+	victim.apply_damage(MELEE_DAMAGE * (1.4 if is_head else 1.0), self)
+	return true
 
 
 # ── public API (testable + RPC-callable) ──────────────────────────────────
@@ -1329,6 +1451,7 @@ func start_reload() -> void:
 		return
 	is_reloading = true
 	reload_remaining = float(weapon_def.reload_time_ms) / 1000.0
+	_play_reload_sound()
 
 
 func _finish_reload() -> void:
