@@ -655,6 +655,7 @@ func _on_join_by_code_pressed() -> void:
 ## panel "connecting" state. Called by all 3 paths (JOIN-by-address, CREATE,
 ## BROWSE) so failure handling lives in one spot.
 func _connect_to_server(address: String) -> void:
+	_pending_leaderboard = false   # a real room-connect — don't cross-fire the leaderboard fetch
 	var peer := WebSocketMultiplayerPeer.new()
 	_bump_buffers(peer)
 	var err := peer.create_client(address)
@@ -1188,6 +1189,7 @@ func _submit_account(action: String) -> void:
 # connection — same gate as login.
 var _lb_dialog: AcceptDialog = null
 var _lb_list: VBoxContainer = null
+var _pending_leaderboard: bool = false   # true while a silent leaderboard fetch is in flight
 
 
 func _setup_leaderboard() -> void:
@@ -1219,14 +1221,38 @@ func _setup_leaderboard() -> void:
 	if net_rpc != null and "server_leaderboard_received" in net_rpc \
 			and not net_rpc.server_leaderboard_received.is_connected(_on_leaderboard_received):
 		net_rpc.server_leaderboard_received.connect(_on_leaderboard_received)
+	# Auto-connect-to-fetch: when we silently connect just for the leaderboard,
+	# these fire the request / surface a failure. (Staging handlers ignore this
+	# connect because we never enter staging, so there's no room-flow collision.)
+	if not multiplayer.connected_to_server.is_connected(_on_connected_leaderboard):
+		multiplayer.connected_to_server.connect(_on_connected_leaderboard)
+	if not multiplayer.connection_failed.is_connected(_on_leaderboard_connect_failed):
+		multiplayer.connection_failed.connect(_on_leaderboard_connect_failed)
 
 
 func _on_leaderboard_pressed() -> void:
 	_lb_dialog.popup_centered()
+	# The leaderboard should be viewable straight from the menu — no need to
+	# join/create a room first. If we already have a live DS peer, just ask;
+	# otherwise connect silently (no staging UI) purely to fetch it.
 	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
-	if peer == null or peer is OfflineMultiplayerPeer:
-		_lb_set_message("先 BROWSE ROOMS / CREATE ROOM 连上服务器,再看排行榜")
+	if peer != null and not (peer is OfflineMultiplayerPeer) \
+			and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		_lb_request()
 		return
+	_lb_set_message("连接中…")
+	_pending_leaderboard = true
+	var p := WebSocketMultiplayerPeer.new()
+	_bump_buffers(p)
+	var err := p.create_client(_default_public_server())
+	if err != OK:
+		_pending_leaderboard = false
+		_lb_set_message("连不上排行榜服务器,稍后再试")
+		return
+	multiplayer.multiplayer_peer = p   # NOTE: no _enter_staging → no lobby UI
+
+
+func _lb_request() -> void:
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc == null:
 		_lb_set_message("无法连接排行榜服务")
@@ -1235,7 +1261,19 @@ func _on_leaderboard_pressed() -> void:
 	net_rpc.client_request_leaderboard.rpc_id(1)
 
 
+func _on_connected_leaderboard() -> void:
+	if _pending_leaderboard:
+		_lb_request()
+
+
+func _on_leaderboard_connect_failed() -> void:
+	if _pending_leaderboard:
+		_pending_leaderboard = false
+		_lb_set_message("连不上排行榜服务器,稍后再试")
+
+
 func _on_leaderboard_received(rows: Array) -> void:
+	_pending_leaderboard = false
 	if _lb_list == null:
 		return
 	for c in _lb_list.get_children():
