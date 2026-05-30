@@ -76,10 +76,27 @@ content_margin_bottom = 8
 
 [sub_resource type="StyleBoxFlat" id="crosshair_pip"]
 bg_color = Color(0.5, 0.95, 0.5, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 0.6)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="crosshair_center"]
+bg_color = Color(0.4, 1, 0.45, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0, 0, 0, 0.7)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
 
 [sub_resource type="Gradient" id="dmg_vignette_grad"]
 offsets = PackedFloat32Array(0, 0.7, 1)
@@ -178,11 +195,11 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -1
-offset_top = -1
-offset_right = 1
-offset_bottom = 1
-theme_override_styles/panel = SubResource("crosshair_pip")
+offset_left = -3
+offset_top = -3
+offset_right = 3
+offset_bottom = 3
+theme_override_styles/panel = SubResource("crosshair_center")
 mouse_filter = 2
 
 [node name="HitMarker" type="Control" parent="Crosshair"]

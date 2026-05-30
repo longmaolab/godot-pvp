@@ -103,14 +103,18 @@ func _recalc_layout() -> void:
 	_jump_rect   = Rect2(right_x, bottom_y - _btn_size - BTN_GAP, _btn_size, _btn_size)
 	# ADS sits left of FIRE, one row down feel — put it under RELOAD.
 	_ads_rect    = Rect2(right_x - _btn_size - BTN_GAP, bottom_y - _btn_size - BTN_GAP, _btn_size, _btn_size)
-	# Weapon row above the cluster, smaller chips.
+	# Weapon chips: VERTICAL column on the LEFT edge (out of the center
+	# sightline). Stacked bottom-up so 1 is lowest (near the move thumb),
+	# 4 highest. Was a horizontal row across mid-screen blocking the view.
 	var w_size: float = _btn_size * 0.5
-	var w_gap: float = 9.0
-	var w_y: float = bottom_y - 2.0 * _btn_size - 2.0 * BTN_GAP - w_size + 4.0
-	var w_right: float = s.x - BTN_MARGIN
+	var w_gap: float = 10.0
+	var w_x: float = BTN_MARGIN
+	# Anchor the column's bottom a bit above vertical center so it clears the
+	# move joystick zone below and stays off the horizon line.
+	var col_bottom: float = s.y * 0.52
 	for i in WEAPON_LABELS.size():
-		var x: float = w_right - (WEAPON_LABELS.size() - i) * (w_size + w_gap) + w_gap
-		_weapon_rects[i] = Rect2(x, w_y, w_size, w_size)
+		var y: float = col_bottom - i * (w_size + w_gap)
+		_weapon_rects[i] = Rect2(w_x, y, w_size, w_size)
 	queue_redraw()
 
 

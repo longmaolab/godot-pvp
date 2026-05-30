@@ -934,18 +934,37 @@ func lean_sign() -> int:
 static func _get_footstep_wav() -> AudioStreamWAV:
 	if _footstep_wav != null:
 		return _footstep_wav
-	var rate: int = 22050
-	var n: int = int(rate * 0.11)
+	# Realistic hard-surface footstep: a soft low-passed noise "scuff" (the
+	# sole grinding grit) layered with a quick low-frequency "body" thump (the
+	# weight landing) and a crisp initial transient (the tap). The old version
+	# was a near-pure 95Hz sine which read as a synthetic beep. Lowpassing the
+	# noise (1-pole) warms it from hiss into a believable thud.
+	var rate: int = 32000
+	var n: int = int(rate * 0.14)
 	var data: PackedByteArray = PackedByteArray()
 	data.resize(n * 2)
 	var lcg: int = 0x2545F49
+	var lp: float = 0.0           # 1-pole lowpass state for the noise
+	var lp2: float = 0.0          # second pole — steeper rolloff, softer thud
 	for i in n:
 		var t: float = float(i) / float(rate)
-		var env: float = exp(-t * 36.0)
+		# Two-stage envelope: very fast attack (~1.5ms), then a punchy body
+		# decay plus a longer soft tail so it doesn't click off abruptly.
+		var attack: float = clampf(t / 0.0015, 0.0, 1.0)
+		var body: float = exp(-t * 42.0)
+		var tail: float = exp(-t * 14.0) * 0.35
+		var env: float = attack * maxf(body, tail)
+		# White noise → 2-pole lowpass (cutoff ~ a/(1-a)·rate, a=0.45 ≈ warm).
 		lcg = (lcg * 1103515245 + 12345) & 0x7FFFFFFF
-		var noise: float = float(lcg) / 1073741823.0 - 1.0
-		var thump: float = sin(TAU * 95.0 * t)
-		var s: float = (noise * 0.55 + thump * 0.45) * env * 0.5
+		var white: float = float(lcg) / 1073741823.0 - 1.0
+		lp += 0.45 * (white - lp)
+		lp2 += 0.45 * (lp - lp2)
+		var scuff: float = lp2
+		# Low body thump, pitch drops slightly over the hit for a "stomp".
+		var thump: float = sin(TAU * (78.0 - t * 90.0) * t)
+		# Crisp initial tap (broadband, only in the first few ms).
+		var tap: float = white * exp(-t * 600.0) * 0.4
+		var s: float = (scuff * 0.62 + thump * 0.30 + tap) * env * 0.85
 		var v: int = int(clampf(s, -1.0, 1.0) * 32767.0)
 		data[i * 2] = v & 0xFF
 		data[i * 2 + 1] = (v >> 8) & 0xFF
