@@ -204,8 +204,8 @@ var _vm_rest_pos: Vector3 = Vector3.ZERO
 # is hidden and a Kenney Blaster Kit GLB is shown instead, picked by weapon
 # category. These 3 constants are the placement knobs — tune from a screenshot.
 const VIEW_MODEL_SCALE := 0.2
-const VIEW_MODEL_OFFSET := Vector3(0.02, -0.05, 0.0)   # local to WeaponVisual
-const VIEW_MODEL_YAW := -PI * 0.5                      # barrel into screen (-Z)
+const VIEW_MODEL_OFFSET := Vector3(0.0, -0.04, 0.0)   # local to WeaponVisual
+const VIEW_MODEL_YAW := 0.0                            # Kenney blasters face -Z natively
 const _VIEW_MODEL_DIR := "res://assets/models/weapons/glb/"
 # type_label keyword (lowercase substring) → blaster GLB. First match wins;
 # order matters (check specific before generic). Falls through to default AR.

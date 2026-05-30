@@ -353,7 +353,7 @@ theme_override_styles/panel = SubResource("panel_glass")
 theme_override_constants/separation = 5
 
 [node name="LogoImage" type="TextureRect" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 120)
+custom_minimum_size = Vector2(0, 84)
 texture = ExtResource("21_logo")
 expand_mode = 1
 stretch_mode = 5

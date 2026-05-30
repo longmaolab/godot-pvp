@@ -390,7 +390,7 @@ func _build_map_thumb() -> void:
 		return
 	_map_thumb = TextureRect.new()
 	_map_thumb.name = "MapThumb"
-	_map_thumb.custom_minimum_size = Vector2(0, 132)
+	_map_thumb.custom_minimum_size = Vector2(0, 96)
 	_map_thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_map_thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	# Rounded-ish framed look: clip + a subtle modulate.
