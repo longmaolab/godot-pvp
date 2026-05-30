@@ -205,7 +205,10 @@ var _vm_rest_pos: Vector3 = Vector3.ZERO
 # category. These 3 constants are the placement knobs — tune from a screenshot.
 const VIEW_MODEL_SCALE := 0.2
 const VIEW_MODEL_OFFSET := Vector3(0.0, -0.04, 0.0)   # local to WeaponVisual
-const VIEW_MODEL_YAW := 0.0                            # Kenney blasters face -Z natively
+# Euler rotation (radians) applied to the GLB. Kenney blaster root carries an
+# internal rotation, so tune empirically from a screenshot. Barrel should
+# point into the screen (away from camera).
+const VIEW_MODEL_ROT := Vector3(0.0, PI * 0.5, 0.0)
 const _VIEW_MODEL_DIR := "res://assets/models/weapons/glb/"
 # type_label keyword (lowercase substring) → blaster GLB. First match wins;
 # order matters (check specific before generic). Falls through to default AR.
@@ -513,7 +516,7 @@ func _apply_view_model() -> void:
 	inst.name = "_ViewModel"
 	weapon_visual.add_child(inst)
 	inst.position = VIEW_MODEL_OFFSET
-	inst.rotation = Vector3(0, VIEW_MODEL_YAW, 0)
+	inst.rotation = VIEW_MODEL_ROT
 	inst.scale = Vector3(VIEW_MODEL_SCALE, VIEW_MODEL_SCALE, VIEW_MODEL_SCALE)
 	_vm_instance = inst
 
