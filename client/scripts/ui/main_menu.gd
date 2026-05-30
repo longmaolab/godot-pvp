@@ -155,6 +155,7 @@ func _ready() -> void:
 	loadout_edit_btn.pressed.connect(_on_open_loadout_edit)
 	loadout_edit_save.pressed.connect(_on_loadout_edit_save)
 	loadout_edit_reset.pressed.connect(_on_loadout_edit_reset)
+	_setup_leaderboard()
 	# Subscribe to Settings.server_action so we can show success/failure
 	# feedback inside the redeem dialog. Settings emits this for ALL
 	# server-acked actions; we only react when action == "redeem_code".
@@ -1177,6 +1178,113 @@ func _submit_account(action: String) -> void:
 		settings.request_login(handle, password)
 	login_status.text = "提交中..."
 	login_status.add_theme_color_override(&"font_color", Color(0.65, 0.85, 0.95))
+
+
+# ── Leaderboard (Tier-3 a: front-end for the existing get_leaderboard backend) ─
+# The backend already serves rows via client_request_leaderboard /
+# server_leaderboard ({player_name, skin_index, kills, deaths, matches_won},
+# sorted kills DESC). This builds the button + dialog in code so we don't have
+# to touch the (freshly-redesigned) main_menu.tscn. Requires a live DS
+# connection — same gate as login.
+var _lb_dialog: AcceptDialog = null
+var _lb_list: VBoxContainer = null
+
+
+func _setup_leaderboard() -> void:
+	# Button — clone a UtilRow chip (redeem) so it matches the theme + EXPAND
+	# sizing, then add it as a 4th chip in the SAME horizontal row. Going
+	# sideways adds ZERO card height (a full-width row would re-overflow the
+	# already-tight LeftCard).
+	if redeem_btn != null and is_instance_valid(redeem_btn):
+		var btn: Button = redeem_btn.duplicate()
+		btn.name = "LeaderboardButton"
+		btn.text = "🏆 榜"
+		redeem_btn.get_parent().add_child(btn)
+		btn.pressed.connect(_on_leaderboard_pressed)
+	# Dialog — a scrollable list, built in code.
+	_lb_dialog = AcceptDialog.new()
+	_lb_dialog.title = "排行榜 / LEADERBOARD"
+	_lb_dialog.min_size = Vector2(420, 480)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(400, 420)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_lb_list = VBoxContainer.new()
+	_lb_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lb_list.add_theme_constant_override(&"separation", 4)
+	scroll.add_child(_lb_list)
+	_lb_dialog.add_child(scroll)
+	add_child(_lb_dialog)
+	# Listen for the server's reply.
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc != null and "server_leaderboard_received" in net_rpc \
+			and not net_rpc.server_leaderboard_received.is_connected(_on_leaderboard_received):
+		net_rpc.server_leaderboard_received.connect(_on_leaderboard_received)
+
+
+func _on_leaderboard_pressed() -> void:
+	_lb_dialog.popup_centered()
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer == null or peer is OfflineMultiplayerPeer:
+		_lb_set_message("先 BROWSE ROOMS / CREATE ROOM 连上服务器,再看排行榜")
+		return
+	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
+	if net_rpc == null:
+		_lb_set_message("无法连接排行榜服务")
+		return
+	_lb_set_message("加载中…")
+	net_rpc.client_request_leaderboard.rpc_id(1)
+
+
+func _on_leaderboard_received(rows: Array) -> void:
+	if _lb_list == null:
+		return
+	for c in _lb_list.get_children():
+		c.queue_free()
+	if rows.is_empty():
+		_lb_set_message("还没有上榜记录 — 打几局排位吧")
+		return
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	_lb_add_row("#", "玩家", "击杀", "K/D", "胜", ui_font, Color(0.6, 0.85, 1.0))
+	var rank: int = 1
+	for r in rows:
+		var name: String = String(r.get("player_name", "?"))
+		var kills: int = int(r.get("kills", 0))
+		var deaths: int = int(r.get("deaths", 0))
+		var wins: int = int(r.get("matches_won", 0))
+		var kd: float = float(kills) / float(maxi(1, deaths))
+		var col: Color = Color(1.0, 0.85, 0.4) if rank <= 3 else Color(0.88, 0.9, 0.95)
+		_lb_add_row(str(rank), name, str(kills), "%.2f" % kd, str(wins), ui_font, col)
+		rank += 1
+
+
+func _lb_add_row(rank: String, name: String, kills: String, kd: String, wins: String, font: Font, col: Color) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var cells := [[rank, 36], [name, 150], [kills, 64], [kd, 64], [wins, 48]]
+	for cell in cells:
+		var lbl := Label.new()
+		lbl.text = String(cell[0])
+		lbl.custom_minimum_size = Vector2(float(cell[1]), 0)
+		lbl.add_theme_color_override(&"font_color", col)
+		if font != null:
+			lbl.add_theme_font_override(&"font", font)
+		row.add_child(lbl)
+	_lb_list.add_child(row)
+
+
+func _lb_set_message(msg: String) -> void:
+	if _lb_list == null:
+		return
+	for c in _lb_list.get_children():
+		c.queue_free()
+	var lbl := Label.new()
+	lbl.text = msg
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.add_theme_color_override(&"font_color", Color(0.8, 0.85, 0.95))
+	var ui_font: Font = load("res://assets/fonts/ui_font.tres") as Font
+	if ui_font != null:
+		lbl.add_theme_font_override(&"font", ui_font)
+	_lb_list.add_child(lbl)
 
 
 # ── Custom Loadout editor ────────────────────────────────────────────────
