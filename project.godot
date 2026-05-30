@@ -50,7 +50,7 @@ window/stretch/aspect="expand"
 
 3d/physics_engine="JoltPhysics3D"
 3d/default_gravity=28.0
-common/physics_interpolation=true
+common/physics_interpolation=false
 
 [rendering]
 
