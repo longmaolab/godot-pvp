@@ -15,6 +15,10 @@ extends Node
 
 const REPLAY_DIR := "user://replays/"
 const MAX_FRAMES_PER_MATCH := 50000   # ~14 min at 60Hz; cap memory
+# Reach NetProtocol via preload (the script class) not the autoload global so
+# is_dedicated_server_boot() resolves regardless of autoload load order or
+# standalone --script loading.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 
 # In-memory buffer: room_id (String) → Array of input dicts.

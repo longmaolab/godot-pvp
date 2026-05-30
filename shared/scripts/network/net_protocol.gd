@@ -12,12 +12,15 @@ const LAG_COMP_HISTORY_TICKS := 60             # ~2s ring buffer of player posit
 # ── Process role detection ──────────────────────────────────────────────────
 ## C7: tells client-only autoloads (Settings, ProcAudio, ServerDiscovery,
 ## StatsStore) whether the current process was launched with `--server`.
-## Loaded BEFORE every other autoload (this file is #1 in project.godot),
-## so it's safe to call from inside their `_ready`.
-## NOT static — Settings / ServerDiscovery call it via the NetProtocol autoload
-## instance, and calling a static func through an instance triggers
-## STATIC_CALLED_ON_INSTANCE warnings on every script reload.
-func is_dedicated_server_boot() -> bool:
+## STATIC so callers can reach it through `preload(...)` (the script class)
+## instead of the `NetProtocol` autoload global. That matters because the
+## smoke test + replay tools load scripts in `--script` mode where autoloads
+## aren't registered: a bare `NetProtocol.is_dedicated_server_boot()` would
+## fail to compile there. Callers therefore do
+## `const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")`
+## and call it statically — which also avoids the STATIC_CALLED_ON_INSTANCE
+## warning that an instance call to a static func would raise.
+static func is_dedicated_server_boot() -> bool:
 	return "--server" in OS.get_cmdline_user_args()
 
 

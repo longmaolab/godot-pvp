@@ -25,6 +25,11 @@ const SAMPLE_RATE := 22050
 const MASTER_VOLUME_DB := -6.0
 const POOL_SIZE := 8   # max concurrent SFX before oldest gets stolen
 
+# Reach NetProtocol via preload (the script class) rather than the autoload
+# global so is_dedicated_server_boot() resolves even when this script is
+# loaded outside the autoload-registered runtime (smoke test --script mode).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 # C7: on the dedicated server every play_*() call is a no-op so headless
 # boot doesn't spin up AudioStreamPlayer nodes with the dummy driver.
 @onready var _muted: bool = NetProtocol.is_dedicated_server_boot()

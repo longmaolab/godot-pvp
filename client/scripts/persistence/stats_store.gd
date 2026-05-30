@@ -12,6 +12,9 @@ signal leaderboard_updated(rows: Array)
 const STATS_FILE := "user://stats.json"
 const CLIENT_CACHE_FILE := "user://lb_cache.json"
 const LEADERBOARD_TOP_N := 10
+# Reach NetProtocol via preload (the script class) not the autoload global so
+# is_dedicated_server_boot() resolves under smoke test --script loading.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 var stats: Dictionary = {}
 var cached_leaderboard: Array = []

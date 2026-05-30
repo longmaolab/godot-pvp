@@ -42,8 +42,13 @@ run_one() {
     fi
 }
 
+# Run smoke through the wrapper (NOT the bare .gd) so engine-side compile/
+# parse errors become hard fails. smoke_test.gd only inspects load_threaded
+# status, which reports a broken script as "loaded" — invoking it directly
+# (the old behaviour here) let real Compile Errors pass as PASS. run_all.sh
+# already routes through this wrapper; run_quick.sh now matches.
 run_one "smoke_test" \
-    "$GODOT" --headless --path "$PROJ" --script tests/smoke_test.gd
+    "$PROJ/tests/run_smoke_test.sh"
 run_one "boot_test" \
     "$PROJ/tests/run_boot_test.sh"
 run_one "practice_integration" \

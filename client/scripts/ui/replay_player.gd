@@ -13,6 +13,13 @@ extends SceneTree
 ## CLI-only for MVP — a visual playback scene (free camera + UI) is a
 ## follow-up.
 
+# Reach the input bitfield constants via preload (the script class). This tool
+# runs in `--script` mode where the NetProtocol autoload global isn't
+# registered, so referencing it bare would fail to compile. Pulling the bit
+# from the protocol also stops the fire-bit constant from drifting out of sync
+# with net_protocol.gd (which is exactly the bug this replaces).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
 	var file_path: String = ""
@@ -59,9 +66,9 @@ func _init() -> void:
 			"frames": 0, "fires": 0, "max_yaw_jump": 0.0, "max_speed_proxy": 0.0,
 		})
 		summary["frames"] = int(summary["frames"]) + 1
-		# Fire bit — INPUT_BIT_FIRE = 1 << 4 (see net_protocol.gd)
+		# Fire bit — read straight from the protocol so this never drifts.
 		var bits: int = int(d.get("b", 0))
-		if (bits & (1 << 4)) != 0:
+		if (bits & NetProtocol.INPUT_FIRE) != 0:
 			summary["fires"] = int(summary["fires"]) + 1
 		var yaw: float = float(d.get("y", 0.0))
 		var pitch: float = float(d.get("pt", 0.0))
@@ -87,7 +94,7 @@ func _init() -> void:
 	var fire_count: int = 0
 	for fr in frames:
 		var d: Dictionary = fr
-		if (int(d.get("b", 0)) & (1 << 4)) == 0:
+		if (int(d.get("b", 0)) & NetProtocol.INPUT_FIRE) == 0:
 			continue
 		fire_count += 1
 		if fire_count > 10:

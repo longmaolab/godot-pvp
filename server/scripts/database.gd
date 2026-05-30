@@ -13,6 +13,9 @@ extends Node
 # directory is writable. Local dev uses user:// for convenience.
 const DB_PATH_LINUX := "/var/lib/godot-pvp/godot-pvp.db"
 const DB_PATH_FALLBACK := "user://godot-pvp.db"
+# Reach NetProtocol via preload (the script class) so is_dedicated_server_boot()
+# is a static call that doesn't depend on autoload load order or registration.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 # Schema version. Bumped EACH time the schema needs ALTER. _migrate() runs
 # every boot, applies any `_MIGRATIONS[v]` entry whose key is > the DB's
@@ -70,10 +73,7 @@ func _ready() -> void:
 func _should_open_db() -> bool:
 	if OS.has_environment("GODOT_PVP_FORCE_DB"):
 		return true
-	var np: Node = get_node_or_null(^"/root/NetProtocol")
-	if np != null and np.has_method(&"is_dedicated_server_boot"):
-		return np.is_dedicated_server_boot()
-	return false
+	return NetProtocol.is_dedicated_server_boot()
 
 
 func _resolve_db_path() -> String:
