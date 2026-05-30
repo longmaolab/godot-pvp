@@ -208,10 +208,10 @@ const VIEW_MODEL_OFFSET := Vector3(0.0, -0.04, 0.0)   # local to WeaponVisual
 # Euler rotation (radians) applied to the GLB. Kenney blaster root carries an
 # internal rotation, so tune empirically from a screenshot. Barrel should
 # point into the screen (away from camera).
-# Headless inspection: barrel = local +Z, GLB has no internal rotation, so at
-# rot=0 the muzzle points world +Z (back at the camera). yaw=PI flips it to -Z
-# (into the screen) = correct FPS hold. Small downward pitch so it sits natural.
-const VIEW_MODEL_ROT := Vector3(0.0, PI, 0.0)
+# Headless: long axis = Z. Live check: the MUZZLE is the model's -Z end, so at
+# rot=0 the muzzle points world -Z = into the screen (correct FPS hold). yaw=PI
+# was wrong (muzzle pointed back at the player). Keep rot=0.
+const VIEW_MODEL_ROT := Vector3(0.0, 0.0, 0.0)
 const _VIEW_MODEL_DIR := "res://assets/models/weapons/glb/"
 # type_label keyword (lowercase substring) → blaster GLB. First match wins;
 # order matters (check specific before generic). Falls through to default AR.
