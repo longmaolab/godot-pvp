@@ -204,8 +204,15 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		var reported_ping = NetRpc.peer_ping_ms.get(peer_id, -1.0)
 		if reported_ping >= 0.0:
 			shooter_ping_ms = reported_ping
-		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + shooter_ping_ms * 0.5
+		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + shooter_ping_ms
 		var rewind_to_ms: float = float(Time.get_ticks_msec()) - rewind_ms
+		# NOTE: rewind = INTERP + FULL ping (above), NOT ping/2. The client keeps
+		# no server-clock sync (entity_interpolator stamps snapshots at LOCAL
+		# arrival, renders at local_now-INTERP), so the seen-enemy already lags
+		# one ping/2 (snapshot travel) AND the fire command costs another ping/2.
+		# Valve's classic interp+ping/2 assumes a synced clock we don't keep.
+		if is_dedicated_server:
+			print("[server]   ↳ lagcomp rewind=%.0fms (interp=%d + ping=%.0f reported=%s)" % [rewind_ms, NetProtocol.SNAPSHOT_INTERPOLATION_MS, shooter_ping_ms, ("default" if reported_ping < 0.0 else "%.0f" % reported_ping)])
 		# F3-M4: only rewind peers in the SAME room as the shooter. Peers
 		# in other concurrent matches are physically in a different World3D
 		# anyway (the raycast can't hit them) — rewinding them would just
