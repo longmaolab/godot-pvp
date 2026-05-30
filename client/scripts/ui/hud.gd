@@ -564,6 +564,36 @@ const STREAK_TIERS := [
 var _streak_count: int = 0
 var _streak_last_kill_ms: int = -10000
 
+# Kill-confirm icon (skull / headshot / streak flame) shown above the
+# "ELIMINATED" pop. Built lazily so the HUD .tscn doesn't need to know it.
+var _kill_icon: TextureRect = null
+const _KILL_ICON_KILL := preload("res://assets/ui/generated/hud_kill.png")
+const _KILL_ICON_HEADSHOT := preload("res://assets/ui/generated/hud_headshot.png")
+const _KILL_ICON_STREAK := preload("res://assets/ui/generated/hud_streak.png")
+
+
+func _ensure_kill_icon() -> void:
+	if _kill_icon != null or kill_confirm == null:
+		return
+	_kill_icon = TextureRect.new()
+	_kill_icon.name = "KillIcon"
+	_kill_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_kill_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_kill_icon.custom_minimum_size = Vector2(72, 72)
+	_kill_icon.size = Vector2(72, 72)
+	_kill_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Anchor centered, sit just above the KillConfirm label (label is at 0.35).
+	_kill_icon.anchor_left = 0.5
+	_kill_icon.anchor_right = 0.5
+	_kill_icon.anchor_top = 0.35
+	_kill_icon.anchor_bottom = 0.35
+	_kill_icon.offset_left = -36
+	_kill_icon.offset_right = 36
+	_kill_icon.offset_top = -96
+	_kill_icon.offset_bottom = -24
+	_kill_icon.modulate.a = 0.0
+	add_child(_kill_icon)
+
 
 ## Big screen-center "ELIMINATED" pop when local player drops an enemy.
 ## Also tracks streak counter and triggers escalation banners.
@@ -593,6 +623,20 @@ func show_kill_confirm(victim_name: String, weapon_label: String = "", headshot:
 		kill_confirm.text = "** ELIMINATED **"
 		kill_confirm.modulate = Color(1, 0.95, 0.4, 1)
 	kill_confirm.scale = Vector2(0.55, 0.55)
+	# Icon above the banner: headshot > streak > plain kill.
+	_ensure_kill_icon()
+	if _kill_icon != null:
+		_kill_icon.texture = _KILL_ICON_HEADSHOT if headshot else \
+			(_KILL_ICON_STREAK if streak_label != "" else _KILL_ICON_KILL)
+		_kill_icon.modulate = Color(streak_color.r, streak_color.g, streak_color.b, 0.0)
+		_kill_icon.scale = Vector2(0.6, 0.6)
+		_kill_icon.pivot_offset = _kill_icon.size * 0.5
+		var ti: Tween = create_tween()
+		ti.set_parallel(true)
+		ti.tween_property(_kill_icon, "modulate:a", 1.0, 0.08)
+		ti.tween_property(_kill_icon, "scale", Vector2(1.0, 1.0), 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		ti.chain().tween_interval(0.55)
+		ti.chain().tween_property(_kill_icon, "modulate:a", 0.0, 0.25)
 	var t: Tween = create_tween()
 	t.set_parallel(true)
 	t.tween_property(kill_confirm, "scale", Vector2(1.15, 1.15), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
