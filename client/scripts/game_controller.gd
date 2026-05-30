@@ -127,6 +127,13 @@ func _ready() -> void:
 		var fg: Node = get_node_or_null(^"/root/FpsGovernor")
 		if fg != null and fg.has_method(&"set_playing"):
 			fg.set_playing(true)
+		# Mobile: DPR is now 2x (sharp UI/text), but full-res 3D on a phone is
+		# hot. Render only the 3D at 0.7 scale (upscaled) — the 2D HUD/UI draws
+		# at full canvas res so text stays crisp. Desktop keeps native 3D.
+		if OS.has_feature("web") and DisplayServer.is_touchscreen_available():
+			var vp: Viewport = get_viewport()
+			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+			vp.scaling_3d_scale = 0.7
 
 		# Mobile touch overlay — self-hides on desktop, auto-shows on touch.
 		add_child(TOUCH_CONTROLS_SCENE.instantiate())
@@ -1275,6 +1282,21 @@ func _on_server_damage_broadcast(target: int, new_hp: float, src: int, _weapon: 
 	var prev_hp: float = victim.hp
 	victim.hp = new_hp
 	victim.hp_changed.emit(new_hp, victim.max_hp)
+	var local_auth: int = local_player.get_multiplayer_authority() if (local_player != null and is_instance_valid(local_player)) else -999999
+	# Multiplayer truth: only the server knows whether the shot really
+	# connected. Local `_local_hitscan()` can hit an interpolated ghost the
+	# server later rejects, especially on high-latency mobile, so the actual
+	# hitmarker / damage number must be driven from this broadcast.
+	if hud != null and src == local_auth and target != local_auth:
+		var dealt: int = int(round(maxf(0.0, prev_hp - new_hp)))
+		if dealt > 0:
+			hud.flash_hit(_headshot)
+			var impact_pos: Vector3 = victim.global_position + Vector3(0, 1.0, 0)
+			if _headshot and "head_hitbox" in victim and victim.head_hitbox != null:
+				impact_pos = victim.head_hitbox.global_position
+			elif "body_hitbox" in victim and victim.body_hitbox != null:
+				impact_pos = victim.body_hitbox.global_position
+			_spawn_damage_label(impact_pos, dealt, _headshot)
 	# C6: do NOT call _die() here anymore — the server emits an explicit
 	# server_player_died RPC for that. Routing death through one path means
 	# clients can't get a stale damage packet to trigger a phantom death,
@@ -1410,6 +1432,11 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 	var proc_audio: Node = get_node_or_null(^"/root/ProcAudio")
 	if proc_audio != null and proc_audio.has_method(&"play_fire"):
 		proc_audio.play_fire()
+	# In multiplayer, hit confirmation must come from server_apply_damage. The
+	# local hitscan only sees the client's interpolated view and can claim a hit
+	# that the server correctly rejects, which creates fake `-25` popups.
+	if _is_networked():
+		return
 
 	if hit_info.is_empty():
 		return
