@@ -37,7 +37,7 @@ SSH_OPTS=(-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=
 SERVER_HOST="${PVP_SERVER_HOST:-root@207.148.98.206}"
 SERVER_PATH="${PVP_SERVER_PATH:-/opt/games/godot-pvp}"
 SERVICE_NAME="godot-pvp-game"
-PUBLIC_URL="https://game.boobank.com/godot-pvp/"
+PUBLIC_URL="https://game.boobank.com/dadaboom/"
 
 # ---- 1. 找 Godot 二进制 ----
 if [ -n "$GODOT_BIN" ] && [ -x "$GODOT_BIN" ]; then
@@ -79,6 +79,33 @@ else
   if [ -n "$NEWER" ]; then
     NEED_EXPORT=1
     REASON="检测到源文件变更:"$'\n'"$NEWER"
+  fi
+fi
+
+# ---- 2b. mtime 兜底 ----
+# find -newer 只看 mtime,而 git stash/checkout/pull/rebase 会把源文件 mtime 改成
+# 早于 docs/index.pck → 上面的检查误判「已最新」→ 静默跳过 export → 部署谎报成功。
+# 实测踩过:ping 上报修复(commit 1d88163)因 stash pop 改旧 mtime 从没进 web 包
+# (见 .agent/test.md 2026-05-30)。下面两条用 git 状态做与 mtime 无关的兜底:
+SRC_PATHS=(client server shared assets addons project.godot server.json export_presets.cfg)
+# (1) HEAD 自上次成功 export 后变了(commit/pull/checkout)→ 必须重 export。
+#     marker 在部署末尾(commit 之后)写,记录最终 HEAD,所以无源改动的再次 deploy
+#     HEAD==marker 仍走快路径跳过;build commit 不会造成「永远在变」。
+if [ "$NEED_EXPORT" = "0" ]; then
+  LAST_EXPORT_HEAD="$(cat .godot/.deploy_export_head 2>/dev/null || true)"
+  CUR_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [ -n "$CUR_HEAD" ] && [ "$CUR_HEAD" != "$LAST_EXPORT_HEAD" ]; then
+    NEED_EXPORT=1
+    REASON="HEAD 自上次 export 后变了(${LAST_EXPORT_HEAD:-<无记录>} → $CUR_HEAD)"
+  fi
+fi
+# (2) 源文件有未提交改动(mtime 可能被改旧但内容确实变了)→ 也重 export。
+#     排除 build_info.gd:它每次 export 自动重写,不算「源」改动。
+if [ "$NEED_EXPORT" = "0" ]; then
+  DIRTY="$(git status --porcelain -- "${SRC_PATHS[@]}" 2>/dev/null | grep -v 'build_info\.gd' | head -3)"
+  if [ -n "$DIRTY" ]; then
+    NEED_EXPORT=1
+    REASON="源文件有未提交改动:"$'\n'"$DIRTY"
   fi
 fi
 
@@ -223,6 +250,13 @@ echo "→ (c) VPS import + 重启 ..."
 ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "cd '$SERVER_PATH' \
   && godot --headless --path . --import 2>&1 | tail -3 \
   && sudo systemctl restart $SERVICE_NAME"
+
+# ---- 6.5 记录本次部署的 HEAD,供下次 deploy 的兜底比对(见步骤 2b)----
+# 放 .godot/(gitignored、不进 commit、不被 rsync 到 VPS),且在 commit/push 之后写,
+# 记录最终 HEAD —— 这样无源改动的下次 deploy 会 HEAD==marker 命中快路径,而真有新
+# commit 时一定不等 → 强制 export。本地态文件:换机器首跑无 marker 会安全地强制 export。
+mkdir -p .godot
+git rev-parse HEAD > .godot/.deploy_export_head 2>/dev/null || true
 
 # ---- 7. done ----
 echo ""

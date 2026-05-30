@@ -31,7 +31,7 @@
 - 轻量验证里，`run_lean_test.sh`、`run_slide_test.sh`、`run_map_validate_test.sh`、`run_bot_map_engage_test.sh`、`run_prediction_test.sh` 均返回 PASS；`run_quick.sh` 整体 8 过 2 失败。
 - 当前最需要处理的不是新地图或移动手感本身，而是“测试误报绿灯 + replay 工具错误读数 + 一个真实 respawn 回归”。
 
-### [P1] `smoke_test` 继续把真实编译错误报成 PASS
+### [x] [P1] `smoke_test` 继续把真实编译错误报成 PASS
 **文件**：`tests/smoke_test.gd:89-110`  
 **关联文件**：`client/scripts/audio/proc_audio.gd:30`、`client/scripts/persistence/server_discovery.gd:24`、`client/scripts/persistence/settings.gd:77`、`client/scripts/persistence/stats_store.gd:27`、`server/scripts/replay_recorder.gd:33`
 
@@ -43,7 +43,7 @@
 - 修测试：`smoke_test` 需要把 Godot error stack 里的 compile/parse failure 当成 hard fail，不能只信 threaded status。
 - 修脚本：这些文件里把裸 `NetProtocol` 改成显式 `const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")`，或改成不依赖全局类注册的访问方式。
 
-### [P1] `replay_player.gd` 仍然在读错 fire bit，回放统计结论是错的
+### [x] [P1] `replay_player.gd` 仍然在读错 fire bit，回放统计结论是错的
 **文件**：`client/scripts/ui/replay_player.gd:62-65, 87-91`  
 **关联文件**：`shared/scripts/network/net_protocol.gd:98-101`
 
@@ -53,7 +53,7 @@
 
 **建议**：统一改为显式引用 `NetProtocol.INPUT_FIRE`，不要再在 replay 工具里复制 bit 常量。
 
-### [P2] 新的 corpse linger 改动打破了现有 death/respawn 回归测试
+### [x] [P2] 新的 corpse linger 改动打破了现有 death/respawn 回归测试
 **文件**：`shared/scripts/player_controller.gd:1256-1270`  
 **关联文件**：`tests/death_respawn_test.gd:46-53`
 
@@ -65,7 +65,7 @@
 - 要保留尸体：更新 `death_respawn_test`，改成断言“死亡时 collision/hitbox 关闭，尸体在 linger 后隐藏”。
 - 仍要求立即隐藏：把 `_die()` 恢复为立即 `visible = false`，死亡动画另走 `Visuals`/corpse proxy。
 
-### [P2] `prediction_reconcile_test` 仍然 PASS 掉真实 RPC 错误
+### [x] [P2] `prediction_reconcile_test` 仍然 PASS 掉真实 RPC 错误
 **文件**：`shared/scripts/player_controller.gd:417-423, 495-522`  
 **关联文件**：`tests/prediction_reconcile_test.gd:130-137`
 
@@ -94,6 +94,61 @@
 1. 先修 `smoke_test` 的 false-green 逻辑，否则后续 reviewer/CI 继续不可信。
 2. 立刻修 `replay_player.gd` 的 fire bit，避免 replay/anti-cheat 工具继续产出错数据。
 3. 对齐死亡可见性契约：决定 corpse linger 是产品行为还是回归，再修代码或修测试其中一边。
+
+---
+
+### [x] 已修复（2026-05-30，Claude）— 本轮 4 项全部闭环 + 实测验证
+
+> 采用 Codex 建议的方向：**改根因，不压症状**（smoke 那条尤其——之前是 whitelist 压掉，
+> 现在是脚本不再依赖裸 autoload 全局，whitelist 整个删掉，回归真·硬失败）。
+
+**P1-1 smoke false-green + 裸 NetProtocol**
+- 根因：`is_dedicated_server_boot()` 是非静态实例方法，且多脚本裸引用 autoload 全局
+  （`NetProtocol` / `NetRpc`）。在 `--script` / `-s` / 冷启动这些「autoload 未注册」路径下
+  编译失败（运行时正常）。实测 `--script` smoke 有 7 个文件报 `Identifier not found`。
+- `shared/scripts/network/net_protocol.gd`：`is_dedicated_server_boot()` → `static func`。
+- 加 `const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")`（常量 + 静态
+  方法都能经类引用解析）到 6 个裸引用文件：`client/scripts/audio/proc_audio.gd`、
+  `client/scripts/persistence/{server_discovery,settings,stats_store}.gd`、
+  `server/scripts/replay_recorder.gd`、`shared/scripts/player_controller.gd`。
+- `server/scripts/fire_resolver.gd`：裸 `NetRpc.peer_ping_ms` → `host.get_node_or_null(^"/root/NetRpc")`
+  防御式取节点（抄同文件 line 397 既有写法）→ 连带修好依赖它的 `game_controller.gd`；同文件
+  另加 `const NetProtocol`（它用 `SNAPSHOT_INTERPOLATION_MS` 常量，否则修完 NetRpc 会暴露下一个）。
+- `server/scripts/database.gd`：`_should_open_db()` 改静态调用（避免在 instance 上调静态方法的
+  STATIC_CALLED_ON_INSTANCE 警告）+ 加 `const NetProtocol`。
+- `tests/run_smoke_test.sh`：**删掉整个 whitelist**（之前 grep -vE 排除 5 个 identifier + 6 个文件
+  路径）。根因修完假阳性消失，任何 SCRIPT/Parse/Failed-to-load 错误都硬失败——那些文件未来的
+  真 typo 不再被掩盖。
+- 验证：`--script` smoke **0 编译错误**（修前 7 个文件报错）；`run_smoke_test.sh` PASS；DS 真实
+  启动（`-- --server`）DB 打开成功（schema v2）、server world ready、**无 STATIC 警告**。
+
+**P1-2 replay_player fire bit 读错**
+- 根因：`client/scripts/ui/replay_player.gd` 硬编码 `1 << 4`（= `INPUT_JUMP`），但 recorder 写的是
+  原始 input 位域，fire 是 `INPUT_FIRE = 1 << 7`（实测 `net_protocol.gd` + `replay_recorder.gd:111`
+  `"b": bits` 确认）。「开火频率」反作弊读数一直在**数跳跃**。
+- 修：加 `const NetProtocol = preload(...)`（`-s` 工具无 autoload），两处 `1 << 4` → `NetProtocol.INPUT_FIRE`，改正注释。
+- `tests/run_replay_player_test.sh`：原测试**照着 bug 写**（fixture 用 `b=16` 冒充 fire；断言是永远
+  匹配的 `grep -qE "1001|fires|2"` 软 WARN，从不真验）。改成正确 fixture（2 帧 `b=128` fire / 1 帧
+  `b=16` jump / 1 帧 `b=1` move）+ **硬断言** `peer 1001: 4 frames, 2 fires`——设计成「修复=2 /
+  旧 1<<4 bug=1」可区分，回退会失败。验证 PASS：报 2 fires、fire events 列 t+0/t+33（非 jump 帧）。
+
+**P2-1 corpse linger 打破 death_respawn（并行 session 已解决，本轮复核确认，未改代码）**
+- `tests/death_respawn_test.gd` 已按「保留尸体」契约更新（立即断言 `is_dead`，再等过
+  `CORPSE_LINGER`(2.2s) 确认隐藏，两个不变量都覆盖）——正是 Codex 选项一。
+- 验证：`death_respawn_test.tscn` PASS（4/4 [ok]）。
+
+**P2-2 prediction self-RPC 刷屏**
+- 根因：`shared/scripts/player_controller.gd` 的 snapshot-only 分支（`_physics_process`）调
+  `_send_input_to_server()` 没加网络门；`.tscn`/headless 默认 `OfflineMultiplayerPeer`（id=1、
+  连接状态恒 CONNECTED），内部 peer 守卫放行 → `rpc_id(1)` 打到自己 → 「on yourself is not
+  allowed」（无害但脏）。
+- 修：send 前加 `if _is_networked() and not multiplayer.is_server():`（与权威分支 line ~589 一致）。
+  真实 DS-client（ENet、非 server、非 offline）照常发；Offline/server 跳过。验证：prediction test
+  的 self-RPC 错误 **3 → 0**，4 项断言仍 PASS。
+
+**全套回归**：`bash tests/run_all.sh` → **47 pass / 2 fail**。2 个失败（`main_menu_compression`
+LeftCard 906>860、`input_rpc_test` forward 子测试 dz=0.088）经 `git stash` 在干净 HEAD 复跑
+**同样失败** = 本轮改动前就存在，与这 4 项无关（详见 `test.md` 同日「[回归发现]」段）。
 
 ## 2026-05-27 续 — Claude（继续推进剩余独立 PR 项）
 

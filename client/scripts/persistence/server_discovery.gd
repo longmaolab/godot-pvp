@@ -15,6 +15,10 @@ const DEFAULT_URL := "ws://127.0.0.1:7777"
 const REMOTE_HINT_FILE := "res://server.json"   # optional, ship in export
 const FETCH_TIMEOUT_SEC := 3.0
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads (smoke test).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 var url: String = DEFAULT_URL
 
 

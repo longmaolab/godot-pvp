@@ -20,6 +20,11 @@ extends RefCounted
 
 const _SHOOT_MASK_SERVER: int = (1 << 0) | (1 << 2)
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads. game_controller.gd
+# preloads this resolver, so a bare global here failed its smoke compile too.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 
 ## Resolves a fire intent from the given peer using the host's own view of the
 ## world. Only the host runs this; result is broadcast via server_apply_damage.
@@ -201,7 +206,11 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		# client sits far above the 60ms default, so a fixed rewind leaves moving
 		# enemies ahead of where the shooter saw them and point-blank shots miss.
 		var shooter_ping_ms: float = host.default_lag_comp_ping_ms
-		var reported_ping = NetRpc.peer_ping_ms.get(peer_id, -1.0)
+		# NetRpc holds per-peer runtime ping state, so reach the live autoload
+		# node (same idiom as the broadcast path below). The bare global doesn't
+		# resolve in standalone `--script` loads — that was the smoke failure.
+		var net_rpc: Node = host.get_node_or_null(^"/root/NetRpc")
+		var reported_ping = net_rpc.peer_ping_ms.get(peer_id, -1.0) if net_rpc != null else -1.0
 		if reported_ping >= 0.0:
 			shooter_ping_ms = reported_ping
 		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + shooter_ping_ms

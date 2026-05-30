@@ -15,6 +15,12 @@ const GRAVITY: float = 28.0
 const SHOOT_MASK: int = (1 << 0) | (1 << 2)   # world + hitboxes
 const SHOOT_RANGE: float = 500.0
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads (smoke test). All uses
+# here are class-level constants (INPUT_*, ENTITY_FLAG_*, thresholds) or the
+# static is_dedicated_server_boot() — none need the live autoload instance.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 # Multiplicative environment effects. Map gimmick zones write to these on
 # enter and reset to 1.0 on exit. Multiple overlapping zones stack.
 var move_speed_multiplier: float = 1.0
@@ -549,7 +555,12 @@ func _physics_process(delta: float) -> void:
 	if is_snapshot_only:
 		if is_local and is_human_input:
 			_apply_camera_kick(delta)
-			_send_input_to_server()
+			# Only a real DS-client streams input up. Same guard as the listen-host
+			# branch below: an OfflineMultiplayerPeer reports id=1, so an ungated
+			# rpc_id(1) self-sends ("on yourself is not allowed") and spams the log
+			# in single-process tests. A snapshot-only player is never the server.
+			if _is_networked() and not multiplayer.is_server():
+				_send_input_to_server()
 			# Local cosmetic fire feedback — server is the damage authority, but
 			# the player still expects tracer / muzzle flash / sound / recoil
 			# kick / ammo countdown to happen when they pull the trigger.

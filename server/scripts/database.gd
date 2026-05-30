@@ -30,6 +30,11 @@ const _MIGRATIONS := {
 	# 3: "..."
 }
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads (smoke test). The boot
+# check is a static method, so no live autoload node is needed.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 var db: Object = null   # SQLite instance (godot-sqlite gdextension)
 var _ready_for_queries: bool = false
 
@@ -70,10 +75,9 @@ func _ready() -> void:
 func _should_open_db() -> bool:
 	if OS.has_environment("GODOT_PVP_FORCE_DB"):
 		return true
-	var np: Node = get_node_or_null(^"/root/NetProtocol")
-	if np != null and np.has_method(&"is_dedicated_server_boot"):
-		return np.is_dedicated_server_boot()
-	return false
+	# Static call via the preloaded class — no dependency on the NetProtocol
+	# autoload node being present/alive at DB-init time.
+	return NetProtocol.is_dedicated_server_boot()
 
 
 func _resolve_db_path() -> String:

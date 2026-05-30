@@ -25,7 +25,11 @@ radius = 0.32
 ; the CharacterBody3D collision capsule so the hittable volume is the same
 ; thing the player physically occupies.
 height = 1.8
-radius = 0.5
+; 0.4 not 0.5: de14ecb widened this to 0.5 as a hit-reg band-aid while the real
+; high-latency-miss cause was still unknown. Reverted now that the root cause is
+; fixed (client fire origin + ping-based lag-comp + physics_interpolation off,
+; see test.md 2026-05-30). 0.4 ≈ the physics capsule (0.35) + a small margin.
+radius = 0.4
 
 [sub_resource type="StandardMaterial3D" id="mat_jumpsuit"]
 albedo_color = Color(0.22, 0.4, 0.7, 1)

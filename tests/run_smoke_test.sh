@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# codexreview 12:39 P2: smoke_test.gd uses load_threaded status which only
-# proves "the loader returned something", not "the script compiled cleanly
-# in this autoload context". When NetProtocol et al fail to resolve, the
-# engine prints `SCRIPT ERROR: Compile Error: Identifier not found:
-# NetProtocol` to stdout but the script still returns PASS.
+# smoke_test.gd uses load_threaded status, which only proves "the loader
+# returned something", not "the script compiled cleanly". A compile error
+# (`SCRIPT ERROR: Compile Error: ...`) still prints to stdout while the test
+# returns PASS. This wrapper greps the engine-side error patterns and turns
+# them into hard fails.
 #
-# This wrapper greps stdout/stderr for the engine-side error patterns and
-# turns them into hard fails.
+# There is NO whitelist. Earlier this wrapper excluded "Identifier not found:
+# NetProtocol/NetRpc/..." because those autoload globals don't resolve under
+# `--script` (no autoloads loaded). That root cause is fixed: every script that
+# referenced an autoload global at compile time now reaches it via an explicit
+# `const X = preload(...)` class reference (and is_dedicated_server_boot() is
+# static), so they all compile clean standalone. With the false positives gone,
+# ANY engine compile error here is a real regression — including a genuine typo
+# in a file the old whitelist would have masked.
 
 set -u
 GODOT="${GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -25,21 +31,8 @@ if grep -q "=== result: PASS" "$LOG"; then
 	SMOKE_PASS=1
 fi
 
-# Engine-level script-load failures that smoke_test currently misses.
-# We EXCLUDE two well-understood false positives that the `--script` runner
-# can't avoid:
-#   1. "Identifier not found: NetProtocol" / other autoloads. Smoke runs
-#      without the project autoloads, so any script that touches one at
-#      top level (`@onready var x = NetProtocol.something()`) fails to
-#      compile here but works fine at real runtime — boot_test covers the
-#      actual runtime path. If you want to add real coverage of these,
-#      move smoke into a .tscn with autoloads, but that breaks the
-#      `--script` SceneTree pattern.
-#   2. The follow-on `Failed to load script ... Compilation failed` line
-#      that the engine prints right after each #1.
+# Any engine-level script-load failure is a hard fail — no exclusions.
 ENGINE_ERRORS=$(grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Invalid assignment of property" "$LOG" \
-	| grep -vE "Identifier not found: (NetProtocol|Settings|StatsStore|ServerDiscovery|NetRpc)" \
-	| grep -vE "Failed to load script \"res://(client/scripts/audio/proc_audio|client/scripts/persistence/(server_discovery|settings|stats_store)|shared/scripts/player_controller|server/scripts/replay_recorder)\.gd\"" \
 	| wc -l | tr -d ' ')
 
 echo "--- log tail ---"

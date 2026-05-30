@@ -15,6 +15,10 @@ extends Node
 
 const FILE := "user://settings.cfg"
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads (smoke test).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 signal changed()
 
 var player_name: String = ""

@@ -14,10 +14,13 @@ const LAG_COMP_HISTORY_TICKS := 60             # ~2s ring buffer of player posit
 ## StatsStore) whether the current process was launched with `--server`.
 ## Loaded BEFORE every other autoload (this file is #1 in project.godot),
 ## so it's safe to call from inside their `_ready`.
-## NOT static — Settings / ServerDiscovery call it via the NetProtocol autoload
-## instance, and calling a static func through an instance triggers
-## STATIC_CALLED_ON_INSTANCE warnings on every script reload.
-func is_dedicated_server_boot() -> bool:
+## STATIC so callers reach it through a `const NetProtocol = preload(...)` class
+## reference instead of the autoload global. That keeps the referencing scripts
+## compilable in standalone load paths (smoke `--script`, replay CLI tools, cold
+## cache) where the autoload singleton isn't registered. Always call it as
+## `NetProtocol.is_dedicated_server_boot()` via that preloaded const — never on
+## the live autoload instance, which would warn STATIC_CALLED_ON_INSTANCE.
+static func is_dedicated_server_boot() -> bool:
 	return "--server" in OS.get_cmdline_user_args()
 
 

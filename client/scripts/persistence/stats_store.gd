@@ -13,6 +13,10 @@ const STATS_FILE := "user://stats.json"
 const CLIENT_CACHE_FILE := "user://lb_cache.json"
 const LEADERBOARD_TOP_N := 10
 
+# NetProtocol reached via the preloaded script class, not the autoload global,
+# so this file compiles in standalone `--script` loads (smoke test).
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+
 var stats: Dictionary = {}
 var cached_leaderboard: Array = []
 
