@@ -89,7 +89,8 @@ theme_override_colors/font_color = Color(0.6, 0.78, 0.92, 0.7)
 [node name="RoomList" type="ItemList" parent="Center/Panel/V"]
 custom_minimum_size = Vector2(0, 360)
 size_flags_vertical = 3
-theme_override_font_sizes/font_size = 17
+theme_override_constants/v_separation = 10
+theme_override_font_sizes/font_size = 22
 
 [node name="StatusLabel" type="Label" parent="Center/Panel/V"]
 text = "刷新中..."
