@@ -21,6 +21,28 @@ const WEAPONS_DIR := "res://shared/data/weapons/"
 ## Wipe + rebuild every weapon card under `weapons_list`. `settings` may be
 ## null (offline) — upgrade levels just render as 0. `on_upgrade` is invoked
 ## when an upgrade button is pressed.
+# type_label keyword (lowercase substring) → weapon-category icon PNG.
+# Order matters: specific before generic. Falls through to the AR icon.
+const _ICON_DIR := "res://assets/ui/generated/"
+const _ICON_TABLE := [
+	["sniper", "wicon_sniper"], ["anti-material", "wicon_sniper"], ["railgun", "wicon_sniper"],
+	["shotgun", "wicon_shotgun"],
+	["smg", "wicon_smg"], ["pdw", "wicon_smg"],
+	["pistol", "wicon_pistol"], ["secondary", "wicon_pistol"], ["revolver", "wicon_pistol"],
+	["beam", "wicon_energy"], ["laser", "wicon_energy"], ["arc", "wicon_energy"],
+	["lightning", "wicon_energy"], ["plasma", "wicon_energy"], ["energy", "wicon_energy"],
+	["bow", "wicon_explosive"], ["launcher", "wicon_explosive"], ["rocket", "wicon_explosive"],
+	["explosive", "wicon_explosive"], ["knockback", "wicon_explosive"], ["throwable", "wicon_explosive"],
+	["melee", "wicon_melee"], ["knife", "wicon_melee"], ["blade", "wicon_melee"], ["sword", "wicon_melee"],
+]
+static func _category_icon(type_label: String) -> String:
+	var lbl := type_label.to_lower()
+	for pair in _ICON_TABLE:
+		if lbl.find(pair[0]) != -1:
+			return _ICON_DIR + pair[1] + ".png"
+	return _ICON_DIR + "wicon_ar.png"
+
+
 static func populate(weapons_list: VBoxContainer, settings: Node, on_upgrade: Callable) -> void:
 	for child in weapons_list.get_children():
 		child.queue_free()
@@ -63,10 +85,19 @@ static func _append_weapon_row(wpn: Resource, settings: Node, on_upgrade: Callab
 	col.add_theme_constant_override(&"separation", 8)
 	pad.add_child(col)
 
-	# Header row: name + type + badges.
+	# Header row: category icon + name + type + badges.
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override(&"separation", 12)
 	col.add_child(header)
+
+	var icon_path: String = _category_icon(String(wpn.type_label))
+	if icon_path != "" and ResourceLoader.exists(icon_path):
+		var icon := TextureRect.new()
+		icon.texture = load(icon_path)
+		icon.custom_minimum_size = Vector2(34, 34)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		header.add_child(icon)
 
 	var name_lbl := Label.new()
 	name_lbl.text = wpn.display_name

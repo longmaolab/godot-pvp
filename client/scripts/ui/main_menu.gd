@@ -215,6 +215,8 @@ func _ready() -> void:
 		for m in MAPS:
 			map_picker.add_item(m.name)
 		map_picker.item_selected.connect(_on_map_changed)
+		_build_map_thumb()
+		_update_map_thumb(map_picker.selected)
 	if mode_picker != null:
 		for m in MODES:
 			mode_picker.add_item(m.name)
@@ -375,7 +377,40 @@ func _count_weapons_on_disk() -> int:
 func _on_map_changed(idx: int) -> void:
 	idx = clampi(idx, 0, MAPS.size() - 1)
 	map_desc.text = MAPS[idx].desc
+	_update_map_thumb(idx)
 	_refresh_summary()
+
+
+# Thumbnail preview shown above the map description. Built once at runtime
+# (so the .tscn stays untouched), inserted just before MapDescription in the
+# left card's VBox. Maps without a "thumb" key hide it.
+var _map_thumb: TextureRect = null
+func _build_map_thumb() -> void:
+	if _map_thumb != null or map_desc == null:
+		return
+	_map_thumb = TextureRect.new()
+	_map_thumb.name = "MapThumb"
+	_map_thumb.custom_minimum_size = Vector2(0, 132)
+	_map_thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_map_thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	# Rounded-ish framed look: clip + a subtle modulate.
+	_map_thumb.clip_contents = true
+	var parent: Node = map_desc.get_parent()
+	parent.add_child(_map_thumb)
+	parent.move_child(_map_thumb, map_desc.get_index())   # sit right above desc
+
+
+func _update_map_thumb(idx: int) -> void:
+	if _map_thumb == null:
+		return
+	idx = clampi(idx, 0, MAPS.size() - 1)
+	var path: String = String(MAPS[idx].get("thumb", ""))
+	if path != "" and ResourceLoader.exists(path):
+		_map_thumb.texture = load(path)
+		_map_thumb.visible = true
+	else:
+		_map_thumb.texture = null
+		_map_thumb.visible = false
 
 
 func _on_mode_changed(idx: int) -> void:
