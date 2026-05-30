@@ -20,11 +20,12 @@ background_mode = 2
 sky = SubResource("sky_t")
 ambient_light_source = 3
 ambient_light_color = Color(0.72, 0.68, 0.6, 1)
-ambient_light_energy = 0.4
+ambient_light_energy = 0.3
 fog_enabled = true
 fog_density = 0.015
 fog_light_color = Color(0.65, 0.6, 0.5, 1)
 tonemap_mode = 2
+tonemap_exposure = 0.72
 
 [node name="TrenchesMap" type="Node3D"]
 

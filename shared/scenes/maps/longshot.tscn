@@ -18,8 +18,9 @@ background_mode = 2
 sky = SubResource("sky_ls")
 ambient_light_source = 3
 ambient_light_color = Color(0.8, 0.78, 0.68, 1)
-ambient_light_energy = 0.5
+ambient_light_energy = 0.3
 tonemap_mode = 2
+tonemap_exposure = 0.72
 
 [node name="Longshot" type="Node3D"]
 

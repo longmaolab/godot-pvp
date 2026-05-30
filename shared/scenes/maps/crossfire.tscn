@@ -22,8 +22,9 @@ background_mode = 2
 sky = SubResource("sky_cf")
 ambient_light_source = 3
 ambient_light_color = Color(0.6, 0.62, 0.7, 1)
-ambient_light_energy = 0.5
+ambient_light_energy = 0.3
 tonemap_mode = 2
+tonemap_exposure = 0.72
 
 [node name="Crossfire" type="Node3D"]
 

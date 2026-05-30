@@ -20,8 +20,9 @@ background_mode = 2
 sky = SubResource("sky_k")
 ambient_light_source = 3
 ambient_light_color = Color(0.75, 0.82, 0.88, 1)
-ambient_light_energy = 0.55
+ambient_light_energy = 0.3
 tonemap_mode = 2
+tonemap_exposure = 0.72
 
 [node name="KOTHMap" type="Node3D"]
 

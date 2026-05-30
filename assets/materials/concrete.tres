@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://bd6o3qybtbq1l" path="res://assets/textures/pbr/concrete/concrete_rough.png" id="3"]
 
 [resource]
-albedo_color = Color(0.70, 0.72, 0.76, 1)
+albedo_color = Color(0.52, 0.55, 0.60, 1)
 albedo_texture = ExtResource("1")
 normal_enabled = true
 normal_texture = ExtResource("2")
