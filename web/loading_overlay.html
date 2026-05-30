@@ -101,7 +101,18 @@
     var tracers = []; var nextTracer = 0; var frame = 0;
 
     function loop() {
-      if (!document.getElementById('db-fx')) { return; } // overlay removed → stop
+      // Stop when the overlay is gone OR just hidden. Godot sets #status
+      // display:none when the game finishes loading but does NOT remove it
+      // from the DOM, so a getElementById check alone never fires → the
+      // ember/tracer animation would run forever on a hidden canvas, burning
+      // a core every frame on top of the live game. Check visibility too.
+      var fx = document.getElementById('db-fx');
+      if (!fx) { return; }                         // overlay removed → stop
+      var st = document.getElementById('status');
+      if (st && (st.style.display === 'none' || st.offsetParent === null)) {
+        fx.remove();                               // tidy up + stop
+        return;
+      }
       frame++;
       ctx.clearRect(0,0,W,H);
 

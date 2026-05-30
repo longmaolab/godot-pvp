@@ -121,6 +121,26 @@ EOF
     docs/index.html
   echo "→ splash/icon 加缓存版本号 ?v=$BUST"
 
+  # 关键性能注入:封顶渲染 DPR。Godot web canvasResizePolicy=2 把 canvas
+  # 渲染到 clientWidth × devicePixelRatio。5K Retina 上 DPR=2 → canvas
+  # 5120×2454 = 1260 万像素/帧,单线程 WASM 把一个核打满(风扇狂转)。
+  # 在引擎 boot 前(<head> 里)把 window.devicePixelRatio 盖成 1 → 按 CSS
+  # 分辨率渲染(像素量 ÷4),快节奏游戏视觉无损。要更锐可把 cap 调到 1.25/1.5。
+  python3 - <<'PYEOF'
+html = open("docs/index.html", encoding="utf-8").read()
+if "__dpr_cap__" not in html:   # idempotent
+    snippet = ('<script>/*__dpr_cap__ Retina web pegs the WASM core '
+               'rendering 12M+ px/frame; render at 1x*/'
+               '(function(){var cap=1;try{var d=Math.min(window.devicePixelRatio||1,cap);'
+               'Object.defineProperty(window,"devicePixelRatio",'
+               '{configurable:true,get:function(){return d;}});}catch(e){}})();</script>')
+    html = html.replace("<head>", "<head>\n" + snippet, 1)
+    open("docs/index.html","w",encoding="utf-8").write(html)
+    print("→ 注入 DPR cap (1x) — 降发热")
+else:
+    print("→ DPR cap 已存在,跳过")
+PYEOF
+
   # 注入战斗主题的加载页动画(web/loading_overlay.html → 在 </body> 前)。
   # canvas 粒子/曳光弹 + 雷达扫描 + logo 辉光 + 战术边框,纯增强不碰 Godot init。
   if [ -f web/loading_overlay.html ]; then
