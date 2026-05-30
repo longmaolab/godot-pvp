@@ -8,16 +8,26 @@
   #status { background: radial-gradient(120% 90% at 50% 40%, #0b1422 0%, #060a12 70%, #03050a 100%) !important; }
   /* Canvas sits behind the splash logo. */
   #db-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
-  /* Logo: float + cyan/orange glow pulse. */
+  /* Logo: STILL position (no float — that made it dizzy), just a subtle
+     energy-glow breathe. Tech feel comes from the scan-line + flicker. */
   #status-splash {
     z-index: 2;
-    filter: drop-shadow(0 0 18px rgba(60,170,255,.55)) drop-shadow(0 0 34px rgba(255,140,40,.30));
-    animation: db-logo 2.6s ease-in-out infinite;
+    animation: db-glow 3.2s ease-in-out infinite;
   }
-  @keyframes db-logo {
-    0%,100% { transform: translateY(0) scale(1);    filter: drop-shadow(0 0 16px rgba(60,170,255,.5))  drop-shadow(0 0 30px rgba(255,140,40,.25)); }
-    50%     { transform: translateY(-6px) scale(1.015); filter: drop-shadow(0 0 26px rgba(90,200,255,.75)) drop-shadow(0 0 46px rgba(255,150,50,.45)); }
+  @keyframes db-glow {
+    0%,100% { filter: drop-shadow(0 0 14px rgba(60,170,255,.45)) drop-shadow(0 0 26px rgba(255,140,40,.22)); }
+    50%     { filter: drop-shadow(0 0 22px rgba(90,200,255,.7))  drop-shadow(0 0 40px rgba(255,150,50,.4)); }
   }
+  /* Hologram scan-line: a thin bright bar sweeping top→bottom over the
+     whole screen, plus an occasional quick flicker. Reads as "tech/HUD
+     booting" without any motion-sickness float. */
+  #db-scan {
+    position: absolute; left: 0; right: 0; height: 2px; z-index: 3; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(120,210,255,.0) 8%, rgba(120,210,255,.55) 50%, rgba(120,210,255,0) 92%, transparent);
+    box-shadow: 0 0 14px rgba(90,190,255,.5);
+    animation: db-scan 3.8s linear infinite;
+  }
+  @keyframes db-scan { 0% { top: -2%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 102%; opacity: 0; } }
   /* Themed progress bar. */
   #status-progress {
     z-index: 2; width: 46% !important; height: 6px !important;
@@ -69,6 +79,7 @@
     var txt = document.createElement('div'); txt.id = 'db-load-text';
     txt.innerHTML = '⟢ ENTERING ARENA ⟣<span class="dots"></span>';
     status.appendChild(txt);
+    var scan = document.createElement('div'); scan.id = 'db-scan'; status.appendChild(scan);
 
     var W = 0, H = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
     function resize() {

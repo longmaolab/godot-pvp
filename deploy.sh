@@ -144,15 +144,18 @@ else
   echo ""
 fi
 
-# ---- 3.5 brotli 预压缩 pck 给 Caddy precompressed 用 ----
-# Caddy 配的 file_server.precompressed 会在客户端 Accept-Encoding: br 时
-# 优先 serve `<file>.br`,跳过现场压缩。pck 从 15MB → 2.5MB,首页下载量
-# 直接腰斩。.br 文件 .gitignore 掉,VPS 那边在 import 后自己压(VPS 有
-# brotli CLI)。本地这步是冗余但留着方便本地调试 web 包大小。
+# ---- 3.5 brotli 预压缩 pck + wasm 给 Caddy precompressed 用 ----
+# Caddy 的 file_server.precompressed 在客户端 Accept-Encoding: br 时优先
+# serve `<file>.br`。关键:.br 必须和原始文件严格匹配 —— 否则浏览器解压
+# 出截断/错版 wasm,报 "section extends past end of module",游戏加载死。
+# 之前 VPS 端单独 brotli 会和 rsync 的原始文件错位(并发 deploy / 时序),
+# 导致 .br 是旧 wasm 压的。改成:本地从同一份 export 压好 .br,连同原始
+# 文件一起 rsync(见步骤 6,不再 --exclude .br),保证 raw 和 .br 永远一致。
 if command -v brotli >/dev/null 2>&1; then
-  echo "→ 本地预压缩 docs/index.pck (brotli q8)..."
-  brotli -q 8 -f docs/index.pck -o docs/index.pck.br
-  ls -lh docs/index.pck docs/index.pck.br | awk '{printf "  %s  %s\n", $5, $9}'
+  echo "→ 本地预压缩 pck + wasm (brotli q11)..."
+  brotli -q 11 -f docs/index.pck -o docs/index.pck.br
+  brotli -q 11 -f docs/index.wasm -o docs/index.wasm.br
+  ls -lh docs/index.pck.br docs/index.wasm.br | awk '{printf "  %s  %s\n", $5, $9}'
 fi
 
 # ---- 4. git 检查 + commit(只提交代码,不提交 docs/ 构建产物) ----
@@ -176,21 +179,21 @@ echo "→ 推送代码到 GitHub..."
 git push
 
 # ---- 6. 部署到服务器 ----
-# (a) 先让 VPS 拉代码(DS 用)+ 清掉历史上 git 跟踪过的 docs/(首次切换时)。
-# (b) rsync web 构建到 VPS:docs/(原始文件,排除本地 .br)。
-# (c) import + VPS 端 brotli q11 重压 + 重启 DS。
+# (a) VPS 拉代码(DS 用)。
+# (b) rsync web 构建 + 匹配的 .br 一起传(不再 --exclude .br):本地从同一份
+#     export 压的 .br 和原始文件严格一致,避免 VPS 端单独 brotli 错位导致
+#     wasm 截断("section extends past end of module" 加载死)。
+# (c) import + 重启 DS(不再 VPS 重压 .br)。
 echo ""
 echo "→ (a) VPS 拉代码 ..."
 ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "cd '$SERVER_PATH' && git pull --rebase 2>&1 | tail -2"
 
-echo "→ (b) rsync web 构建 → VPS:docs/ ..."
-rsync -az -e "ssh ${SSH_OPTS[*]}" --exclude='*.br' docs/ "$SERVER_HOST:$SERVER_PATH/docs/"
+echo "→ (b) rsync web 构建(含匹配的 .br) → VPS:docs/ ..."
+rsync -az -e "ssh ${SSH_OPTS[*]}" docs/ "$SERVER_HOST:$SERVER_PATH/docs/"
 
-echo "→ (c) VPS import + brotli + 重启 ..."
+echo "→ (c) VPS import + 重启 ..."
 ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "cd '$SERVER_PATH' \
   && godot --headless --path . --import 2>&1 | tail -3 \
-  && brotli -q 11 -f docs/index.pck -o docs/index.pck.br \
-  && brotli -q 11 -f docs/index.wasm -o docs/index.wasm.br \
   && sudo systemctl restart $SERVICE_NAME"
 
 # ---- 7. done ----
