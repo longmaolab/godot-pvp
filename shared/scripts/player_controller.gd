@@ -760,8 +760,13 @@ func _step_viewmodel(delta: float) -> void:
 	var ads_off: Vector3 = Vector3(-_vm_rest_pos.x * 0.85, -_vm_rest_pos.y * 0.3, 0.02) if _is_ads else Vector3.ZERO
 	# Recoil — punch back toward the camera (+z) and up.
 	var kick: Vector3 = Vector3(0.0, _vm_kick * 0.008, _vm_kick * 0.05)
-	var target: Vector3 = _vm_rest_pos + bob + sway + ads_off + kick
+	# Reload — dip the weapon down/in and tilt it (muzzle down) while reloading,
+	# so the reload reads visually instead of just an ammo timer.
+	var reload_off: Vector3 = Vector3(0.03, -0.08, 0.0) if is_reloading else Vector3.ZERO
+	var target: Vector3 = _vm_rest_pos + bob + sway + ads_off + kick + reload_off
 	weapon_visual.position = weapon_visual.position.lerp(target, clampf(delta * 16.0, 0.0, 1.0))
+	var target_tilt: float = 0.5 if is_reloading else 0.0
+	weapon_visual.rotation.x = lerpf(weapon_visual.rotation.x, target_tilt, clampf(delta * 9.0, 0.0, 1.0))
 
 
 ## Normalized 0..1 reticle bloom for the local human's HUD crosshair — mirrors
@@ -1505,6 +1510,26 @@ func _die() -> void:
 	# unless we respawn first (the timer re-checks is_dead).
 	if _skin != null:
 		_skin.play_anim(&"die")
+	# Procedural death collapse (ragdoll substitute — the GLB skins aren't
+	# rigged with physical bones, so we tip the whole body over + drop it
+	# toward the floor instead of a real physics ragdoll). Runs on every client
+	# (each runs _die locally), so all viewers see the corpse fall. Falls away
+	# from the killer when known; a little random roll keeps deaths from looking
+	# identical. Local player's Visuals are hidden first-person, so this is for
+	# everyone watching the kill.
+	var vis: Node3D = get_node_or_null(^"Visuals") as Node3D
+	if vis != null:
+		var tip_dir: float = 1.0
+		if last_attacker != null and is_instance_valid(last_attacker) and last_attacker is Node3D:
+			# Pushed away from the attacker: tip forward if shot from behind, back if from front.
+			var to_me: Vector3 = global_position - (last_attacker as Node3D).global_position
+			tip_dir = 1.0 if to_me.dot(-transform.basis.z) >= 0.0 else -1.0
+		var roll: float = (float(get_instance_id() % 7) - 3.0) * 0.06
+		var fall := create_tween()
+		fall.set_parallel(true)
+		fall.tween_property(vis, "rotation:x", 1.45 * tip_dir, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		fall.tween_property(vis, "rotation:z", roll, 0.55)
+		fall.tween_property(vis, "position:y", -0.55, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	var tree: SceneTree = get_tree()
 	if tree != null:
 		var t: SceneTreeTimer = tree.create_timer(CORPSE_LINGER)
@@ -1532,7 +1557,8 @@ func respawn(at: Vector3) -> void:
 		head_hitbox.position.x = 0.0
 	var _vis: Node3D = get_node_or_null(^"Visuals") as Node3D
 	if _vis != null:
-		_vis.rotation.z = 0.0
+		_vis.rotation = Vector3.ZERO     # undo any death-collapse tip/roll
+		_vis.position.y = 0.0
 	_slide_timer = 0.0
 	_slide_cooldown = 0.0
 	# Reset remote-input tick baseline so a client that just reconnected

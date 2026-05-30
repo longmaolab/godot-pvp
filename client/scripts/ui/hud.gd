@@ -42,6 +42,8 @@ var _netstat_label: Label = null    # FPS + ping readout (built in _ready)
 var _ping_ms: int = -1              # set by game_controller; <0 = no measurement
 var _radar: Control = null          # proximity radar (built in _ready)
 const _RADAR_SCRIPT := preload("res://client/scripts/ui/radar.gd")
+var _scope: Control = null          # sniper scope overlay (built in _ready)
+const _SCOPE_SCRIPT := preload("res://client/scripts/ui/scope.gd")
 
 # Reusable style for feed row backgrounds (cheap — one shared sub-resource).
 var _feed_row_style: StyleBoxFlat
@@ -57,6 +59,7 @@ func _ready() -> void:
 			_pip_base[pip] = [pip.offset_left, pip.offset_top, pip.offset_right, pip.offset_bottom]
 	_build_netstat_label()
 	_build_radar()
+	_build_scope()
 	_feed_row_style = StyleBoxFlat.new()
 	# Bind the credits pill to the Settings autoload so kills update it live.
 	if has_node(^"/root/Settings"):
@@ -425,6 +428,30 @@ func update_radar(blips: Array) -> void:
 		_radar.set_blips(blips)
 
 
+# ── Sniper scope ────────────────────────────────────────────────────────────
+func _build_scope() -> void:
+	_scope = _SCOPE_SCRIPT.new()
+	_scope.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scope.visible = false
+	add_child(_scope)
+
+
+## Show the scope only while ADS-ing a sniper-class weapon (high zoom / Sniper
+## type). Hide the regular crosshair pips under it so they don't double up.
+func _update_scope() -> void:
+	if _scope == null:
+		return
+	var scoped: bool = false
+	if _ability_player != null and is_instance_valid(_ability_player) \
+			and _ability_player.get(&"_is_ads") and _ability_player.weapon_def != null:
+		var wd: Resource = _ability_player.weapon_def
+		var tl: String = String(wd.type_label) if "type_label" in wd else ""
+		var zoom_fov: float = float(wd.ads_zoom_fov) if "ads_zoom_fov" in wd else 45.0
+		scoped = tl.to_lower().contains("sniper") or zoom_fov <= 26.0
+	if scoped != _scope.visible:
+		_scope.visible = scoped
+
+
 ## Push a kill-feed line. Each entry is a small left-bordered panel; older
 ## lines are auto-removed when count exceeds FEED_MAX_LINES.
 func push_feed(text: String, color: Color = Color.WHITE) -> void:
@@ -503,6 +530,7 @@ func _process(_delta: float) -> void:
 		resume_prompt.visible = false
 	_update_crosshair_spread()
 	_update_netstat()
+	_update_scope()
 	# Ability cooldown bar — derived live from the local player's state.
 	if _ability_player != null and is_instance_valid(_ability_player) \
 			and ability_bar != null and ability_label != null:
