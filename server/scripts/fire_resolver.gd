@@ -55,7 +55,13 @@ static func _falloff_mult(weapon: Resource, dist: float) -> float:
 	return lerpf(1.0, minm, (dist - start) / (end - start))
 
 
-static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_yaw: float, fire_pitch: float) -> void:
+# How far the client-reported shoot origin may sit from the server's mirror
+# before we distrust it. Covers legit prediction lead (~300ms mobile ping ×
+# ~9.5 m/s sprint ≈ 2.9m) without letting a tampered client shoot from afar.
+const FIRE_ORIGIN_MAX_DRIFT := 4.0
+
+
+static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_yaw: float, fire_pitch: float, fire_origin: Vector3 = Vector3.INF) -> void:
 	if not host.multiplayer.is_server():
 		return
 	var is_dedicated_server: bool = host.is_dedicated_server
@@ -230,6 +236,14 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 		PhysicsServer3D.body_set_state(shooter.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, shooter.global_transform)
 
 	var origin: Vector3 = shooter.camera.global_position
+	# Prefer the shooter's CLIENT-reported camera position. Under client
+	# prediction (+ network latency) the client aims from a position that's
+	# offset from this lagged server mirror; raycasting from the mirror sends
+	# point-blank shots into the scenery (severe on high-latency mobile — the
+	# ray sails past the enemy into a wall/floor). Trust the client origin only
+	# within FIRE_ORIGIN_MAX_DRIFT of the mirror so it can't shoot from afar.
+	if is_finite(fire_origin.x) and fire_origin.distance_to(origin) <= FIRE_ORIGIN_MAX_DRIFT:
+		origin = fire_origin
 	var dir: Vector3 = -shooter.camera.global_transform.basis.z
 	# ── Accuracy cone (server-authoritative spread) ───────────────────────
 	# Every shot deviates randomly within a cone whose size depends on the

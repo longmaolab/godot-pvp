@@ -1222,8 +1222,8 @@ func _spawn_pos_for(peer_id: int) -> Vector3:
 const _FireResolver = preload("res://server/scripts/fire_resolver.gd")
 
 
-func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float = INF, fire_pitch: float = INF) -> void:
-	_FireResolver.resolve_fire(self, peer_id, weapon_id, fire_yaw, fire_pitch)
+func _on_client_fire_server(peer_id: int, weapon_id: StringName, fire_yaw: float = INF, fire_pitch: float = INF, fire_origin: Vector3 = Vector3.INF) -> void:
+	_FireResolver.resolve_fire(self, peer_id, weapon_id, fire_yaw, fire_pitch, fire_origin)
 
 
 ## Listen-host server: client pressed ability, mirror the activation onto

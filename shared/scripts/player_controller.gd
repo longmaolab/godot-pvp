@@ -1416,14 +1416,19 @@ func try_fire() -> bool:
 		# of our transform (which lags ~100ms and makes shots miss fast aim).
 		var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 		if net_rpc != null:
+			# Send our CLIENT camera position too — under prediction (+ latency)
+			# it's offset from the server's lagged mirror, and raycasting from the
+			# mirror sends point-blank shots into the scenery (severe on mobile).
+			# The server clamps it so it can't be abused.
+			var shoot_origin: Vector3 = camera.global_position if camera != null else global_position + Vector3(0, 1, 0)
 			if multiplayer.is_server():
 				# call_remote excludes self, so emit the signal directly so the
 				# host's GameController handler still picks it up. We pass this
 				# player's *authority* peer (the human pulling the trigger), not
 				# multiplayer.get_unique_id() which on a dedicated server is 1.
-				net_rpc.client_fire_received.emit(get_multiplayer_authority(), weapon_def.id, _aim_yaw, _aim_pitch)
+				net_rpc.client_fire_received.emit(get_multiplayer_authority(), weapon_def.id, _aim_yaw, _aim_pitch, shoot_origin)
 			else:
-				net_rpc.client_fire.rpc_id(1, weapon_def.id, _aim_yaw, _aim_pitch)
+				net_rpc.client_fire.rpc_id(1, weapon_def.id, _aim_yaw, _aim_pitch, shoot_origin)
 		# Local hit-feedback only — actual HP change waits for server broadcast.
 	elif "is_throwable" in weapon_def and weapon_def.is_throwable:
 		# Practice / offline throwable: server isn't running, so spawn the

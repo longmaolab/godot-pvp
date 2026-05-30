@@ -12,7 +12,7 @@ signal client_input_received(peer_id: int, tick: int, bits: int, yaw: float, pit
 ## Fire intent now carries the shooter's instantaneous aim so the server can
 ## raycast at the EXACT direction the client was looking, not the interp-delayed
 ## view it has of the shooter's transform.
-signal client_fire_received(peer_id: int, weapon_id: StringName, yaw: float, pitch: float)
+signal client_fire_received(peer_id: int, weapon_id: StringName, yaw: float, pitch: float, origin: Vector3)
 ## Listen-host clients send this when they press the ability key, so the
 ## server's view of the player can mirror buff/powershot state. DS clients
 ## already trigger ability server-side via the INPUT_ABILITY edge in
@@ -155,14 +155,14 @@ func client_send_input(tick: int, bits: int, yaw: float, pitch: float) -> void:
 
 
 @rpc("any_peer", "reliable", "call_remote")
-func client_fire(weapon_id: StringName, yaw: float, pitch: float) -> void:
+func client_fire(weapon_id: StringName, yaw: float, pitch: float, origin: Vector3 = Vector3.INF) -> void:
 	var peer := multiplayer.get_remote_sender_id()
 	# Gate at the RPC edge — fire_resolver's per-shot pipeline (lag-comp
 	# rewind + raycast + restore) costs real CPU, so we want to bail BEFORE
 	# emitting the signal rather than after running the work.
 	if not _check_rpc_rate(peer, "fire"):
 		return
-	client_fire_received.emit(peer, weapon_id, yaw, pitch)
+	client_fire_received.emit(peer, weapon_id, yaw, pitch, origin)
 
 
 @rpc("any_peer", "reliable", "call_remote")
