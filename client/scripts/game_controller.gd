@@ -2287,7 +2287,11 @@ func _tick_ping(delta: float) -> void:
 	_ping_send_accum = 0.0
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")
 	if net_rpc != null:
-		net_rpc.client_ping.rpc_id(1, Time.get_ticks_msec())
+		# Piggyback our smoothed RTT so the server can lag-compensate by OUR
+		# real ping, not a fixed constant (mobile clients are far over the
+		# 60ms default; without this their shots on moving enemies miss). -1
+		# until the first pong lands → server ignores it and keeps the default.
+		net_rpc.client_ping.rpc_id(1, Time.get_ticks_msec(), _ping_ms)
 
 
 func _on_server_pong(client_time_ms: int) -> void:

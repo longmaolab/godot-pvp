@@ -196,7 +196,15 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 	# shooter SAW them, and shots feel "should have hit" but don't register. ──
 	var saved_positions: Dictionary = {}
 	if host.lag_compensation_enabled and host.lag_comp != null:
-		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + host.default_lag_comp_ping_ms * 0.5
+		# Rewind by THIS shooter's real ping (reported on its latency probe),
+		# falling back to the fixed default until the first ping lands. A mobile
+		# client sits far above the 60ms default, so a fixed rewind leaves moving
+		# enemies ahead of where the shooter saw them and point-blank shots miss.
+		var shooter_ping_ms: float = host.default_lag_comp_ping_ms
+		var reported_ping = NetRpc.peer_ping_ms.get(peer_id, -1.0)
+		if reported_ping >= 0.0:
+			shooter_ping_ms = reported_ping
+		var rewind_ms: float = float(NetProtocol.SNAPSHOT_INTERPOLATION_MS) + shooter_ping_ms * 0.5
 		var rewind_to_ms: float = float(Time.get_ticks_msec()) - rewind_ms
 		# F3-M4: only rewind peers in the SAME room as the shooter. Peers
 		# in other concurrent matches are physically in a different World3D

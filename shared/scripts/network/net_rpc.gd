@@ -351,6 +351,7 @@ const _RPC_RATE_BUDGETS := {
 # first message.
 func forget_peer(peer: int) -> void:
 	_chat_rate_state.erase(peer)
+	peer_ping_ms.erase(peer)
 	# Generic budgets keyed by "peer:kind". Sweep the whole dict — there
 	# are at most |kinds| entries per peer so this is O(kinds).
 	for k in _RPC_RATE_BUDGETS.keys():
@@ -419,9 +420,20 @@ func server_send_snapshot(tick: int, entities: Array) -> void:
 # so the client can compute round-trip time. Client throttles, so no rate-gate.
 signal server_pong_received(client_time_ms: int)
 
+## Server-side per-peer round-trip latency (ms), reported by each client on its
+## ping. Lag compensation reads this to rewind targets by the SHOOTER's actual
+## ping instead of a fixed constant — a high-latency mobile client otherwise
+## under-rewinds moving enemies and its point-blank shots miss. Cleared on
+## disconnect via forget_peer(). Clamped on write so a tampered client can't
+## ask the server to rewind enemies seconds into the past.
+var peer_ping_ms: Dictionary = {}
+const PEER_PING_CLAMP_MS: float = 400.0
+
 @rpc("any_peer", "unreliable", "call_remote")
-func client_ping(client_time_ms: int) -> void:
+func client_ping(client_time_ms: int, ping_ms: float = -1.0) -> void:
 	var peer: int = multiplayer.get_remote_sender_id()
+	if ping_ms >= 0.0:
+		peer_ping_ms[peer] = clampf(ping_ms, 0.0, PEER_PING_CLAMP_MS)
 	server_pong.rpc_id(peer, client_time_ms)
 
 @rpc("authority", "unreliable", "call_remote")

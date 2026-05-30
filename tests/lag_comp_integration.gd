@@ -82,7 +82,11 @@ func _run_test() -> void:
 	await get_tree().physics_frame
 
 	# Trial 1: lag_comp ON — rewind target to POS_A, raycast should hit.
-	var hit_with_comp: bool = await _do_lag_compensated_raycast(shooter, target, lag_comp, 2, t_old + 10.0)
+	# Rewind to the EXACT snapshot timestamp: that's the instant the shooter
+	# saw the target. Any offset lands inside the A→B interpolation segment, so
+	# the rewound silhouette drifts off the firing line and the ray misses —
+	# which is a property of where you rewind to, not of the rewind machinery.
+	var hit_with_comp: bool = await _do_lag_compensated_raycast(shooter, target, lag_comp, 2, t_old)
 	if not hit_with_comp:
 		_fail("with lag-comp ON, expected hit (target rewound to POS_A) but got miss")
 		return
@@ -114,9 +118,19 @@ func _do_lag_compensated_raycast(
 			target.global_position = sample.pos
 			target.rotation.y = sample.yaw
 			target.head.rotation.x = sample.pitch
-			# Hitbox global_transforms are computed from parent; force one
-			# physics step so the broadphase sees the move.
-			await get_tree().physics_frame
+			# Match production (fire_resolver): PhysicsServer3D doesn't auto-resync
+			# Area3D broadphase entries when global_position is written from script,
+			# so a same-tick raycast sees the OLD hitbox AABB. Awaiting a single
+			# physics_frame races the broadphase and loses on a loaded machine —
+			# push the rewound transforms explicitly, exactly as the real fire path.
+			PhysicsServer3D.body_set_state(target.get_rid(),
+				PhysicsServer3D.BODY_STATE_TRANSFORM, target.global_transform)
+			if "head_hitbox" in target and target.head_hitbox != null:
+				PhysicsServer3D.area_set_transform(target.head_hitbox.get_rid(),
+					target.head_hitbox.global_transform)
+			if "body_hitbox" in target and target.body_hitbox != null:
+				PhysicsServer3D.area_set_transform(target.body_hitbox.get_rid(),
+					target.body_hitbox.global_transform)
 
 	var origin: Vector3 = shooter.camera.global_position
 	var dir: Vector3 = -shooter.camera.global_transform.basis.z
@@ -133,6 +147,18 @@ func _do_lag_compensated_raycast(
 		target.global_position = saved["pos"]
 		target.rotation.y = saved["yaw"]
 		target.head.rotation.x = saved["pitch"]
+		# Flush the broadphase BACK too — symmetric with the rewind flush above.
+		# Without this the next raycast (Trial 2) still sees the hitbox AABB at
+		# the rewound position. Production gets this for free: a physics frame
+		# elapses before the next fire, re-syncing the broadphase.
+		PhysicsServer3D.body_set_state(target.get_rid(),
+			PhysicsServer3D.BODY_STATE_TRANSFORM, target.global_transform)
+		if "head_hitbox" in target and target.head_hitbox != null:
+			PhysicsServer3D.area_set_transform(target.head_hitbox.get_rid(),
+				target.head_hitbox.global_transform)
+		if "body_hitbox" in target and target.body_hitbox != null:
+			PhysicsServer3D.area_set_transform(target.body_hitbox.get_rid(),
+				target.body_hitbox.global_transform)
 
 	if hit.is_empty():
 		return false
