@@ -120,6 +120,36 @@ var _is_host: bool = false      # true while staging as the server side
 var _peer_count: int = 1        # 1 = us; host increments on peer_connected
 
 
+@onready var _cols: BoxContainer = $Scroll/Center/Cols
+@onready var _left_card: PanelContainer = $Scroll/Center/Cols/LeftCard
+@onready var _right_card: PanelContainer = $Scroll/Center/Cols/RightCard
+
+
+## Portrait (tall) → stack cards vertically + full-width so they don't shrink
+## to a third of the screen. Landscape → side-by-side desktop columns.
+func _apply_responsive_layout() -> void:
+	if _cols == null:
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var portrait: bool = vp.y > vp.x
+	_cols.vertical = portrait
+	for card in [_left_card, _right_card]:
+		if card == null:
+			continue
+		if portrait:
+			# Fill the column width; let height be natural so both stack.
+			card.custom_minimum_size = Vector2(0, 0)
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		else:
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Desktop keeps the authored min widths; restore them in landscape.
+	if not portrait:
+		if _left_card != null: _left_card.custom_minimum_size = Vector2(560, 460)
+		if _right_card != null: _right_card.custom_minimum_size = Vector2(500, 460)
+
+
 func _ready() -> void:
 	# Release the mouse if a previous in-game scene left it captured.
 	# Without this, returning from game.tscn (via pause-menu MAIN MENU,
@@ -127,6 +157,11 @@ func _ready() -> void:
 	# user can't see the cursor or click ANY button on this menu — looks
 	# like the menu "froze" the second time they try to launch practice.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Responsive layout: portrait phones get the two cards stacked vertically
+	# and full-width (instead of the desktop side-by-side 560px columns that
+	# squish to ~1/3 size on a tall narrow screen). Recompute on rotate/resize.
+	get_viewport().size_changed.connect(_apply_responsive_layout)
+	_apply_responsive_layout()
 	var vlabel: Label = get_node_or_null(^"VersionLabel")
 	if vlabel != null:
 		var bi := preload("res://client/scripts/build_info.gd")

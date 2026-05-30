@@ -338,7 +338,7 @@ theme_override_constants/margin_right = 36
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="Cols" type="HBoxContainer" parent="Scroll/Center"]
+[node name="Cols" type="BoxContainer" parent="Scroll/Center"]
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 16
