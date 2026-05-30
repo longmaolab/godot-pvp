@@ -92,6 +92,16 @@ var _last_snapshot_tick: int = -1
 var _ping_send_accum: float = 0.0
 var _ping_ms: float = -1.0   # smoothed round-trip latency; <0 = unmeasured
 
+# Server-loss watchdog (DS client only). The DS broadcasts snapshots at 30Hz;
+# if we stop receiving them for WATCHDOG_TIMEOUT_MS the server died or our WS
+# dropped. WebSocketMultiplayerPeer doesn't reliably emit server_disconnected
+# on an abrupt systemd restart, so without this the player keeps shooting into
+# a dead session (no hits, no deaths, no error). We detect silence and bail.
+const WATCHDOG_TIMEOUT_MS: int = 4000
+var _last_snapshot_ms: int = 0
+var _got_first_snapshot: bool = false
+var _server_lost: bool = false
+
 @onready var players_root: Node3D = Node3D.new()
 
 
@@ -268,6 +278,11 @@ var _snapshot_tick: int = 0
 ## DS-M3 + lag-comp recording: one consolidated physics-tick body. Runs on
 ## both listen-host (lag_comp.record) and dedicated server (snapshot broadcast).
 func _physics_process(delta: float) -> void:
+	# Client-side server-loss watchdog. Only a DS client (connected to a
+	# dedicated server, not hosting one) watches the snapshot stream.
+	if _server_is_dedicated and not is_dedicated_server and _got_first_snapshot and not _server_lost:
+		if (Time.get_ticks_msec() - _last_snapshot_ms) > WATCHDOG_TIMEOUT_MS:
+			_handle_server_lost()
 	# Lag-comp position history (host + DS). Used by DS-M4 for rewind raycasts.
 	if multiplayer.is_server() and lag_comp != null:
 		for peer in players_by_peer.keys():
@@ -822,6 +837,9 @@ func _on_server_snapshot(tick: int, entities: Array) -> void:
 	if tick <= _last_snapshot_tick:
 		return
 	_last_snapshot_tick = tick
+	# Watchdog: a fresh snapshot means the server is alive.
+	_last_snapshot_ms = Time.get_ticks_msec()
+	_got_first_snapshot = true
 	var now_ms: float = float(Time.get_ticks_msec())
 	for e in entities:
 		var peer_id: int = int(e.get("p", 0))
@@ -874,7 +892,31 @@ func _on_connection_failed() -> void:
 
 func _on_server_disconnected() -> void:
 	push_warning("[client] server disconnected")
-	_show_connect_error("与服务器断开 — 服务器已关闭")
+	_handle_server_lost()
+
+
+## Server died / connection dropped mid-match. Fired by the snapshot watchdog
+## OR multiplayer.server_disconnected. Idempotent. Shows a clear message and
+## returns to the main menu so the player isn't stuck firing into a dead
+## session (the bug: "打了没用、不死人、不报错" during a server restart).
+func _handle_server_lost() -> void:
+	if _server_lost:
+		return
+	_server_lost = true
+	push_warning("[client] server lost — no snapshots for %dms, returning to menu" % WATCHDOG_TIMEOUT_MS)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if hud != null and hud.has_method(&"push_feed"):
+		hud.push_feed("⚠ 服务器断开 / SERVER LOST — 返回主菜单...", Color(1, 0.4, 0.4))
+	if connecting_overlay != null and connecting_overlay.has_method(&"show_error"):
+		connecting_overlay.show_error("服务器断开(可能在重启)\n正在返回主菜单...")
+	# Tear down the dead peer so stale RPCs stop, then bounce to the menu.
+	if multiplayer.has_multiplayer_peer():
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+	var t: SceneTreeTimer = get_tree().create_timer(2.0)
+	t.timeout.connect(func():
+		if is_inside_tree():
+			get_tree().change_scene_to_file(MAIN_MENU_PATH))
 
 
 func _show_connect_error(msg: String) -> void:
