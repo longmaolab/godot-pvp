@@ -1,7 +1,9 @@
 # DADABOOM (godot-pvp) — Claude 工作流约定
 
-> 游戏展示名 = **DADABOOM**。代码仓库 / 目录 / 线上 URL / systemd 服务
-> 仍用 `godot-pvp` 这个 slug（基础设施未迁移，改 slug 要动 DNS/VPS/tunnel）。
+> 游戏展示名 = **DADABOOM**，公开 URL 为 `/dadaboom/`。代码仓库 / 目录 /
+> systemd 服务 / DB 仍用 `godot-pvp` 这个 slug（基础设施未迁移）。
+> 注：改公开 URL 路径前缀只动 VPS Caddy（+ client `server.json` + portal 链接），
+> 不动 DNS / Cloudflare tunnel —— 它们工作在域名层 `game.boobank.com`。
 > 玩家看到的标题、窗口名、产品名都是 DADABOOM。
 
 
@@ -47,8 +49,8 @@ bash tests/run_all.sh
 
 | 项 | 值 |
 |---|---|
-| 公开入口 | https://game.boobank.com/godot-pvp/ |
-| WebSocket | wss://game.boobank.com/godot-pvp/ws |
+| 公开入口 | https://game.boobank.com/dadaboom/ |
+| WebSocket | wss://game.boobank.com/dadaboom/ws |
 | VPS 路径 | `/opt/games/godot-pvp/` |
 | systemd 服务 | `godot-pvp-game.service` |
 | DS 端口 | 7778（arena-shooter 占 7777） |

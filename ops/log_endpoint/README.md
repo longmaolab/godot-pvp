@@ -5,7 +5,7 @@ of `godot-pvp-game` logs without us shipping an SSH key out there. Pairs
 with the daily HTTP smoke routine described in `.agent/test.md`.
 
 ```
-┌─────────┐    GET /godot-pvp/_logs              ┌──────────┐
+┌─────────┐    GET /dadaboom/_logs              ┌──────────┐
 │ Routine │ ───── Authorization: Bearer XXX ───▶ │  Caddy   │
 └─────────┘                                       └────┬─────┘
                                                        │ reverse_proxy
@@ -37,7 +37,7 @@ systemctl status godot-pvp-logs                              # should be active 
 # 4. Add the Caddy route. Edit /etc/caddy/Caddyfile; inside the
 #    `game.boobank.com { ... }` block insert the snippet from
 #    ops/log_endpoint/caddy-snippet.conf BEFORE the existing
-#    `handle_path /godot-pvp/*` block.
+#    `handle_path /dadaboom/*` block.
 nano /etc/caddy/Caddyfile
 
 # 5. Restart Caddy (NOT reload — Caddyfile has `admin off`, reload always fails).
@@ -45,7 +45,7 @@ systemctl restart caddy
 systemctl is-active caddy                                    # active
 
 # 6. Smoke from your laptop:
-curl -H "Authorization: Bearer $TOKEN" https://game.boobank.com/godot-pvp/_logs | head -50
+curl -H "Authorization: Bearer $TOKEN" https://game.boobank.com/dadaboom/_logs | head -50
 # Should print recent journalctl lines. With a wrong token: "unauthorized".
 ```
 
@@ -72,7 +72,7 @@ the `LOG_TOKEN` env var or whatever the Routine uses).
   shell-out beyond a fixed `journalctl` argv.
 - Rate limit at Caddy if you ever expose this beyond the routine:
   ```
-  handle /godot-pvp/_logs {
+  handle /dadaboom/_logs {
       rate_limit { zone logs { window 60s events 30 } }
       reverse_proxy localhost:7779
   }
