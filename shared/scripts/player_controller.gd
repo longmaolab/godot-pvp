@@ -1421,14 +1421,27 @@ func try_fire() -> bool:
 			# mirror sends point-blank shots into the scenery (severe on mobile).
 			# The server clamps it so it can't be abused.
 			var shoot_origin: Vector3 = camera.global_position if camera != null else global_position + Vector3(0, 1, 0)
+			# Derive the aim from the camera's ACTUAL rendered forward (basis.z),
+			# NOT the logical _aim_yaw/_aim_pitch. _local_hitscan() already raycasts
+			# along camera.basis.z, so the client predicts (and shows "-25") there.
+			# On mobile web the rendered camera can drift from _aim_yaw (physics
+			# interpolation + viewport quirks): the player lines the crosshair up on
+			# the chest, the client predicts a hit, but the raw _aim_yaw we used to
+			# send pointed ~15-20° elsewhere, so the server missed and HP never
+			# dropped. Sending the camera forward makes server resolution ==
+			# client prediction == what the player actually saw. (PC stayed fine
+			# because there the two never diverge.)
+			var _cam_fwd: Vector3 = (-camera.global_transform.basis.z) if camera != null else Vector3.FORWARD
+			var _send_yaw: float = atan2(-_cam_fwd.x, -_cam_fwd.z)
+			var _send_pitch: float = asin(clampf(_cam_fwd.y, -1.0, 1.0))
 			if multiplayer.is_server():
 				# call_remote excludes self, so emit the signal directly so the
 				# host's GameController handler still picks it up. We pass this
 				# player's *authority* peer (the human pulling the trigger), not
 				# multiplayer.get_unique_id() which on a dedicated server is 1.
-				net_rpc.client_fire_received.emit(get_multiplayer_authority(), weapon_def.id, _aim_yaw, _aim_pitch, shoot_origin)
+				net_rpc.client_fire_received.emit(get_multiplayer_authority(), weapon_def.id, _send_yaw, _send_pitch, shoot_origin)
 			else:
-				net_rpc.client_fire.rpc_id(1, weapon_def.id, _aim_yaw, _aim_pitch, shoot_origin)
+				net_rpc.client_fire.rpc_id(1, weapon_def.id, _send_yaw, _send_pitch, shoot_origin)
 		# Local hit-feedback only — actual HP change waits for server broadcast.
 	elif "is_throwable" in weapon_def and weapon_def.is_throwable:
 		# Practice / offline throwable: server isn't running, so spawn the
