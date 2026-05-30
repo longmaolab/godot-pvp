@@ -301,6 +301,26 @@ static func resolve_fire(host: Node, peer_id: int, weapon_id: StringName, fire_y
 			print("[server]   ↳ ray from=%s dir=%s MISSED" % [str(origin.snapped(Vector3(0.01,0.01,0.01))), str(dir.snapped(Vector3(0.001,0.001,0.001)))])
 		else:
 			print("[server]   ↳ ray hit %s (%s)" % [hit.collider.name, hit.collider.get_class()])
+	if is_dedicated_server:
+		# DIAG (temp): is the ray starting where the client is, and does it pass
+		# near the enemy? perp = how far the ray line misses the enemy chest.
+		var sr: String = host._room_id_for_peer(peer_id)
+		var mirror: Vector3 = shooter.camera.global_position
+		var drift: float = fire_origin.distance_to(mirror) if is_finite(fire_origin.x) else -1.0
+		var osrc: String = "client" if (is_finite(fire_origin.x) and origin == fire_origin) else "mirror"
+		for tp2 in host.players_by_peer.keys():
+			if tp2 == peer_id:
+				continue
+			if not sr.is_empty() and host._room_id_for_peer(tp2) != sr:
+				continue
+			var en: Node = host.players_by_peer[tp2]
+			if en == null or not is_instance_valid(en):
+				continue
+			var chest: Vector3 = en.body_hitbox.global_position if ("body_hitbox" in en and en.body_hitbox != null) else en.global_position + Vector3(0, 1, 0)
+			var vv: Vector3 = chest - origin
+			var tt: float = vv.dot(dir)
+			var perp: float = (vv - dir * tt).length()
+			print("[server]   ↳ DIAG origin=%s src=%s drift=%.2f | enemy%d chest=%s perp=%.2fm along=%.1fm" % [str(origin.snapped(Vector3(0.1,0.1,0.1))), osrc, drift, tp2, str(chest.snapped(Vector3(0.1,0.1,0.1))), perp, tt])
 
 	# Restore rewound players regardless of hit/miss. Also re-push physics
 	# transforms so other systems (collisions, area enter/exit, the very
