@@ -5,6 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://b6h7d8u5n2jqd" path="res://assets/textures/pbr/paintedmetal/paintedmetal_rough.png" id="3"]
 
 [resource]
+albedo_color = Color(0.55, 0.60, 0.68, 1)
 albedo_texture = ExtResource("1")
 metallic = 0.4
 normal_enabled = true

@@ -5,6 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://dquqp6g23xbt6" path="res://assets/textures/pbr/tiles/tiles_rough.png" id="3"]
 
 [resource]
+albedo_color = Color(0.64, 0.67, 0.72, 1)
 albedo_texture = ExtResource("1")
 normal_enabled = true
 normal_texture = ExtResource("2")
