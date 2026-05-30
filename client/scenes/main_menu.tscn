@@ -1,8 +1,10 @@
-[gd_scene load_steps=30 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="Script" path="res://client/scripts/ui/main_menu.gd" id="1_script"]
 [ext_resource type="Theme" path="res://assets/themes/pvp_theme.tres" id="2_theme"]
 [ext_resource type="FontVariation" path="res://assets/fonts/ui_font.tres" id="3_font"]
+[ext_resource type="Texture2D" uid="uid://d3wu51a0nq4la" path="res://assets/ui/generated/menu_bg.png" id="20_bg"]
+[ext_resource type="Texture2D" uid="uid://bdd7gif6c1jny" path="res://assets/ui/generated/logo_dadaboom.png" id="21_logo"]
 
 [sub_resource type="Gradient" id="bg_grad"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -304,6 +306,23 @@ anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.4, 0.7, 0.95, 0.025)
 
+[node name="BgPhoto" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("20_bg")
+expand_mode = 1
+stretch_mode = 6
+modulate = Color(0.6, 0.6, 0.65, 1)
+
+[node name="BgDim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.02, 0.03, 0.07, 0.35)
+
 [node name="Scroll" type="ScrollContainer" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
@@ -333,7 +352,14 @@ theme_override_styles/panel = SubResource("panel_glass")
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/LeftCard"]
 theme_override_constants/separation = 5
 
+[node name="LogoImage" type="TextureRect" parent="Scroll/Center/Cols/LeftCard/V"]
+custom_minimum_size = Vector2(0, 120)
+texture = ExtResource("21_logo")
+expand_mode = 1
+stretch_mode = 5
+
 [node name="Title" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
+visible = false
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 40
 theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
