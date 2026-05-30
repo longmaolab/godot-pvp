@@ -1,20 +1,16 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="1_pickup"]
 [ext_resource type="Script" path="res://shared/scripts/world/damage_zone.gd" id="2_damage"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/ground.tres" id="m_ground"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/concrete.tres" id="m_concrete"]
+[ext_resource type="Texture2D" uid="uid://43difd8vu2l1" path="res://assets/textures/sky/industrial_sunset_puresky.hdr" id="m_sky"]
 
 [sub_resource type="BoxShape3D" id="box_noman_dmg"]
 size = Vector3(100, 1, 8)
 
-[sub_resource type="StandardMaterial3D" id="mat_dirt"]
-albedo_color = Color(0.3, 0.25, 0.18, 1)
-
-[sub_resource type="StandardMaterial3D" id="mat_trench"]
-albedo_color = Color(0.18, 0.15, 0.1, 1)
-
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat_t"]
-sky_horizon_color = Color(0.5, 0.48, 0.42, 1)
-ground_horizon_color = Color(0.3, 0.27, 0.22, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat_t"]
+panorama = ExtResource("m_sky")
 
 [sub_resource type="Sky" id="sky_t"]
 sky_material = SubResource("sky_mat_t")
@@ -46,35 +42,35 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -20)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 1, 30)
-material = SubResource("mat_dirt")
+material = ExtResource("m_ground")
 
 [node name="GroundS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 20)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 1, 30)
-material = SubResource("mat_dirt")
+material = ExtResource("m_ground")
 
 [node name="NoMansLand" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 1, 10)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="TrenchN_Front" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -5.5)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 3, 1)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="TrenchS_Front" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 5.5)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 3, 1)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="Gap1" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 1.0, -5.5)
@@ -109,28 +105,28 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 2.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 5, 60)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="WallW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 2.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 5, 60)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="WallN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -35)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 5, 1)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="WallS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 35)
 use_collision = true
 collision_layer = 1
 size = Vector3(120, 5, 1)
-material = SubResource("mat_trench")
+material = ExtResource("m_concrete")
 
 [node name="SpawnPoints" type="Node3D" parent="."]
 

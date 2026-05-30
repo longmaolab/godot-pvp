@@ -1,25 +1,17 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
 [ext_resource type="Script" path="res://shared/scripts/world/low_grav_zone.gd" id="3_lowgrav"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/metalplates.tres" id="m_metalplates"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/paintedmetal.tres" id="m_paintedmetal"]
+[ext_resource type="Texture2D" uid="uid://cehvq5htyiah7" path="res://assets/textures/sky/kloofendal_48d_partly_cloudy_puresky.hdr" id="m_sky"]
 
 [sub_resource type="BoxShape3D" id="box_lowgrav"]
 size = Vector3(14, 12, 14)
 
-[sub_resource type="StandardMaterial3D" id="mat_steel"]
-albedo_color = Color(0.32, 0.36, 0.42, 1)
-metallic = 0.4
-roughness = 0.5
-
-[sub_resource type="StandardMaterial3D" id="mat_platform"]
-albedo_color = Color(0.45, 0.48, 0.55, 1)
-metallic = 0.3
-roughness = 0.4
-
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat_s"]
-sky_horizon_color = Color(0.32, 0.45, 0.6, 1)
-ground_horizon_color = Color(0.18, 0.2, 0.25, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat_s"]
+panorama = ExtResource("m_sky")
 
 [sub_resource type="Sky" id="sky_s"]
 sky_material = SubResource("sky_mat_s")
@@ -48,77 +40,77 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(60, 1, 60)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="MiddlePlatformNorth" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, -18)
 use_collision = true
 collision_layer = 1
 size = Vector3(20, 0.6, 14)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="MiddlePlatformSouth" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
 use_collision = true
 collision_layer = 1
 size = Vector3(20, 0.6, 14)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="UpperPlatform" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(12, 0.6, 12)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="RampN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.949, 0.316, 0, -0.316, 0.949, 0, 2, -10)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 0.4, 8)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="RampS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.949, -0.316, 0, 0.316, 0.949, 0, 2, 10)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 0.4, 8)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="RampMid" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.949, 0.316, 0, -0.316, 0.949, 5, 6, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(3, 0.4, 6)
-material = SubResource("mat_platform")
+material = ExtResource("m_paintedmetal")
 
 [node name="WallN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -30)
 use_collision = true
 collision_layer = 1
 size = Vector3(60, 6, 1)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 30)
 use_collision = true
 collision_layer = 1
 size = Vector3(60, 6, 1)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallE" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 60)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 60)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="FuelTank1" type="CSGCylinder3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 1.5, -10)
@@ -126,7 +118,7 @@ use_collision = true
 collision_layer = 1
 radius = 1.5
 height = 3.0
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="FuelTank2" type="CSGCylinder3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 1.5, 10)
@@ -134,7 +126,7 @@ use_collision = true
 collision_layer = 1
 radius = 1.5
 height = 3.0
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="SpawnPoints" type="Node3D" parent="."]
 

@@ -1,23 +1,14 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/ground.tres" id="m_ground"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/concrete.tres" id="m_concrete"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/rust.tres" id="m_rust"]
+[ext_resource type="Texture2D" uid="uid://cehvq5htyiah7" path="res://assets/textures/sky/kloofendal_48d_partly_cloudy_puresky.hdr" id="m_sky"]
 
-[sub_resource type="StandardMaterial3D" id="mat_floor"]
-albedo_color = Color(0.4, 0.37, 0.3, 1)
-roughness = 0.9
-
-[sub_resource type="StandardMaterial3D" id="mat_wall"]
-albedo_color = Color(0.33, 0.3, 0.25, 1)
-roughness = 0.8
-
-[sub_resource type="StandardMaterial3D" id="mat_cover"]
-albedo_color = Color(0.5, 0.46, 0.36, 1)
-
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat_ls"]
-sky_horizon_color = Color(0.62, 0.6, 0.5, 1)
-ground_horizon_color = Color(0.45, 0.4, 0.32, 1)
-sky_top_color = Color(0.5, 0.62, 0.78, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat_ls"]
+panorama = ExtResource("m_sky")
 
 [sub_resource type="Sky" id="sky_ls"]
 sky_material = SubResource("sky_mat_ls")
@@ -46,105 +37,105 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(96, 1, 50)
-material = SubResource("mat_floor")
+material = ExtResource("m_ground")
 
 [node name="WallN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -25)
 use_collision = true
 collision_layer = 1
 size = Vector3(96, 6, 1)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 25)
 use_collision = true
 collision_layer = 1
 size = Vector3(96, 6, 1)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallE" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 50)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 50)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="Spine_A" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -37.25, 2, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(21.5, 4, 1.4)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="Spine_B" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 2, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(19, 4, 1.4)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="Spine_C" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 2, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(19, 4, 1.4)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="Spine_D" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 37.25, 2, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(21.5, 4, 1.4)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="CoverN1" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -28, 1, -13)
 use_collision = true
 collision_layer = 1
 size = Vector3(3, 2, 3)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="CoverN2" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 1, -13)
 use_collision = true
 collision_layer = 1
 size = Vector3(3, 2, 3)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="CoverN3" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 1.5, 2.5)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="CoverS1" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -28, 1, 13)
 use_collision = true
 collision_layer = 1
 size = Vector3(3, 2, 3)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="CoverS2" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 1, 13)
 use_collision = true
 collision_layer = 1
 size = Vector3(3, 2, 3)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="CoverS3" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 1.5, 2.5)
-material = SubResource("mat_cover")
+material = ExtResource("m_rust")
 
 [node name="SpawnPoints" type="Node3D" parent="."]
 

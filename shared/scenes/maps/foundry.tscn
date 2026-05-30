@@ -1,17 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
-
-[sub_resource type="StandardMaterial3D" id="mat_floor"]
-albedo_color = Color(0.24, 0.23, 0.25, 1)
-metallic = 0.2
-roughness = 0.8
-
-[sub_resource type="StandardMaterial3D" id="mat_steel"]
-albedo_color = Color(0.34, 0.35, 0.4, 1)
-metallic = 0.5
-roughness = 0.45
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/concrete.tres" id="m_concrete"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/metalplates.tres" id="m_metalplates"]
+[ext_resource type="Texture2D" uid="uid://43difd8vu2l1" path="res://assets/textures/sky/industrial_sunset_puresky.hdr" id="m_sky"]
 
 [sub_resource type="StandardMaterial3D" id="mat_ember"]
 albedo_color = Color(0.7, 0.34, 0.12, 1)
@@ -19,10 +12,8 @@ emission_enabled = true
 emission = Color(0.85, 0.35, 0.1, 1)
 emission_energy_multiplier = 0.6
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat_fd"]
-sky_horizon_color = Color(0.4, 0.28, 0.22, 1)
-ground_horizon_color = Color(0.2, 0.15, 0.13, 1)
-sky_top_color = Color(0.15, 0.12, 0.15, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat_fd"]
+panorama = ExtResource("m_sky")
 
 [sub_resource type="Sky" id="sky_fd"]
 sky_material = SubResource("sky_mat_fd")
@@ -51,70 +42,70 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(70, 1, 70)
-material = SubResource("mat_floor")
+material = ExtResource("m_concrete")
 
 [node name="WallN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -35)
 use_collision = true
 collision_layer = 1
 size = Vector3(70, 6, 1)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallS" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 35)
 use_collision = true
 collision_layer = 1
 size = Vector3(70, 6, 1)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallE" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 70)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="WallW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -35, 3, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 70)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="CornerNE" type="CSGBox3D" parent="."]
 transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 30, 3, -30)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 14)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="CornerNW" type="CSGBox3D" parent="."]
 transform = Transform3D(0.707, 0, -0.707, 0, 1, 0, 0.707, 0, 0.707, -30, 3, -30)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 14)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="CornerSE" type="CSGBox3D" parent="."]
 transform = Transform3D(0.707, 0, -0.707, 0, 1, 0, 0.707, 0, 0.707, 30, 3, 30)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 14)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="CornerSW" type="CSGBox3D" parent="."]
 transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, -30, 3, 30)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 6, 14)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="Dais" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(16, 1.2, 16)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="DaisCover" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.95, 5)
@@ -128,28 +119,28 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 3, -18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 6, 4)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="PillarNW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 3, -18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 6, 4)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="PillarSE" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 3, 18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 6, 4)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="PillarSW" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 3, 18)
 use_collision = true
 collision_layer = 1
 size = Vector3(4, 6, 4)
-material = SubResource("mat_steel")
+material = ExtResource("m_metalplates")
 
 [node name="ContainerN" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, -18)

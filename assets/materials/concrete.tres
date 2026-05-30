@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" load_steps=4 format=3]
+
+[ext_resource type="Texture2D" uid="uid://cie82d87orfa2" path="res://assets/textures/pbr/concrete/concrete_color.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://buo8r2wk64856" path="res://assets/textures/pbr/concrete/concrete_normal.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://bd6o3qybtbq1l" path="res://assets/textures/pbr/concrete/concrete_rough.png" id="3"]
+
+[resource]
+albedo_texture = ExtResource("1")
+normal_enabled = true
+normal_texture = ExtResource("2")
+roughness_texture = ExtResource("3")
+uv1_scale = Vector3(4, 4, 4)

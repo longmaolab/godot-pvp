@@ -1,20 +1,16 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://shared/scripts/world/jump_pad.gd" id="1_jump"]
 [ext_resource type="Script" path="res://shared/scripts/world/pickup.gd" id="2_pickup"]
-
-[sub_resource type="StandardMaterial3D" id="mat_floor"]
-albedo_color = Color(0.38, 0.34, 0.22, 1)
-
-[sub_resource type="StandardMaterial3D" id="mat_wall"]
-albedo_color = Color(0.22, 0.2, 0.18, 1)
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/ground.tres" id="m_ground"]
+[ext_resource type="StandardMaterial3D" path="res://assets/materials/concrete.tres" id="m_concrete"]
+[ext_resource type="Texture2D" uid="uid://cehvq5htyiah7" path="res://assets/textures/sky/kloofendal_48d_partly_cloudy_puresky.hdr" id="m_sky"]
 
 [sub_resource type="StandardMaterial3D" id="mat_crate"]
 albedo_color = Color(0.55, 0.45, 0.3, 1)
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat_bf"]
-sky_horizon_color = Color(0.55, 0.48, 0.35, 1)
-ground_horizon_color = Color(0.4, 0.32, 0.22, 1)
+[sub_resource type="PanoramaSkyMaterial" id="sky_mat_bf"]
+panorama = ExtResource("m_sky")
 
 [sub_resource type="Sky" id="sky_bf"]
 sky_material = SubResource("sky_mat_bf")
@@ -43,35 +39,35 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(100, 1, 100)
-material = SubResource("mat_floor")
+material = ExtResource("m_ground")
 
 [node name="WallNorth" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -50)
 use_collision = true
 collision_layer = 1
 size = Vector3(100, 5, 1)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallSouth" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 50)
 use_collision = true
 collision_layer = 1
 size = Vector3(100, 5, 1)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallEast" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 2.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 5, 100)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="WallWest" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 2.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 5, 100)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="Crate1" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1, -8)
@@ -106,21 +102,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 use_collision = true
 collision_layer = 1
 size = Vector3(10, 3, 1)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="LongWall2" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 1.5, -25)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 3, 12)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="LongWall3" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 1.5, 25)
 use_collision = true
 collision_layer = 1
 size = Vector3(1, 3, 12)
-material = SubResource("mat_wall")
+material = ExtResource("m_concrete")
 
 [node name="SpawnPoints" type="Node3D" parent="."]
 
