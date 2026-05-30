@@ -107,6 +107,20 @@ EOF
   find docs -name "*.import" -delete 2>/dev/null || true
   # 同步 server.json 到 docs/(Caddy 同源 fetch 用)
   cp server.json docs/server.json
+
+  # 给 index.html 里引用的 splash/icon png 加版本号 ?v=<hash>。
+  # 原因:这些 png 走 Cloudflare 边缘缓存(默认对图片 max-age 4h,还覆盖
+  # origin 的 Cache-Control),改了 boot splash 也看到旧机器人。index.html
+  # 本身是 no-cache(Caddy header,CF 不缓存 html),所以浏览器每次拿新 html,
+  # 只要 png 的 URL 带新 hash,CF 就 MISS → 拿到新图。无需手动 purge CF。
+  BUST="$(git rev-parse --short HEAD)"
+  sed -i '' \
+    -e "s|src=\"index.png\"|src=\"index.png?v=$BUST\"|g" \
+    -e "s|href=\"index.icon.png\"|href=\"index.icon.png?v=$BUST\"|g" \
+    -e "s|href=\"index.apple-touch-icon.png\"|href=\"index.apple-touch-icon.png?v=$BUST\"|g" \
+    docs/index.html
+  echo "→ splash/icon 加缓存版本号 ?v=$BUST"
+
   echo "✓ Export 完成"
   echo ""
 else
