@@ -198,6 +198,29 @@ static var _reload_wav: AudioStreamWAV = null
 # it reads as life, not seasickness. Local human only.
 @onready var weapon_visual: Node3D = get_node_or_null(^"Head/Camera3D/WeaponVisual")
 var _vm_rest_pos: Vector3 = Vector3.ZERO
+
+# ── First-person weapon view-model (GLB) ──────────────────────────────────
+# Local human only. The procedural box gun (GunBody/Barrel/Grip in the .tscn)
+# is hidden and a Kenney Blaster Kit GLB is shown instead, picked by weapon
+# category. These 3 constants are the placement knobs — tune from a screenshot.
+const VIEW_MODEL_SCALE := 0.5
+const VIEW_MODEL_OFFSET := Vector3(0.0, -0.04, 0.12)   # local to WeaponVisual
+const VIEW_MODEL_YAW := PI                              # face barrel forward (-Z)
+const _VIEW_MODEL_DIR := "res://assets/models/weapons/glb/"
+# type_label keyword (lowercase substring) → blaster GLB. First match wins;
+# order matters (check specific before generic). Falls through to default AR.
+const _VIEW_MODEL_TABLE := [
+	["sniper", "blaster-h"], ["anti-material", "blaster-h"], ["railgun", "blaster-h"],
+	["shotgun", "blaster-l"],
+	["smg", "blaster-c"], ["pdw", "blaster-c"],
+	["pistol", "blaster-a"], ["secondary", "blaster-a"], ["revolver", "blaster-a"],
+	["beam", "blaster-e"], ["laser", "blaster-e"], ["arc", "blaster-e"],
+	["lightning", "blaster-e"], ["plasma", "blaster-e"], ["energy", "blaster-e"],
+	["bow", "blaster-r"], ["launcher", "blaster-r"], ["rocket", "blaster-r"],
+	["explosive", "blaster-r"], ["knockback", "blaster-r"], ["throwable", "blaster-r"],
+	["lmg", "blaster-n"], ["heavy", "blaster-n"], ["minigun", "blaster-n"],
+]
+var _vm_instance: Node3D = null   # currently-shown GLB (freed on weapon swap)
 var _vm_bob_phase: float = 0.0
 var _vm_kick: float = 0.0
 var _vm_prev_yaw: float = 0.0
@@ -279,6 +302,8 @@ func _ready() -> void:
 		_sync_ammo_from_state()
 	hp_changed.emit(hp, max_hp)
 	ammo_changed.emit(ammo_in_mag, ammo_reserve)
+	# Show the GLB view-model for the starting weapon (local human only).
+	_apply_view_model()
 
 	# Tag hitboxes with reference to owner — used by raycast hit lookup.
 	head_hitbox.set_meta(&"owner_player", self)
@@ -434,6 +459,60 @@ func _equip_resource(new_weapon: Resource) -> void:
 	time_until_next_shot = 0.0
 	weapon_switched.emit(new_weapon)
 	ammo_changed.emit(ammo_in_mag, ammo_reserve)
+	_apply_view_model()
+
+
+## Pick the first-person GLB for a weapon: explicit view_model override wins,
+## else first keyword match on type_label, else default AR blaster.
+func _resolve_view_model(weapon: Resource) -> String:
+	if weapon == null:
+		return ""
+	if "view_model" in weapon and String(weapon.view_model) != "":
+		return String(weapon.view_model)
+	var label: String = String(weapon.type_label).to_lower()
+	for pair in _VIEW_MODEL_TABLE:
+		if label.find(pair[0]) != -1:
+			return pair[1]
+	return "blaster-d"   # default assault rifle silhouette
+
+
+## Swap the held GLB to match weapon_def. Local human only — bots / remote
+## ghosts / the DS never render a first-person weapon, so we skip them (avoids
+## spawning 96 GLBs server-side). Hides the procedural box gun when a GLB shows.
+func _apply_view_model() -> void:
+	if not (is_local and is_human_input) or weapon_visual == null:
+		return
+	if _vm_instance != null and is_instance_valid(_vm_instance):
+		# remove_child first so the "_ViewModel" name frees up immediately —
+		# otherwise the new instance added this frame collides and Godot
+		# auto-renames it while queue_free is still pending.
+		weapon_visual.remove_child(_vm_instance)
+		_vm_instance.queue_free()
+		_vm_instance = null
+	var model_name: String = _resolve_view_model(weapon_def)
+	var procedural := ["GunBody", "GunBarrel", "GunGrip"]
+	if model_name == "":
+		for n in procedural:
+			var box: Node = weapon_visual.get_node_or_null(n)
+			if box is Node3D: (box as Node3D).visible = true
+		return
+	var path: String = _VIEW_MODEL_DIR + model_name + ".glb"
+	if not ResourceLoader.exists(path):
+		return   # missing model → keep procedural gun visible
+	var scene: PackedScene = load(path) as PackedScene
+	if scene == null:
+		return
+	# Hide procedural boxes only once we know the GLB loaded.
+	for n in procedural:
+		var box: Node = weapon_visual.get_node_or_null(n)
+		if box is Node3D: (box as Node3D).visible = false
+	var inst: Node3D = scene.instantiate() as Node3D
+	inst.name = "_ViewModel"
+	weapon_visual.add_child(inst)
+	inst.position = VIEW_MODEL_OFFSET
+	inst.rotation = Vector3(0, VIEW_MODEL_YAW, 0)
+	inst.scale = Vector3(VIEW_MODEL_SCALE, VIEW_MODEL_SCALE, VIEW_MODEL_SCALE)
+	_vm_instance = inst
 
 
 func _sync_ammo_from_state() -> void:

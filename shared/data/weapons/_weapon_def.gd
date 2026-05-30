@@ -15,6 +15,9 @@ const SLOT_SUPPORT   := &"support"
 @export var type_label: String = ""        # e.g. "AR", "Shotgun+", "Sniper"
 @export var slot: StringName = SLOT_PRIMARY
 @export_multiline var description: String = ""   # shown to user in menus
+## Optional first-person view-model GLB name (e.g. "blaster-h"). Empty = let
+## PlayerController pick one by weapon category from its lookup table.
+@export var view_model: StringName = &""
 
 @export_group("Damage")
 @export var damage: float = 25.0
