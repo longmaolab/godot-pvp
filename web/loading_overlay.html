@@ -1,0 +1,150 @@
+<!-- DADABOOM animated loading overlay. Injected into docs/index.html by
+     deploy.sh right before </body>. Enhances the Godot status overlay with
+     a combat-themed canvas animation (drifting embers + bullet tracers +
+     radar sweep), a glowing logo, tactical corner brackets, and an
+     "ENTERING ARENA" line. Pure add-on — never touches Godot's init. -->
+<style>
+  /* The Godot loading overlay container. */
+  #status { background: radial-gradient(120% 90% at 50% 40%, #0b1422 0%, #060a12 70%, #03050a 100%) !important; }
+  /* Canvas sits behind the splash logo. */
+  #db-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  /* Logo: float + cyan/orange glow pulse. */
+  #status-splash {
+    z-index: 2;
+    filter: drop-shadow(0 0 18px rgba(60,170,255,.55)) drop-shadow(0 0 34px rgba(255,140,40,.30));
+    animation: db-logo 2.6s ease-in-out infinite;
+  }
+  @keyframes db-logo {
+    0%,100% { transform: translateY(0) scale(1);    filter: drop-shadow(0 0 16px rgba(60,170,255,.5))  drop-shadow(0 0 30px rgba(255,140,40,.25)); }
+    50%     { transform: translateY(-6px) scale(1.015); filter: drop-shadow(0 0 26px rgba(90,200,255,.75)) drop-shadow(0 0 46px rgba(255,150,50,.45)); }
+  }
+  /* Themed progress bar. */
+  #status-progress {
+    z-index: 2; width: 46% !important; height: 6px !important;
+    -webkit-appearance: none; appearance: none;
+    border: 1px solid rgba(80,170,255,.4); border-radius: 4px;
+    background: rgba(255,255,255,.06); overflow: hidden;
+    box-shadow: 0 0 14px rgba(60,160,255,.35);
+  }
+  #status-progress::-webkit-progress-bar { background: transparent; }
+  #status-progress::-webkit-progress-value {
+    background: linear-gradient(90deg, #34c3ff, #6ad6ff, #ffae4f);
+    box-shadow: 0 0 12px rgba(90,200,255,.8); border-radius: 4px;
+  }
+  #status-progress::-moz-progress-bar {
+    background: linear-gradient(90deg, #34c3ff, #ffae4f); border-radius: 4px;
+  }
+  /* "ENTERING ARENA" line under the logo. */
+  #db-load-text {
+    position: absolute; left: 0; right: 0; top: 62%; z-index: 2; text-align: center;
+    font-family: 'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    letter-spacing: 5px; font-weight: 700; font-size: clamp(12px, 2.4vw, 18px);
+    color: #bfe3ff; text-shadow: 0 0 10px rgba(60,170,255,.6); text-transform: uppercase;
+  }
+  #db-load-text .dots::after { content: ''; animation: db-dots 1.4s steps(4,end) infinite; }
+  @keyframes db-dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} 100%{content:''} }
+  /* Tactical scope corner brackets framing the viewport. */
+  .db-corner { position: absolute; width: 46px; height: 46px; z-index: 2; border: 2px solid rgba(90,180,255,.55); }
+  .db-tl { top: 18px; left: 18px; border-right: 0; border-bottom: 0; }
+  .db-tr { top: 18px; right: 18px; border-left: 0; border-bottom: 0; }
+  .db-bl { bottom: 18px; left: 18px; border-right: 0; border-top: 0; }
+  .db-br { bottom: 18px; right: 18px; border-left: 0; border-top: 0; }
+</style>
+<script>
+(function () {
+  function boot() {
+    var status = document.getElementById('status');
+    if (!status) { return setTimeout(boot, 60); }
+    if (document.getElementById('db-fx')) { return; }
+
+    // Canvas behind the splash.
+    var cv = document.createElement('canvas'); cv.id = 'db-fx';
+    status.insertBefore(cv, status.firstChild);
+    var ctx = cv.getContext('2d');
+
+    // Corner brackets + loading text.
+    ['db-tl','db-tr','db-bl','db-br'].forEach(function (c) {
+      var d = document.createElement('div'); d.className = 'db-corner ' + c; status.appendChild(d);
+    });
+    var txt = document.createElement('div'); txt.id = 'db-load-text';
+    txt.innerHTML = '⟢ ENTERING ARENA ⟣<span class="dots"></span>';
+    status.appendChild(txt);
+
+    var W = 0, H = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    function resize() {
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // Drifting embers (team colours).
+    var embers = [];
+    for (var i = 0; i < 46; i++) {
+      embers.push({
+        x: Math.random()*W, y: Math.random()*H,
+        r: Math.random()*1.8 + 0.6, vx: (Math.random()-0.5)*0.18, vy: -(Math.random()*0.35+0.12),
+        a: Math.random()*0.5+0.2, warm: Math.random() < 0.4
+      });
+    }
+    // Bullet tracers fired periodically across the screen.
+    var tracers = []; var nextTracer = 0; var frame = 0;
+
+    function loop() {
+      if (!document.getElementById('db-fx')) { return; } // overlay removed → stop
+      frame++;
+      ctx.clearRect(0,0,W,H);
+
+      // Tactical grid (faint, slow drift).
+      ctx.strokeStyle = 'rgba(70,150,230,0.05)'; ctx.lineWidth = 1;
+      var g = 46, off = (frame*0.25) % g;
+      ctx.beginPath();
+      for (var gx = -off; gx < W; gx += g) { ctx.moveTo(gx,0); ctx.lineTo(gx,H); }
+      for (var gy = -off; gy < H; gy += g) { ctx.moveTo(0,gy); ctx.lineTo(W,gy); }
+      ctx.stroke();
+
+      // Radar sweep around centre.
+      var cx = W/2, cy = H*0.42, R = Math.max(W,H)*0.5;
+      var ang = (frame*0.012) % (Math.PI*2);
+      var grad = ctx.createConicGradient ? null : null;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
+      var lin = ctx.createLinearGradient(0,0,R,0);
+      lin.addColorStop(0,'rgba(80,190,255,0.18)'); lin.addColorStop(1,'rgba(80,190,255,0)');
+      ctx.fillStyle = lin; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,-0.18,0.02); ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      // Embers.
+      embers.forEach(function (p) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.y < -4) { p.y = H+4; p.x = Math.random()*W; }
+        if (p.x < -4) p.x = W+4; if (p.x > W+4) p.x = -4;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle = p.warm ? 'rgba(255,160,60,'+p.a+')' : 'rgba(90,200,255,'+p.a+')';
+        ctx.fill();
+      });
+
+      // Spawn + draw tracers.
+      if (frame > nextTracer) {
+        nextTracer = frame + 70 + Math.random()*120;
+        var fromLeft = Math.random() < 0.5;
+        var y0 = Math.random()*H*0.8 + H*0.1;
+        tracers.push({ x: fromLeft?-60:W+60, y: y0, vx: (fromLeft?1:-1)*(11+Math.random()*7), warm: Math.random()<0.4, life: 0 });
+      }
+      tracers = tracers.filter(function (t) {
+        t.x += t.vx; t.life++;
+        var len = 90;
+        var col = t.warm ? '255,170,70' : '90,210,255';
+        var lg = ctx.createLinearGradient(t.x,0,t.x-Math.sign(t.vx)*len,0);
+        lg.addColorStop(0,'rgba('+col+',0.9)'); lg.addColorStop(1,'rgba('+col+',0)');
+        ctx.strokeStyle = lg; ctx.lineWidth = 2.2; ctx.beginPath();
+        ctx.moveTo(t.x,t.y); ctx.lineTo(t.x-Math.sign(t.vx)*len,t.y); ctx.stroke();
+        return t.x > -120 && t.x < W+120;
+      });
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>

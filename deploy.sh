@@ -121,6 +121,22 @@ EOF
     docs/index.html
   echo "→ splash/icon 加缓存版本号 ?v=$BUST"
 
+  # 注入战斗主题的加载页动画(web/loading_overlay.html → 在 </body> 前)。
+  # canvas 粒子/曳光弹 + 雷达扫描 + logo 辉光 + 战术边框,纯增强不碰 Godot init。
+  if [ -f web/loading_overlay.html ]; then
+    python3 - <<'PYEOF'
+import io
+html = open("docs/index.html", encoding="utf-8").read()
+overlay = open("web/loading_overlay.html", encoding="utf-8").read()
+if "db-fx" not in html:   # idempotent
+    html = html.replace("</body>", overlay + "\n</body>", 1)
+    open("docs/index.html","w",encoding="utf-8").write(html)
+    print("→ 注入加载页动画 overlay")
+else:
+    print("→ 加载页动画已存在,跳过")
+PYEOF
+  fi
+
   echo "✓ Export 完成"
   echo ""
 else
