@@ -14,8 +14,10 @@ extends Node
 ## fixed tick for 30Hz snapshots + physics.
 
 const FPS_UNFOCUSED := 8
-const FPS_MENU := 30
-const FPS_PLAY_WEB := 60
+const FPS_MENU := 20         # a static menu doesn't need 30 — 20 cuts menu CPU ~33%
+const FPS_PLAY_WEB := 60     # gameplay stays 60 until the perf overlay proves the
+                             # machine can't sustain it (capping below the actual
+                             # frame-rate does nothing but hurt feel)
 const FPS_PLAY_NATIVE := 0   # 0 = uncapped (let vsync rule) on desktop
 
 var _focused: bool = true

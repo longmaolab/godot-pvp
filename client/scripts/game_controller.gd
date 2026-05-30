@@ -127,29 +127,13 @@ func _ready() -> void:
 		var fg: Node = get_node_or_null(^"/root/FpsGovernor")
 		if fg != null and fg.has_method(&"set_playing"):
 			fg.set_playing(true)
-		# Web: render the 3D viewport at a reduced scale (upscaled to the canvas).
-		# The 2D HUD/UI still draws at full canvas res so text stays crisp.
-		# This is the real heat lever: on a large/HiDPI canvas (e.g. a 5K Mac in
-		# Safari, whose WebGL is slow) full-res 3D pegs the single WASM core.
-		# Earlier this only ran on touch devices, so DESKTOP web (the exact 5K
-		# case) kept native 3D and the fan spun — that was the bug.
-		# Scale adapts to canvas pixel count: the bigger the backing store, the
-		# harder we cut 3D. UI/text untouched.
-		if OS.has_feature("web"):
-			var vp: Viewport = get_viewport()
-			var px: float = float(vp.size.x) * float(vp.size.y)
-			var scale_3d: float = 0.7
-			if DisplayServer.is_touchscreen_available():
-				scale_3d = 0.7                      # phones — already tuned
-			elif px > 3_500_000.0:
-				scale_3d = 0.55                     # 5K / huge desktop canvas
-			elif px > 2_000_000.0:
-				scale_3d = 0.65                     # 1440p+ desktop
-			else:
-				scale_3d = 0.8                      # small desktop window
-			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-			vp.scaling_3d_scale = scale_3d
-			print("[perf] web 3D render scale = %.2f (viewport %dx%d)" % [scale_3d, vp.size.x, vp.size.y])
+		# NOTE: do NOT try to cut 3D cost here with Viewport.scaling_3d_scale —
+		# web runs the GL Compatibility renderer (WebGL2 has no Vulkan), and
+		# Compatibility silently IGNORES scaling_3d_scale. It was dead code on
+		# web for every build. The real heat levers on web are the frame-rate
+		# cap (FpsGovernor) and per-frame work (draw calls / physics), not
+		# render resolution — the WASM main thread is CPU-bound, not fill-bound
+		# (both Chrome and Safari peg a full core identically).
 
 		# Mobile touch overlay — self-hides on desktop, auto-shows on touch.
 		add_child(TOUCH_CONTROLS_SCENE.instantiate())
