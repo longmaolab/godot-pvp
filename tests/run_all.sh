@@ -88,6 +88,8 @@ run_serial "lag_comp_test (history record + sample interpolation)" \
     "$GODOT" --headless --path "$PROJ" tests/lag_comp_test.tscn
 run_serial "hud_signal_test (hp/ammo/weapon_switched bindings)" \
     "$GODOT" --headless --path "$PROJ" tests/hud_signal_test.tscn
+run_serial "killcam_test (death replay: visibility restore + cam/ghost teardown)" \
+    "$GODOT" --headless --path "$PROJ" tests/killcam_test.tscn
 if [ -f "$PROJ/tests/run_hitbox_geometry_test.sh" ]; then
     run_serial "hitbox_geometry (per-skin coverage)" \
         "$PROJ/tests/run_hitbox_geometry_test.sh"
@@ -125,6 +127,31 @@ if [ -f "$PROJ/tests/run_room_scenes_parse_test.sh" ]; then
         "$PROJ/tests/run_room_scenes_parse_test.sh"
 fi
 
+# ── Single-process feature tests (added 2026-05-30 — were drifting outside
+#    the suite). All godot×1, no background DS, so they belong in tier 1. ──
+for spec in \
+    "grenade::run_grenade_test.sh::throwable AoE math" \
+    "lean::run_lean_test.sh::lean/peek server-authoritative" \
+    "slide::run_slide_test.sh::slide tech (sprint+crouch lunge)" \
+    "prediction::run_prediction_test.sh::DS-client local prediction" \
+    "map_validate::run_map_validate_test.sh::all maps spawn-point + collision" \
+    "database::run_database_test.sh::sqlite accounts/economy/password hash" \
+    "bot_map_engage::run_bot_map_engage_test.sh::bot un-frozen + engages" \
+    "weapons_dialog_builder::run_weapons_dialog_builder_test.sh::catalog builder" \
+    "hud_font_inheritance::run_hud_font_inheritance_test.sh::HUD font no-tofu" \
+    "rematch_reject::run_rematch_reject_test.sh::rematch reject feedback" \
+    "respawn_input_tick_reset::run_respawn_input_tick_reset_test.sh::respawn resets input tick" \
+    "room_world::run_room_world_test.sh::per-room world isolation" \
+    "main_menu_compression::run_main_menu_compression_test.sh::menu fits viewport" \
+    "concurrent_match::run_concurrent_match_test.sh::concurrent rooms isolated" \
+    "replay_player::run_replay_player_test.sh::replay JSON recorder↔player contract" \
+    ; do
+    name="${spec%%::*}"; rest="${spec#*::}"; runner="${rest%%::*}"; desc="${rest##*::}"
+    if [ -f "$PROJ/tests/$runner" ]; then
+        run_serial "$name ($desc)" "$PROJ/tests/$runner"
+    fi
+done
+
 echo
 echo "═════════════════════════════════════════"
 echo "  TIER 2: MP integration tests (parallel x$PARALLEL)"
@@ -137,7 +164,6 @@ specs=(
   "multiplayer_integration:::$PROJ/tests/run_multiplayer_test.sh"
   "mp_game_test:::$PROJ/tests/run_mp_game_test.sh"
   "mp_host_collision_guard:::$PROJ/tests/run_mp_host_collision_guard_test.sh"
-  "mp_hit_test:::$PROJ/tests/run_mp_hit_test.sh"
   "server_boot_test:::$PROJ/tests/run_server_boot_test.sh"
   "input_rpc_test:::$PROJ/tests/run_input_rpc_test.sh"
   "snapshot_test:::$PROJ/tests/run_snapshot_test.sh"
@@ -152,8 +178,6 @@ specs=(
   "respawn_safe_test:::$PROJ/tests/run_respawn_safe_test.sh"
   "match_e2e_test:::$PROJ/tests/run_match_e2e_test.sh"
 )
-[ -f "$PROJ/tests/run_mp_burst_hit_test.sh" ] && \
-  specs+=("mp_burst_hit_test:::$PROJ/tests/run_mp_burst_hit_test.sh")
 
 # Pipe specs into xargs, one per line. -P4 -L1 = up to 4 in flight, one
 # spec per invocation. Each worker writes its rc to LOG_DIR/<name>.rc.

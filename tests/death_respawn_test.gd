@@ -48,10 +48,19 @@ func _run_test() -> void:
 	if not p.is_dead:
 		_fail("player should be dead after 9999 damage")
 		return
-	if p.visible:
-		_fail("dead player should be invisible")
+	# NOTE (2026-05-30): _die() no longer hides the body instantly — the
+	# corpse-drop feel feature (killcam-era) keeps the corpse VISIBLE for
+	# CORPSE_LINGER (2.2s) playing the death anim, THEN hides it. So the
+	# correct death-state invariant to assert immediately is `is_dead`, not
+	# `visible`. We separately confirm the corpse DOES hide after the linger
+	# below, so the eventual-invisibility guarantee is still covered.
+	print("  [ok] died: is_dead set (corpse lingers ~%.1fs by design)" % p.get("CORPSE_LINGER"))
+	# Wait out the corpse linger + a margin, confirm the body hides.
+	await get_tree().create_timer(float(p.get("CORPSE_LINGER")) + 0.4).timeout
+	if is_instance_valid(p) and p.is_dead and p.visible:
+		_fail("corpse never hid after CORPSE_LINGER — drop-then-vanish broken")
 		return
-	print("  [ok] died signal fired without HUD signature error")
+	print("  [ok] corpse hidden after linger window")
 
 	# 3. Verify respawn restores state cleanly.
 	# Pre-decrement ammo to confirm respawn refills it.

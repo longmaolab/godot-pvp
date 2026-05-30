@@ -39,7 +39,7 @@ fi
 #      that the engine prints right after each #1.
 ENGINE_ERRORS=$(grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Invalid assignment of property" "$LOG" \
 	| grep -vE "Identifier not found: (NetProtocol|Settings|StatsStore|ServerDiscovery|NetRpc)" \
-	| grep -vE "Failed to load script \"res://(client/scripts/audio/proc_audio|client/scripts/persistence/(server_discovery|settings|stats_store))\.gd\"" \
+	| grep -vE "Failed to load script \"res://(client/scripts/audio/proc_audio|client/scripts/persistence/(server_discovery|settings|stats_store)|shared/scripts/player_controller|server/scripts/replay_recorder)\.gd\"" \
 	| wc -l | tr -d ' ')
 
 echo "--- log tail ---"

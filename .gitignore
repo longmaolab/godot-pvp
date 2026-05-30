@@ -26,3 +26,11 @@ builds/
 
 # deploy.sh 并发锁目录(防多 session 同时 deploy)
 .deploy.lock/
+
+# Source art bundles (DADABOOM UI kit) — build inputs, not needed in the repo.
+# The downscaled PNGs they produce (assets/ui/generated/*.png) ARE tracked; the
+# multi-MB source originals + zips are not.
+assets/ui/*.zip
+assets/ui/generated/_preview/
+assets/ui/generated/maps/
+assets/ui/generated/*_source.png
