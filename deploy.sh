@@ -9,6 +9,30 @@ set -e
 
 cd "$(dirname "$0")"
 
+# ---- 0. 并发锁(防多 session 同时 deploy 互相踩工作树) ----
+# 多个 session 并发 deploy 会争 .godot/exported、git index、VPS 工作树,
+# 产物可能不对。用原子 mkdir 锁(macOS 没有 flock(1))。带 stale 检测:
+# 持锁进程若已死(kill -9 没触发 trap 清理),自动抢锁继续。
+LOCK_DIR=".deploy.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  OTHER_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || echo '?')"
+  if [ "$OTHER_PID" != "?" ] && kill -0 "$OTHER_PID" 2>/dev/null; then
+    echo "⛔ 已有 deploy 在跑 (PID $OTHER_PID)。等它结束,或先 kill 再试。"
+    echo "   (这正是之前 13 个 deploy 并发卡死的场景,现在被锁拦下了)"
+    exit 1
+  fi
+  echo "⚠️  发现残留锁 (PID $OTHER_PID 已不在),抢锁继续。"
+  rm -rf "$LOCK_DIR"; mkdir "$LOCK_DIR"
+fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
+# ---- SSH keepalive(防半开死连接) ----
+# 之前 ssh import 步骤会变成半开连接:VPS 端早跑完,本地 ssh 收不到关闭信号
+# 永远挂着,deploy 僵死 1+ 小时。ServerAliveInterval 让本地每 15s 探一次,
+# 连续 4 次(60s)无响应就主动断开,deploy 才能 set -e 退出 + 释放锁。
+SSH_OPTS=(-o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
 # ---- 配置(改服务器时改这里) ----
 SERVER_HOST="${PVP_SERVER_HOST:-root@207.148.98.206}"
 SERVER_PATH="${PVP_SERVER_PATH:-/opt/games/godot-pvp}"
@@ -127,13 +151,13 @@ git push
 # (c) import + VPS 端 brotli q11 重压 + 重启 DS。
 echo ""
 echo "→ (a) VPS 拉代码 ..."
-ssh "$SERVER_HOST" "cd '$SERVER_PATH' && git pull --rebase 2>&1 | tail -2"
+ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "cd '$SERVER_PATH' && git pull --rebase 2>&1 | tail -2"
 
 echo "→ (b) rsync web 构建 → VPS:docs/ ..."
-rsync -az --exclude='*.br' docs/ "$SERVER_HOST:$SERVER_PATH/docs/"
+rsync -az -e "ssh ${SSH_OPTS[*]}" --exclude='*.br' docs/ "$SERVER_HOST:$SERVER_PATH/docs/"
 
 echo "→ (c) VPS import + brotli + 重启 ..."
-ssh "$SERVER_HOST" "cd '$SERVER_PATH' \
+ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "cd '$SERVER_PATH' \
   && godot --headless --path . --import 2>&1 | tail -3 \
   && brotli -q 11 -f docs/index.pck -o docs/index.pck.br \
   && brotli -q 11 -f docs/index.wasm -o docs/index.wasm.br \

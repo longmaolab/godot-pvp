@@ -23,3 +23,6 @@ docs/
 !.agent/codexreview.md
 fix-local-camera-current.patch
 builds/
+
+# deploy.sh 并发锁目录(防多 session 同时 deploy)
+.deploy.lock/
