@@ -121,35 +121,32 @@ EOF
     docs/index.html
   echo "→ splash/icon 加缓存版本号 ?v=$BUST"
 
-  # 关键性能注入:封顶渲染 DPR(设备感知)。Godot web canvasResizePolicy=2 把
-  # canvas 渲染到 clientWidth × devicePixelRatio。实测铁证:5K×DPR2 = 1290 万
-  # 像素的巨型 canvas,浏览器按显示器 60Hz 合成它就把 GPU 打满 → 风扇狂转
-  # (缩小窗口画布 → Chrome 渲染进程 83%→6%,与 Godot 帧率无关)。
-  #   · 手机(DPR3,小屏):cap=2 → 文字清晰(cap=1 会糊,用户验证过)
-  #   · 桌面高分屏(5K Mac,DPR2):cap=1.5 → 画布像素砍 44%、文字仍 165ppi 锐利
-  # 手机端不受影响。这是唯一对风扇有效的杠杆(降帧率实测无效)。
+  # 渲染 DPR 封顶 = 2(全设备)。Godot web canvasResizePolicy=2 把 canvas 渲染到
+  # clientWidth × devicePixelRatio。cap=2 的作用:手机(DPR3)1x→2x 文字清晰;
+  # PC(DPR1-2)保持不变。这是纯文字清晰度设置,不影响发热。
+  # 注:曾试过"桌面 1.5"想降风扇,实测无效已撤回 —— 风扇真凶是孤儿/僵尸 Chrome
+  #     渲染进程(脱离标签却全速跑的旧游戏实例),不是画布像素。详见 fps_governor.gd。
   python3 - <<'PYEOF'
 import re
 html = open("docs/index.html", encoding="utf-8").read()
-snippet = ('<script>/*__dpr_cap__ cap render DPR: touch(phone)=2 crisp text, '
-           'desktop HiDPI=1.5 to cut the 5K canvas fill/compositing that pegs '
-           'the GPU (the fan). Fps does NOT help — compositing is per-pixel @60Hz*/'
-           '(function(){var touch=("ontouchstart" in window)||(navigator.maxTouchPoints>0);'
-           'var cap=touch?2:1.5;try{var d=Math.min(window.devicePixelRatio||1,cap);'
+snippet = ('<script>/*__dpr_cap__ cap render DPR to 2: phones(DPR3) render 2x for '
+           'crisp text, PC(DPR1-2) unchanged. Pure text-sharpness, not a fan lever '
+           '(the fan was a zombie Chrome renderer, not canvas pixels).*/'
+           '(function(){var cap=2;try{var d=Math.min(window.devicePixelRatio||1,cap);'
            'Object.defineProperty(window,"devicePixelRatio",'
            '{configurable:true,get:function(){return d;}});}catch(e){}})();</script>')
-# 幂等:已注入则整段替换为最新版(升级旧的 cap=2 全局版 → 设备感知版)
+# 幂等:已注入则整段替换为最新版(把之前的设备感知 1.5 版改回扁平 cap=2)
 if '/*__dpr_cap__' in html:
     html2 = re.sub(r'<script>/\*__dpr_cap__.*?</script>', snippet, html, count=1, flags=re.S)
     if html2 != html:
         open("docs/index.html","w",encoding="utf-8").write(html2)
-        print("→ DPR cap 升级到设备感知(桌面 1.5 / 手机 2)")
+        print("→ DPR cap 改回 2x(全设备,恢复清晰文字)")
     else:
-        print("→ DPR cap 已是设备感知版,跳过")
+        print("→ DPR cap 已是 2x,跳过")
 else:
     html = html.replace("<head>", "<head>\n" + snippet, 1)
     open("docs/index.html","w",encoding="utf-8").write(html)
-    print("→ 注入 DPR cap(桌面 1.5 / 手机 2)")
+    print("→ 注入 DPR cap (2x)")
 PYEOF
 
   # 注入战斗主题的加载页动画(web/loading_overlay.html → 在 </body> 前)。
