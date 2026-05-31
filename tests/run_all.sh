@@ -82,6 +82,8 @@ run_serial "bot_integration (AI hunts stationary dummy)" \
     "$GODOT" --headless --path "$PROJ" tests/bot_integration.tscn
 run_serial "death_respawn_test (signal sigs + respawn refill)" \
     "$GODOT" --headless --path "$PROJ" tests/death_respawn_test.tscn
+run_serial "spawn_clearance_test (no spawn point embedded in a wall)" \
+    "$GODOT" --headless --path "$PROJ" tests/spawn_clearance_test.tscn
 run_serial "match_mode_test (FFA/ELIM/RACE win conditions)" \
     "$GODOT" --headless --path "$PROJ" tests/match_mode_test.tscn
 run_serial "lag_comp_test (history record + sample interpolation)" \
