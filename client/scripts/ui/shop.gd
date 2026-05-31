@@ -63,6 +63,15 @@ func _ready() -> void:
 	_refresh_chests()
 	_refresh_wheel_hint()
 	_build_wheel()
+	# Header currency as rounded "pills" (gold credits / blue fragments).
+	credits_label.add_theme_stylebox_override(&"normal", _pill_box(Color(1, 0.85, 0.4)))
+	fragments_label.add_theme_stylebox_override(&"normal", _pill_box(Color(0.55, 0.8, 1.0)))
+	# Chest rows live in the scene (not built procedurally) — give them the same
+	# unified card look + button styling as the other tabs.
+	_style_card(get_node(^"V/Tabs/Chests/V/CommonRow") as PanelContainer, _CARD_ACCENT)
+	_style_card(get_node(^"V/Tabs/Chests/V/RareRow") as PanelContainer, Color(0.9, 0.5, 0.85, 0.55))
+	for cb in [common_chest_buy, rare_chest_buy, common_chest_btn, rare_chest_btn]:
+		_style_buy_button(cb)
 	if has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		s.credits_changed.connect(func(_n): _refresh_currency())
@@ -87,6 +96,81 @@ func _is_online() -> bool:
 	if not has_node(^"/root/Settings"):
 		return false
 	return get_node(^"/root/Settings").synced_with_server
+
+
+# ── Shared visual design (Pass 2/3 polish) ─────────────────────────────────
+# One card look for every shop list (weapons / bundles / upgrades / chests):
+# consistent bg, rounded corners, left accent stripe, padding + a hover lift.
+const _CARD_BG := Color(0.07, 0.10, 0.17, 0.92)
+const _CARD_BG_HOVER := Color(0.12, 0.16, 0.25, 0.97)
+const _CARD_ACCENT := Color(0.42, 0.62, 0.92, 0.55)
+
+
+func _card_box(accent: Color, hover: bool) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = _CARD_BG_HOVER if hover else _CARD_BG
+	sb.set_border_width_all(1)
+	sb.border_width_left = 3
+	sb.border_color = accent.lightened(0.3) if hover else accent
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 9
+	sb.content_margin_bottom = 9
+	return sb
+
+
+# Apply the unified card style + a hover highlight to a PanelContainer.
+func _style_card(pc: PanelContainer, accent: Color = _CARD_ACCENT) -> void:
+	pc.add_theme_stylebox_override(&"panel", _card_box(accent, false))
+	pc.mouse_filter = Control.MOUSE_FILTER_PASS   # still highlights, still passes clicks
+	pc.mouse_entered.connect(func(): pc.add_theme_stylebox_override(&"panel", _card_box(accent, true)))
+	pc.mouse_exited.connect(func(): pc.add_theme_stylebox_override(&"panel", _card_box(accent, false)))
+
+
+func _btn_box(bg: Color, border: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.set_border_width_all(1)
+	sb.border_color = border
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 5
+	sb.content_margin_bottom = 5
+	return sb
+
+
+# Primary BUY action: green with hover/pressed feedback + a muted disabled state
+# (so buttons that toggle, like "开启" when you have 0 chests, look right too).
+func _style_buy_button(btn: Button) -> void:
+	btn.add_theme_stylebox_override(&"normal", _btn_box(Color(0.15, 0.40, 0.23, 1), Color(0.4, 0.9, 0.5, 0.7)))
+	btn.add_theme_stylebox_override(&"hover", _btn_box(Color(0.22, 0.56, 0.31, 1), Color(0.65, 1.0, 0.75, 0.95)))
+	btn.add_theme_stylebox_override(&"pressed", _btn_box(Color(0.11, 0.30, 0.17, 1), Color(0.4, 0.9, 0.5, 0.9)))
+	btn.add_theme_stylebox_override(&"disabled", _btn_box(Color(0.10, 0.12, 0.16, 0.8), Color(0.32, 0.38, 0.48, 0.4)))
+	btn.add_theme_color_override(&"font_color", Color(0.88, 1.0, 0.92))
+	btn.add_theme_color_override(&"font_hover_color", Color(1, 1, 1))
+	btn.add_theme_color_override(&"font_disabled_color", Color(0.55, 0.62, 0.72))
+
+
+# Muted disabled state (OWNED / locked).
+func _style_muted_button(btn: Button) -> void:
+	btn.add_theme_stylebox_override(&"disabled", _btn_box(Color(0.10, 0.12, 0.16, 0.8), Color(0.32, 0.38, 0.48, 0.4)))
+	btn.add_theme_color_override(&"font_color_disabled", Color(0.55, 0.62, 0.72))
+
+
+# Rounded "pill" background for the header currency labels.
+func _pill_box(tint: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(tint.r, tint.g, tint.b, 0.14)
+	sb.set_border_width_all(1)
+	sb.border_color = Color(tint.r, tint.g, tint.b, 0.55)
+	sb.set_corner_radius_all(13)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 5
+	sb.content_margin_bottom = 5
+	return sb
 
 
 # ── Bundles tab ───────────────────────────────────────────────────────────
@@ -119,22 +203,8 @@ func _populate_bundles() -> void:
 func _make_bundle_card(b: Resource) -> PanelContainer:
 	var s: Node = get_node(^"/root/Settings")
 	var pc := PanelContainer.new()
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.08, 0.14, 0.92)
-	bg.border_color = b.theme_color if "theme_color" in b else Color(0.4, 0.7, 0.95, 0.6)
-	bg.border_width_left = 3
-	bg.border_width_top = 2
-	bg.border_width_right = 2
-	bg.border_width_bottom = 2
-	bg.corner_radius_top_left = 10
-	bg.corner_radius_top_right = 10
-	bg.corner_radius_bottom_left = 10
-	bg.corner_radius_bottom_right = 10
-	bg.content_margin_left = 16
-	bg.content_margin_right = 16
-	bg.content_margin_top = 12
-	bg.content_margin_bottom = 12
-	pc.add_theme_stylebox_override(&"panel", bg)
+	var accent: Color = b.theme_color if "theme_color" in b else _CARD_ACCENT
+	_style_card(pc, accent)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override(&"separation", 6)
 	pc.add_child(v)
@@ -187,9 +257,11 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 	if unowned == 0:
 		buy_btn.text = "全部已拥有"
 		buy_btn.disabled = true
+		_style_muted_button(buy_btn)
 	else:
 		buy_btn.text = "BUY · $%d" % b.discounted_price()
 		buy_btn.pressed.connect(_on_buy_bundle.bind(b))
+		_style_buy_button(buy_btn)
 	buy_row.add_child(buy_btn)
 	return pc
 
@@ -263,19 +335,7 @@ func _populate_weapons() -> void:
 func _make_weapon_row(w: Resource) -> PanelContainer:
 	var s: Node = get_node(^"/root/Settings")
 	var pc := PanelContainer.new()
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.08, 0.14, 0.85)
-	bg.border_color = Color(0.4, 0.7, 0.95, 0.4)
-	bg.border_width_left = 2
-	bg.corner_radius_top_left = 6
-	bg.corner_radius_top_right = 6
-	bg.corner_radius_bottom_left = 6
-	bg.corner_radius_bottom_right = 6
-	bg.content_margin_left = 12
-	bg.content_margin_right = 12
-	bg.content_margin_top = 8
-	bg.content_margin_bottom = 8
-	pc.add_theme_stylebox_override(&"panel", bg)
+	_style_card(pc)
 	var row := HBoxContainer.new()
 	pc.add_child(row)
 
@@ -312,6 +372,10 @@ func _make_weapon_row(w: Resource) -> PanelContainer:
 		price_label.add_theme_color_override(&"font_color", Color(1, 0.85, 0.4))
 		buy_btn.text = "BUY · $%d" % w.price_credits
 		buy_btn.pressed.connect(_on_buy_weapon.bind(w))
+	if buy_btn.disabled:
+		_style_muted_button(buy_btn)
+	else:
+		_style_buy_button(buy_btn)
 	return pc
 
 
@@ -564,19 +628,7 @@ func _populate_upgrades() -> void:
 
 func _make_upgrade_row(w: Resource, s: Node) -> PanelContainer:
 	var pc := PanelContainer.new()
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.08, 0.14, 0.85)
-	bg.border_color = Color(0.6, 0.7, 0.95, 0.4)
-	bg.border_width_left = 2
-	bg.corner_radius_top_left = 6
-	bg.corner_radius_top_right = 6
-	bg.corner_radius_bottom_left = 6
-	bg.corner_radius_bottom_right = 6
-	bg.content_margin_left = 12
-	bg.content_margin_right = 12
-	bg.content_margin_top = 8
-	bg.content_margin_bottom = 8
-	pc.add_theme_stylebox_override(&"panel", bg)
+	_style_card(pc)
 	var row := HBoxContainer.new()
 	pc.add_child(row)
 	var name_label := Label.new()
@@ -615,6 +667,9 @@ func _make_upgrade_row(w: Resource, s: Node) -> PanelContainer:
 func _reveal(bbcode: String) -> void:
 	reveal_text.text = bbcode
 	reveal_dialog.popup_centered(Vector2i(520, 320))
+	# Subtle content fade-in (Window itself can't scale-tween while embedded).
+	reveal_text.modulate.a = 0.0
+	create_tween().tween_property(reveal_text, "modulate:a", 1.0, 0.25)
 
 
 # Server replied to a mutating shop op. Show the popup for purchase here so
