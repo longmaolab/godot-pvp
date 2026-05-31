@@ -31,7 +31,7 @@
 - `smoke_test` 本轮没有再出现旧的裸 `NetProtocol` 编译错误，说明 2026-05-30 的 false-green 根因修复已基本生效。
 - 仍有几处会直接影响线上玩法/运营可信度：MP bot rematch 状态泄漏、Shop 升级仍绕过服务器、match history 开始时间恒为 0、deploy 可以导出脏代码但不提交对应源码。
 
-### [P1] MP bots 被加入 `room.players` 后没有在 match teardown 清理，rematch 会累积旧 bot
+### [x] [P1] MP bots 被加入 `room.players` 后没有在 match teardown 清理，rematch 会累积旧 bot
 **文件**：`client/scripts/game_controller.gd:1849`、`client/scripts/game_controller.gd:1882`、`client/scripts/game_controller.gd:1888`、`client/scripts/game_controller.gd:1891`、`client/scripts/game_controller.gd:2111`  
 **关联文件**：`server/scripts/room_manager.gd:362`、`server/scripts/room.gd:23`
 
@@ -41,7 +41,7 @@
 
 **建议**：给 bot id 建立房间级 ownership。match teardown 时遍历该 room 的负 peer id：`queue_free()` bot、从 `players_by_peer` / `bots` / `peer_to_room` / `room.players` / `room.profiles` / K/D 中删除。更干净的做法是新增 `Room.add_bot/remove_bot` 或让 RoomManager 暴露专门的 synthetic-peer cleanup API，避免 GameController 直接改 RoomManager 内部字典。
 
-### [P1] Shop 升级按钮仍走本地 `bump_upgrade()`，线上升级不会持久到服务器
+### [x] [P1] Shop 升级按钮仍走本地 `bump_upgrade()`，线上升级不会持久到服务器
 **文件**：`client/scripts/ui/shop.gd:580`、`client/scripts/ui/shop.gd:584`、`client/scripts/ui/shop.gd:586`、`client/scripts/ui/shop.gd:588`  
 **关联文件**：`client/scripts/persistence/settings.gd:301`、`client/scripts/persistence/settings.gd:422`、`server/scripts/profile_service.gd:341`
 
@@ -51,7 +51,7 @@
 
 **建议**：Shop 在线模式下按钮调用 `request_apply_upgrade(weapon_id, stat, lvl + 1)`，等待 `server_action("upgrade", ...)` 和后续 profile push 刷新 UI；同时把 UI 的 max level/cost 文案改成读取服务端共享常量，或先把服务端规则回调成 3 级 30/60/120，避免规则漂移。离线路径如需保留，再显式分支调用 `bump_upgrade()`。
 
-### [P1] `match_history.started_ms` 仍然硬写 0，赛后记录无法按真实开局时间审计
+### [x] [P1] `match_history.started_ms` 仍然硬写 0，赛后记录无法按真实开局时间审计
 **文件**：`client/scripts/game_controller.gd:1704`、`client/scripts/game_controller.gd:1705`  
 **关联文件**：`server/scripts/database.gd:149`、`server/scripts/profile_service.gd:664`、`server/scripts/room_manager.gd:345`
 
@@ -61,7 +61,7 @@
 
 **建议**：在 `Room` 上新增 `match_started_ms`，在 `RoomManager.start_match()` 用 `Time.get_unix_time_from_system() * 1000` 写入；`GameController._on_match_ended()` 传该字段给 `ProfileService.record_match_end()`。`created_at_ms` 是进程 tick，不适合直接入库做 wall-clock history。
 
-### [P2] `deploy.sh` 会检测到脏源码并重新 export，但 commit 阶段只 stage 少数文件
+### [x] [P2] `deploy.sh` 会检测到脏源码并重新 export，但 commit 阶段只 stage 少数文件
 **文件**：`deploy.sh:90`、`deploy.sh:104`、`deploy.sh:113`、`deploy.sh:224`
 
 **问题**：脚本用 `SRC_PATHS` 检测 `client/server/shared/assets/...` 的未提交改动，并会基于这些脏源码重新导出 web build。但后面的 `git add` 只 stage `export_presets.cfg server.json .gitignore client/scripts/build_info.gd`，不会提交实际源码改动。
@@ -70,7 +70,7 @@
 
 **建议**：二选一：要么 `git add "${SRC_PATHS[@]}"`（排除 `docs/`、`.godot/` 和不应提交的生成物）并真实提交源码；要么在发现 `DIRTY` 时 fail fast，要求先手动提交。不要允许“脏源码 export + 干净源码 push”的半部署。
 
-### [P2] 轻量测试还有环境/断言噪声，容易掩盖真实结果
+### [x] [P2] 轻量测试还有环境/断言噪声，容易掩盖真实结果
 **文件**：`tests/run_boot_test.sh:1`、`tests/run_input_rpc_test.sh:22`、`tests/main_menu_compression_test.gd:1`
 
 **问题**：`run_quick.sh` 本轮 9 过 1 失败，唯一失败是 `boot_test` 把 macOS Godot 的 `get_system_ca_certificates` stderr 当成项目错误。`run_input_rpc_test.sh` 本轮因固定端口 9102 bind 失败而缺少 spawn/final 日志，属于环境占用，不是输入管线结论。`main_menu_compression_test` 仍真实失败：LeftCard min height 906 > budget 860。
@@ -100,6 +100,56 @@
 4. 清理测试噪声：macOS CA stderr whitelist、动态端口、main menu 高度回归。
 
 ---
+
+### [x] 已修复（2026-05-31，Claude）— 5 项全部处理 + 实测
+
+**P1-1 MP bot rematch 泄漏** — 根因:`_spawn_room_bots` 把 bot(合成负 peer id)写进
+`bots[]`/`players_by_peer`/`peer_to_room`/`room.players`,但 `_tear_down_match_world`
+只 reparent 人类 + free RoomWorld,四个注册表的 bot id 全没清 → rematch 累积。
+修:新增 `RoomManager.remove_bot()`(清 peer_to_room + room.players/profiles/K-D)+
+`GameController._cleanup_room_bots()`(清 players_by_peer/bots[] + free 节点 + 调
+remove_bot),在 `_tear_down_match_world` free rw **之前**调,server-only。
+验:run_all 的 room_manager/room_rpc/concurrent_match/rematch_reject/room_world 全过。
+
+**P1-2 Shop 升级走本地不持久 + 规则漂移** — 根因:Shop Upgrades tab 显示 /3 +
+[30,60,120]、点击走本地 `bump_upgrade`;但服务端是 0..10 级 + 5 碎片/级,且 NetProtocol
+常量(3/[30,60,120])无人用=死常量。修:① NetProtocol 常量改成真实规则
+(`MAX_UPGRADE_LEVELS_PER_WEAPON=10`、`UPGRADE_COST_PER_LEVEL=5`)当唯一来源;
+② settings.bump_upgrade(离线)+ profile_service._on_apply_upgrade(服务端)+ shop UI
+全部读这俩常量;③ shop 升级按钮在线走 `request_apply_upgrade` RPC、离线才 fallback
+`bump_upgrade`(和 weapons_dialog_builder 主菜单图鉴一致)。改了 net_protocol /
+settings / shop / profile_service 四处。
+
+**P1-3 match_history.started_ms 硬写 0** — 修:Room 加 `match_started_ms` 字段,
+`RoomManager.start_match()` 用 `Time.get_unix_time_from_system()*1000` 写入,
+`GameController._on_match_ended` 传它给 `record_match_end`(原来硬写 0)。验:database
+13/13(含 match history)过。
+
+**P2-4 deploy.sh 脏源码 export 但不提交** — 改 `deploy.sh` step 2b:有未提交的
+**会进 DS 的源码**(client/server/shared/addons/project.godot,排除 build_info.gd /
+*.uid / 纯 web 的 assets / 自动提交的 config)就 **fail-fast 拒绝部署**。不选 auto-`git
+add`(多 session 共用工作树会扫进别 session 的在途文件)。
+
+**P2-5 测试噪声(3 子项)**:
+- boot_test:grep 排除 macOS `get_system_ca_certificates` / certificate 平台噪声
+  (保留 @onready Node-not-found 等真错覆盖)。
+- input_rpc:固定端口 9102/9103 → 随机高位端口(消除 bind 冲突,现在能 conclusive 跑)。
+- main_menu_compression:LeftCard 906 压到 **844 < 860**(V separation 5→4、logo
+  84→52、FunFact 32→26;不删任何按钮/功能)。run_all 现已 PASS。
+
+**回归**:`bash tests/run_all.sh` → **48 pass / 1 fail**(对比修复前 47/49:净修好了
+main_menu_compression)。
+
+**唯一残留 — input_rpc_test forward 子测试(根因已坐实,非生产 bug,非本轮引入)**:
+端口修复后能 conclusive 跑了,但 forward 仍 `dz=0.088`。查 DS 日志:player spawn 在
+(0,1,0) 后 **Y 恒为 1.000**(连重力都没落)→ 它的 `_step_movement` 根本没跑。根因:
+input_rpc 用「裸 peer 不 join room」的 **legacy 路径**,roomless player 进全局
+`players_root`,不在 room_world 的物理世界 → 不被模拟。房间重构(F3-M*)后真实客户端
+都 join room,**这条 legacy 路径已死**;真实输入→移动由 two_client / three_client /
+real_aim(全过)覆盖。**这是过时测试,不是生产 bug。已按用户决定退役**:从
+`tests/run_all.sh` 的 specs 移除,`run_input_rpc_test.sh` 加 RETIRED 横幅 + 早退 0
+(harness `headless_input_client.gd` 保留,供日后改成 room-flow 测试复活)。退役后
+**run_all = 48/48 全绿**。详见 test.md 同日。
 
 > **归档**：2026-05-30 及更早的已闭环 review 已移至
 > `.agent/codexreview-archive/resolved-2026-05.md`（1612 行，全部 [x]/已解决）。

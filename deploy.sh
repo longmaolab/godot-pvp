@@ -82,14 +82,27 @@ else
   fi
 fi
 
-# ---- 2b. mtime 兜底 ----
-# find -newer 只看 mtime,而 git stash/checkout/pull/rebase 会把源文件 mtime 改成
-# 早于 docs/index.pck → 上面的检查误判「已最新」→ 静默跳过 export → 部署谎报成功。
-# 实测踩过:ping 上报修复(commit 1d88163)因 stash pop 改旧 mtime 从没进 web 包
-# (见 .agent/test.md 2026-05-30)。下面两条用 git 状态做与 mtime 无关的兜底:
-SRC_PATHS=(client server shared assets addons project.godot server.json export_presets.cfg)
-# (1) HEAD 自上次成功 export 后变了(commit/pull/checkout)→ 必须重 export。
-#     marker 在部署末尾(commit 之后)写,记录最终 HEAD,所以无源改动的再次 deploy
+# ---- 2b. 部署前的 git 兜底(与 mtime 无关)----
+# find -newer 只看 mtime,而 git stash/checkout/pull/rebase 会把源文件 mtime 改旧
+# → 上面的 mtime 检查误判「已最新」→ 静默跳过 export → 部署谎报成功(实测踩过:
+# ping 修复 commit 1d88163 因 stash pop 改旧 mtime 从没进 web 包,见 test.md)。
+#
+# (a) Fail-fast:有未提交的「会进 DS」的源码改动就拒绝部署。web 构建从工作树
+#     export(rsync 上 VPS),但 DS 走 git pull —— 脏源码 = web/DS 错版(RPC / 武器 /
+#     地图 drift,线上极难查)。这些路径 deploy.sh 不会自动 commit,所以必须先手动
+#     commit。**不 auto-`git add`**:多 session 共用工作树,auto-add 会扫进别的 session
+#     的在途文件。排除 build_info.gd(下面自动重写)和 Godot 生成的 *.uid;assets/
+#     (纯 web 美术,DS 不用)和 export_presets/server.json(deploy 自动提交)不在此列。
+DS_CODE_PATHS=(client server shared addons project.godot)
+DIRTY_SRC="$(git status --porcelain -- "${DS_CODE_PATHS[@]}" 2>/dev/null | grep -vE 'build_info\.gd|\.uid$' | head -8)"
+if [ -n "$DIRTY_SRC" ]; then
+  echo "❌ 拒绝部署:有未提交的源码改动(会进 DS,但 git pull 拿不到 → web/DS 错版)。"
+  echo "   先 commit 你自己的改动(别带上别 session 的在途文件)再 deploy:"
+  echo "$DIRTY_SRC"
+  exit 1
+fi
+# (b) HEAD 自上次成功 export 后变了(commit/pull/checkout)→ 必须重 export。
+#     marker 在部署末尾(commit 之后)写,记录最终 HEAD,所以无改动的再次 deploy
 #     HEAD==marker 仍走快路径跳过;build commit 不会造成「永远在变」。
 if [ "$NEED_EXPORT" = "0" ]; then
   LAST_EXPORT_HEAD="$(cat .godot/.deploy_export_head 2>/dev/null || true)"
@@ -97,15 +110,6 @@ if [ "$NEED_EXPORT" = "0" ]; then
   if [ -n "$CUR_HEAD" ] && [ "$CUR_HEAD" != "$LAST_EXPORT_HEAD" ]; then
     NEED_EXPORT=1
     REASON="HEAD 自上次 export 后变了(${LAST_EXPORT_HEAD:-<无记录>} → $CUR_HEAD)"
-  fi
-fi
-# (2) 源文件有未提交改动(mtime 可能被改旧但内容确实变了)→ 也重 export。
-#     排除 build_info.gd:它每次 export 自动重写,不算「源」改动。
-if [ "$NEED_EXPORT" = "0" ]; then
-  DIRTY="$(git status --porcelain -- "${SRC_PATHS[@]}" 2>/dev/null | grep -v 'build_info\.gd' | head -3)"
-  if [ -n "$DIRTY" ]; then
-    NEED_EXPORT=1
-    REASON="源文件有未提交改动:"$'\n'"$DIRTY"
   fi
 fi
 

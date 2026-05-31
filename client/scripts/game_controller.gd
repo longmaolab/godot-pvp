@@ -1697,12 +1697,15 @@ func _on_match_ended(winner: int, final: Dictionary, room_id: String = "") -> vo
 			var room_peers: Array = []
 			var map_id: String = ""
 			var mode_id: String = ""
+			var started_ms: int = 0
 			if rm != null and rm.rooms.has(room_id):
 				room_peers = (rm.rooms[room_id].players as Array).duplicate()
 				map_id = String(rm.rooms[room_id].map_path)
 				mode_id = String(rm.rooms[room_id].mode_def_path)
+				# Real wall-clock start (set in RoomManager.start_match), not 0.
+				started_ms = int(rm.rooms[room_id].match_started_ms)
 			ps.call(&"record_match_end", room_id, mode_id, map_id,
-				0, int(Time.get_unix_time_from_system() * 1000.0),
+				started_ms, int(Time.get_unix_time_from_system() * 1000.0),
 				winner, room_peers, final)
 		# F3-M5: end_match the SPECIFIC room that ended, not "the one
 		# active room" (which is no longer a singleton). Practice / pre-
@@ -2132,8 +2135,42 @@ func _tear_down_match_world(ended_room_id: String = "") -> void:
 				for child in room_players_root.get_children():
 					if is_instance_valid(child):
 						child.reparent(players_root, false)
+			# P1: purge this room's bots (synthetic negative peer ids) from every
+			# registry BEFORE freeing the RoomWorld, so a rematch doesn't keep
+			# stale bots in players_by_peer / bots[] / room.players / scoreboard.
+			_cleanup_room_bots(ended_room_id)
 			rw.queue_free()
 		room_worlds.erase(ended_room_id)
+
+
+## Frees this room's bots and purges their synthetic (negative) peer ids from
+## players_by_peer, bots[], peer_to_room and the room's player/profile/K-D maps.
+## Pairs with _spawn_room_bots; called from _tear_down_match_world BEFORE the
+## RoomWorld is freed. Server-only — bots are only registered server-side.
+func _cleanup_room_bots(room_id: String) -> void:
+	if room_id.is_empty() or not (_is_networked() and multiplayer.is_server()):
+		return
+	var rm: Node = get_node_or_null(^"/root/RoomManager")
+	var room = rm.rooms.get(room_id) if rm != null and rm.rooms.has(room_id) else null
+	# Gather this room's bot ids (synthetic negatives) from the room list AND the
+	# peer→room map (defensive — either source alone should suffice).
+	var bot_ids: Dictionary = {}
+	if room != null:
+		for pid in room.players:
+			if pid < 0:
+				bot_ids[pid] = true
+	if rm != null:
+		for pid in rm.peer_to_room.keys():
+			if pid < 0 and String(rm.peer_to_room[pid]) == room_id:
+				bot_ids[pid] = true
+	for bot_id in bot_ids.keys():
+		var b: Node = players_by_peer.get(bot_id)
+		if b != null and is_instance_valid(b):
+			bots.erase(b)
+			b.queue_free()
+		players_by_peer.erase(bot_id)
+		if rm != null and rm.has_method(&"remove_bot"):
+			rm.remove_bot(bot_id)
 
 
 # Returns the 4-weapon Resource array to use for `peer_id`. If this is

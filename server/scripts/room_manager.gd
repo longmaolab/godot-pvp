@@ -348,6 +348,8 @@ func start_match(room_id: String) -> void:
 		return
 	print("[RoomMgr] START_MATCH %s (%d players)" % [room_id, room.players.size()])
 	room.state = Room.STATE_MATCH
+	# Wall-clock match start for match_history.started_ms (real time, not tick).
+	room.match_started_ms = int(Time.get_unix_time_from_system() * 1000.0)
 	room_state_changed.emit(room)   # tell room players the state changed
 	match_started.emit(room)         # tell GameController to boot the match
 
@@ -399,6 +401,25 @@ func _peer_is_live(peer_id: int) -> bool:
 	if not _is_real_networked_server():
 		return false
 	return peer_id in multiplayer.get_peers()
+
+
+## Remove a synthetic bot peer (negative id) from all room-side bookkeeping.
+## Bots are registered by GameController._spawn_room_bots (which writes
+## peer_to_room + room.players directly), so a match teardown must symmetrically
+## purge them — otherwise rematches accumulate stale bot ids in room.players and
+## the scoreboard. Real (positive) peers use leave_room instead; this is bots only.
+func remove_bot(bot_peer_id: int) -> void:
+	if bot_peer_id >= 0:
+		return   # safety: synthetic bot ids are always negative
+	var room_id: String = String(peer_to_room.get(bot_peer_id, ""))
+	peer_to_room.erase(bot_peer_id)
+	if room_id.is_empty() or not rooms.has(room_id):
+		return
+	var room: Room = rooms[room_id]
+	room.players.erase(bot_peer_id)
+	room.profiles.erase(bot_peer_id)
+	room.kills.erase(bot_peer_id)
+	room.deaths.erase(bot_peer_id)
 
 
 # ── State broadcasters ───────────────────────────────────────────────────

@@ -60,8 +60,11 @@ const STARTER_CREDITS := 500
 const TRIAL_DIVISOR := 20
 const ADMIN_PASS_COST := 300
 const ADMIN_PASS_LENGTH_MS := 600_000           # 10 minutes
-const UPGRADE_COSTS := [30, 60, 120]            # fragments per upgrade level
-const MAX_UPGRADE_LEVELS_PER_WEAPON := 3
+# Per-weapon stat upgrades. Single source of truth for client + server so the
+# Shop / weapon-catalog UI and ProfileService never drift. Server authority:
+# ProfileService._on_apply_upgrade enforces these (cap + cost = delta * cost/level).
+const UPGRADE_COST_PER_LEVEL := 5               # fragments per level
+const MAX_UPGRADE_LEVELS_PER_WEAPON := 10
 const CHEST_PRICE_COMMON := 120
 const CHEST_PRICE_RARE := 400
 const FRAGMENT_UNLOCK_COST := 100

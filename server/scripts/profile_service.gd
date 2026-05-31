@@ -14,6 +14,9 @@ extends Node
 
 const Database = preload("res://server/scripts/database.gd")
 const _WEAPON_REGISTRY = preload("res://shared/scripts/weapon_registry.gd")
+# NetProtocol via the preloaded class (not the autoload global) — shared source
+# of truth for the upgrade rule (cap + cost) so client UI and server never drift.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 # Lazy-built once per process; canonical source for weapon pricing on the
 # server side. Client-sent `price` arg is ignored.
@@ -355,12 +358,12 @@ func _on_apply_upgrade(peer_id: int, weapon_id: String, stat: String, level: int
 		return
 	var current: Dictionary = db.get_upgrades(account_id, weapon_id)
 	var cur_level: int = int(current.get(stat, 0))
-	var target: int = clampi(level, 0, 10)
+	var target: int = clampi(level, 0, NetProtocol.MAX_UPGRADE_LEVELS_PER_WEAPON)
 	if target <= cur_level:
 		_ack(peer_id, "upgrade", false, "already at or above")
 		return
-	# Cost per level: 5 fragments × delta levels (cheap; tune later)
-	var cost: int = (target - cur_level) * 5
+	# Cost: UPGRADE_COST_PER_LEVEL fragments × delta levels (shared NetProtocol rule).
+	var cost: int = (target - cur_level) * NetProtocol.UPGRADE_COST_PER_LEVEL
 	if not db.spend_fragments(account_id, cost):
 		_ack(peer_id, "upgrade", false, "insufficient fragments")
 		return

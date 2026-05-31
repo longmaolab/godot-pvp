@@ -19,6 +19,19 @@
 
 **触发词**：用户说「读 test.md」/「读 codexreview.md」/「看 todo」就去 `.agent/` 里找对应文件。
 
+### 归档规则（防止三件套无限膨胀，三个文件触发不同）
+
+- **`codexreview.md` —— 闭环即归档（事件触发）。** 一批 review 的所有项都 `[x]` 后，
+  立即把整批移到 `.agent/codexreview-archive/resolved-YYYY-MM.md`。本文件**永远只留
+  当前开放项 + 顶部格式模板**——它进 git、每次 session 扫、remote agent 读它当「当前
+  待办」，必须保持小。
+- **`test.md` / `todo.md` —— 太大才归档（体量触发）。** 本地追溯档案，留着无害；只在
+  文件超过 **~500 行**（或 session 开头扫着明显费劲）时，把**最老的已解决报告 / 已完成
+  段**搬到 `.agent/test-archive/` `.agent/todo-archive/`（按日期分文件）。**任何时候都不
+  归档开放项**，并保留最近 1–2 周的上下文。
+- 每次归档在活动文件末尾留一行回链指针（`> 历史已归档至 …`）。归档目录都在 `.agent/*`
+  之下，被 `.gitignore` 忽略（只 codexreview.md 本体进 git）。
+
 ## 修 bug 的硬性要求（来自用户反复强调）
 
 1. **不要盲目加保险机制** —— 找根因，不要套 try/except 把症状盖掉

@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# DS-M2 verification: a headless test client sends client_send_input RPCs to
-# the dedicated server. The server simulates physics from those inputs and
-# logs the player's final position before disconnect.
-#
-# We run TWO subtests:
-#   A. INPUT_FORWARD bit set → expect final.z significantly less than spawn.z
-#      (forward in Godot = -Z, so movement should be ~ -several meters)
-#   B. zero bits          → expect final.z within ±0.5 of spawn.z
-#
-# B is the "did we accidentally always move?" guard.
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ RETIRED 2026-05-31 — removed from tests/run_all.sh. Do not treat as a gate. ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+# This DS-M2-era test connects a bare client (client_hello, NO room join) and
+# streams client_send_input, expecting the server-side player to move. After the
+# room refactor (F3-M*) a roomless peer's player is spawned into the global
+# players_root, but physics/matches run inside each room's RoomWorld SubViewport
+# — so that player is never simulated (DS log: spawn at y=1.0, y stays 1.000, no
+# gravity, no movement). Real clients ALWAYS join a room, so this path is dead.
+# Input→server-movement is covered by the room-flow MP tests that DO pass:
+# two_client / three_client / real_aim / match_e2e. Root cause: .agent/test.md
+# 2026-05-31. The harness (headless_input_client.gd) is kept so this can be
+# revived as a proper room-flow test (create_room → start_match → send input).
+echo "[RETIRED] input_rpc_test — dead pre-room path; coverage in two/three_client/real_aim. Skipping."
+exit 0
+
+# ── Original DS-M2 body kept below for revival reference (unreachable) ───────
+# Two subtests: A) INPUT_FORWARD → final.z « spawn.z;  B) zero bits → final.z ≈ spawn.z.
 
 set -u
 GODOT="${GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -17,8 +25,10 @@ LOG_DIR="$PROJ/tests/.logs"
 mkdir -p "$LOG_DIR"
 
 # INPUT_FORWARD = 1<<0 = 1 ; INPUT_BACK = 1<<1 = 2 (see net_protocol.gd)
-PORT_A=9102
-PORT_B=9103
+# Random high ports — fixed 9102/9103 caused "bind failed" → inconclusive runs
+# when DS tests run concurrently / a prior socket lingered (codexreview 05-31).
+PORT_A=$((9400 + RANDOM % 300))
+PORT_B=$((PORT_A + 1))
 
 run_subtest() {
 	local label="$1" port="$2" bits="$3" min_dz="$4" max_dz="$5"

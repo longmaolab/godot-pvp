@@ -9,6 +9,10 @@ const RARE_CHEST_PRICE := 400
 const WHEEL_PAID_PRICE := 100
 const FRAGMENT_UNLOCK_COST := 100
 const MAIN_MENU := preload("res://client/scenes/main_menu.tscn")
+# Upgrade rule (level cap + per-level cost) — shared source of truth so Shop,
+# the weapon catalog, and the server never drift. Preloaded class ref, not the
+# autoload global, so this file also compiles in standalone --script loads.
+const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 
 @onready var credits_label: Label = $V/Header/H/Credits
 @onready var fragments_label: Label = $V/Header/H/Fragments
@@ -577,19 +581,31 @@ func _make_upgrade_row(w: Resource, s: Node) -> PanelContainer:
 	name_label.text = w.display_name
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
+	var max_lvl: int = NetProtocol.MAX_UPGRADE_LEVELS_PER_WEAPON
 	for stat in [&"damage", &"mag", &"reload"]:
 		var lvl: int = s.get_upgrade(String(w.id), stat)
 		var btn := Button.new()
 		var stat_label: String = "DMG" if stat == &"damage" else ("MAG" if stat == &"mag" else "RLD")
-		btn.text = "%s lvl %d/3" % [stat_label, lvl]
-		if lvl < 3:
-			var cost: int = [30, 60, 120][lvl]
-			btn.text += "%d" % cost
-			btn.pressed.connect(func(): s.bump_upgrade(String(w.id), stat))
+		btn.text = "%s lvl %d/%d" % [stat_label, lvl, max_lvl]
+		if lvl < max_lvl:
+			btn.text += "  +%d" % NetProtocol.UPGRADE_COST_PER_LEVEL
+			# Local copies so each iteration's lambda captures its own values.
+			var wid: String = String(w.id)
+			var st: String = String(stat)
+			var st_name: StringName = stat
+			var target: int = lvl + 1
+			btn.pressed.connect(func():
+				# Online: route through the server RPC so the upgrade persists
+				# (else the next server_profile sync overwrites the local change —
+				# the P1 bug). request_apply_upgrade returns false when offline;
+				# fall back to the local sandbox bump only then.
+				if not s.request_apply_upgrade(wid, st, target):
+					s.bump_upgrade(wid, st_name)
+			)
 		else:
 			btn.disabled = true
-			btn.text += "MAX"
-		btn.custom_minimum_size = Vector2(140, 28)
+			btn.text += "  MAX"
+		btn.custom_minimum_size = Vector2(150, 28)
 		row.add_child(btn)
 	return pc
 

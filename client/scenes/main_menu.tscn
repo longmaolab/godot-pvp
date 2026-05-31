@@ -350,10 +350,10 @@ size_flags_vertical = 3
 theme_override_styles/panel = SubResource("panel_glass")
 
 [node name="V" type="VBoxContainer" parent="Scroll/Center/Cols/LeftCard"]
-theme_override_constants/separation = 5
+theme_override_constants/separation = 4
 
 [node name="LogoImage" type="TextureRect" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 84)
+custom_minimum_size = Vector2(0, 52)
 texture = ExtResource("21_logo")
 expand_mode = 1
 stretch_mode = 5
@@ -570,7 +570,7 @@ text = "[A] 账号"
 [node name="FunFactSep" type="HSeparator" parent="Scroll/Center/Cols/LeftCard/V"]
 
 [node name="FunFact" type="Label" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 26)
 text = "▶ TIP — 加载中..."
 autowrap_mode = 3
 horizontal_alignment = 1

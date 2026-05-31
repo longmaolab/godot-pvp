@@ -22,7 +22,11 @@ var map_path: String = ""          # full res:// path
 var mode_def_path: String = ""     # full res:// path, "" = no mode (FFA practice-ish)
 var players: Array[int] = []       # peer_ids in this room (host first)
 var state: int = STATE_LOBBY
-var created_at_ms: int = 0
+var created_at_ms: int = 0          # process tick (Time.get_ticks_msec) — NOT wall-clock
+# Wall-clock (unix ms) of the most recent START. Used as match_history.started_ms
+# so post-match audit / replay / duration stats sort by real time. created_at_ms
+# is a process tick and would land bogus 1970-ish values in the DB.
+var match_started_ms: int = 0
 var max_players: int = 4           # Phase 1: locked at 4 per .agent/lobby_plan.md
 # Phase 2: per-peer lobby identity + ready state. Keyed by peer_id (int).
 # Each value is {"name": String, "skin": int, "ready": bool}. Defaults are

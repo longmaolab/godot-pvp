@@ -165,7 +165,10 @@ specs=(
   "mp_game_test:::$PROJ/tests/run_mp_game_test.sh"
   "mp_host_collision_guard:::$PROJ/tests/run_mp_host_collision_guard_test.sh"
   "server_boot_test:::$PROJ/tests/run_server_boot_test.sh"
-  "input_rpc_test:::$PROJ/tests/run_input_rpc_test.sh"
+  # input_rpc_test RETIRED 2026-05-31 — tested a dead pre-room "bare peer, no
+  # join" path (roomless player never simulated). Input→server-movement coverage
+  # lives in two_client / three_client / real_aim / match_e2e (room flow). See
+  # run_input_rpc_test.sh header + .agent/test.md 2026-05-31.
   "snapshot_test:::$PROJ/tests/run_snapshot_test.sh"
   "fire_test:::$PROJ/tests/run_fire_test.sh"
   "respawn_test:::$PROJ/tests/run_respawn_test.sh"

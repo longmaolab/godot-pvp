@@ -419,13 +419,15 @@ func get_upgrade(weapon_id: String, stat: StringName) -> int:
 	return int(rec.get(stat, 0))
 
 
+## OFFLINE-ONLY local upgrade (practice / no server). Online play must route
+## through request_apply_upgrade → server. Rule mirrors NetProtocol (the shared
+## source of truth) + ProfileService so offline and online behave identically.
 func bump_upgrade(weapon_id: String, stat: StringName) -> bool:
 	var rec: Dictionary = upgrades.get(weapon_id, {})
 	var cur: int = int(rec.get(stat, 0))
-	if cur >= 3:
+	if cur >= NetProtocol.MAX_UPGRADE_LEVELS_PER_WEAPON:
 		return false
-	# Per-stat cost ladder mirrors original pvp-game (30 / 60 / 120 fragments).
-	var cost: int = [30, 60, 120][cur]
+	var cost: int = NetProtocol.UPGRADE_COST_PER_LEVEL
 	if not spend_fragments(cost):
 		return false
 	rec[stat] = cur + 1

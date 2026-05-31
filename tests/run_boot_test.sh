@@ -22,10 +22,15 @@ ok=true
 if [ "$RC" -ne 0 ]; then
     echo "godot exit code: $RC (want 0)"; ok=false
 fi
-# Any "ERROR" / "SCRIPT ERROR" / "Parse Error" lines = real failure.
-if grep -qE "ERROR:|Parse Error|SCRIPT ERROR|Failed to" "$LOG"; then
+# Any "ERROR" / "SCRIPT ERROR" / "Parse Error" lines = real failure — EXCEPT
+# macOS Godot's TLS/CA-cert stderr (system cert-store access). That's platform
+# noise, never a project bug, and was tripping this gate on some macOS setups
+# (codexreview 05-31). Real project errors don't mention certificates, so the
+# keyword filter keeps @onready "Node not found" / SCRIPT ERROR coverage intact.
+ERRS="$(grep -E "ERROR:|Parse Error|SCRIPT ERROR|Failed to" "$LOG" | grep -viE "certificat|get_system_ca")"
+if [ -n "$ERRS" ]; then
     echo "FAIL — error lines detected:"
-    grep -E "ERROR:|Parse Error|SCRIPT ERROR|Failed to" "$LOG" | head -20
+    echo "$ERRS" | head -20
     ok=false
 fi
 
