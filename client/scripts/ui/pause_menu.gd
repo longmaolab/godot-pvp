@@ -24,6 +24,11 @@ func _ready() -> void:
 	resume_btn.pressed.connect(_on_resume)
 	menu_btn.pressed.connect(_on_main_menu)
 	quit_btn.pressed.connect(_on_quit)
+	# On web `get_tree().quit()` is a no-op (can't close a browser tab), so the
+	# Quit button just looked broken when clicked. Hide it there — "回主菜单 /
+	# Main Menu" is the web "exit" (leaves the match cleanly). Native keeps Quit.
+	if OS.has_feature("web"):
+		quit_btn.visible = false
 	# Initialize from current state so the very first tick doesn't see a
 	# spurious CAPTURED→VISIBLE transition during scene load.
 	_last_mouse_mode = Input.mouse_mode

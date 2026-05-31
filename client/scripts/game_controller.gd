@@ -449,6 +449,9 @@ func spawn_bot(target: Node, at: Vector3, weapon: Resource) -> Node:
 	# torso mesh) and can't move because the camera is wrong.
 	bot.is_local = false
 	bot.is_human_input = false
+	# Distinct skin per bot so a practice room of bots doesn't all look identical.
+	# Set before add_child so the player's _ready applies it (same as humans).
+	bot.skin_index = (bots.size() + 1) % 18
 	add_child(bot)
 	bot.global_position = at
 	bot.head_hitbox.monitoring = true
@@ -1877,6 +1880,8 @@ func _spawn_room_bots(room, room_world: Node) -> void:
 		bot.player_name = "Bot-%d" % (i + 1)
 		bot.is_local = false
 		bot.is_human_input = false
+		# Distinct skin per bot so they're visually tellable apart (+ name tag).
+		bot.skin_index = (i + 1) % 18
 		bot.set_multiplayer_authority(bot_peer_id)
 		room_world.add_child(bot)
 		bot.global_position = _spawn_pos_for(bot_peer_id)
