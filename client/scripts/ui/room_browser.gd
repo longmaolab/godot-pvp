@@ -14,6 +14,7 @@ class_name RoomBrowser
 
 const ROOM_LOBBY_SCENE := "res://client/scenes/ui/room_lobby.tscn"
 const MAIN_MENU_SCENE := "res://client/scenes/main_menu.tscn"
+const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 
 @onready var server_label: Label = $Center/Panel/V/ServerLabel
 @onready var room_list: ItemList = $Center/Panel/V/RoomList
@@ -60,6 +61,12 @@ func _ready() -> void:
 	room_list.item_selected.connect(_on_room_selected)
 	room_list.item_activated.connect(func(idx): _on_room_selected(idx); _on_join_pressed())
 	join_btn.disabled = true   # enable when a row is selected
+	# Shared design system: readable list rows + variant-styled buttons.
+	UiStyle.style_list(room_list)
+	UiStyle.style_button(create_btn, "primary")
+	UiStyle.style_button(join_btn, "primary")
+	UiStyle.style_button(refresh_btn, "neutral")
+	UiStyle.style_button(back_btn, "neutral")
 
 	# Subscribe to RPC replies.
 	var net_rpc: Node = get_node_or_null(^"/root/NetRpc")

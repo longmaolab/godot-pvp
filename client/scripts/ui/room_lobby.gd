@@ -17,6 +17,7 @@ class_name RoomLobbyScene
 ## status message.
 
 const ROOM_BROWSER_SCENE := "res://client/scenes/ui/room_browser.tscn"
+const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 const MAIN_MENU_SCENE := "res://client/scenes/main_menu.tscn"
 const GAME_SCENE := "res://client/scenes/game.tscn"
 
@@ -45,9 +46,11 @@ var _my_ready: bool = false
 func _ready() -> void:
 	_my_peer = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 0
 
-	# Taller, more readable player rows — the default ItemList rows were cramped.
-	player_list.add_theme_font_size_override(&"font_size", 20)
-	player_list.add_theme_constant_override(&"v_separation", 14)
+	# Shared design system: readable player rows + variant-styled buttons.
+	UiStyle.style_list(player_list, 20, 14)
+	UiStyle.style_button(start_btn, "primary")
+	UiStyle.style_button(ready_btn, "primary")
+	UiStyle.style_button(leave_btn, "danger")
 
 	# Pick up the initial room state stashed by room_browser before
 	# change_scene_to_file. Settings autoload is the cross-scene channel.
