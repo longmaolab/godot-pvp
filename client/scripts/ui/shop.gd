@@ -13,6 +13,13 @@ const MAIN_MENU := preload("res://client/scenes/main_menu.tscn")
 # the weapon catalog, and the server never drift. Preloaded class ref, not the
 # autoload global, so this file also compiles in standalone --script loads.
 const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
+const _PRIZE_WHEEL := preload("res://client/scripts/ui/prize_wheel.gd")
+const _PRIZE_WHEEL_POINTER := preload("res://client/scripts/ui/prize_wheel_pointer.gd")
+const _WHEEL_SIZE := Vector2(264, 264)
+# Untyped (not `: PrizeWheel`) so shop.gd still parses under smoke's `--script`
+# cold-cache load, where the class_name global isn't registered. Runtime is a
+# real PrizeWheel; its methods dispatch dynamically.
+var _wheel = null
 
 @onready var credits_label: Label = $V/Header/H/Credits
 @onready var fragments_label: Label = $V/Header/H/Fragments
@@ -27,7 +34,7 @@ const NetProtocol = preload("res://shared/scripts/network/net_protocol.gd")
 @onready var rare_chest_buy: Button = $V/Tabs/Chests/V/RareRow/H/Buy
 @onready var wheel_spin_btn: Button = $V/Tabs/Wheel/V/SpinButton
 @onready var wheel_hint: Label = $V/Tabs/Wheel/V/Hint
-@onready var wheel_dial: Control = $V/Tabs/Wheel/V/DialHolder/Dial
+@onready var wheel_holder: CenterContainer = $V/Tabs/Wheel/V/DialHolder
 @onready var wheel_result: RichTextLabel = $V/Tabs/Wheel/V/Result
 @onready var upgrades_list: VBoxContainer = $V/Tabs/Upgrades/Scroll/V
 @onready var bundles_list: VBoxContainer = $V/Tabs/Bundles/Scroll/V
@@ -55,6 +62,7 @@ func _ready() -> void:
 	_populate_bundles()
 	_refresh_chests()
 	_refresh_wheel_hint()
+	_build_wheel()
 	if has_node(^"/root/Settings"):
 		var s: Node = get_node(^"/root/Settings")
 		s.credits_changed.connect(func(_n): _refresh_currency())
@@ -496,14 +504,8 @@ func _on_spin() -> void:
 		if r <= cum:
 			picked = o
 			break
-	# Spin the dial — 5 full rotations + a random offset, 3.5s with cubic
-	# bezier so it slows dramatically at the end.
-	var target_rot: float = TAU * 5.0 + randf_range(0.0, TAU)
-	wheel_dial.rotation = 0.0
-	var t: Tween = create_tween()
-	t.tween_property(wheel_dial, "rotation", target_rot, 3.5) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	await t.finished
+	# Real prize wheel: spin so the pointer LANDS on the picked segment.
+	await _spin_wheel_to(WHEEL_OUTCOMES.find(picked))
 	_apply_wheel_outcome(picked, s)
 	_refresh_wheel_hint()
 	wheel_spin_btn.disabled = false
@@ -672,12 +674,68 @@ func _show_wheel_reward(reward: Dictionary) -> void:
 	wheel_spin_btn.disabled = false
 
 
-# Spin the dial with the same 3.5s cubic-ease tween as the local path. When
-# the server is authoritative, the result label is filled in by
-# _on_server_reward after the tween — no client-side outcome picking.
+# Online: the server is authoritative for the reward, and its reward categories
+# don't map 1:1 to the client wheel segments — so the spin is decorative. Land
+# on a random segment; _show_wheel_reward fills in the real reward + re-enables
+# the button when the server replies.
 func _start_wheel_animation(_unused) -> void:
-	var target_rot: float = TAU * 5.0 + randf_range(0.0, TAU)
-	wheel_dial.rotation = 0.0
+	await _spin_wheel_to(randi() % WHEEL_OUTCOMES.size())
+
+
+# ── Prize-wheel widget (built procedurally over the scene's DialHolder) ─────
+func _build_wheel() -> void:
+	for c in wheel_holder.get_children():
+		c.queue_free()
+	wheel_holder.custom_minimum_size = Vector2(0, _WHEEL_SIZE.y + 8)
+	var area := Control.new()
+	area.custom_minimum_size = _WHEEL_SIZE
+	area.size = _WHEEL_SIZE
+	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wheel = _PRIZE_WHEEL.new()
+	_wheel.size = _WHEEL_SIZE
+	_wheel.pivot_offset = _WHEEL_SIZE * 0.5
+	_wheel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area.add_child(_wheel)
+	_wheel.set_segments(_wheel_segments())
+	var pointer := _PRIZE_WHEEL_POINTER.new()
+	pointer.size = Vector2(_WHEEL_SIZE.x, 26)
+	pointer.position = Vector2(0, -2)
+	pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area.add_child(pointer)
+	wheel_holder.add_child(area)
+
+
+func _wheel_segments() -> Array:
+	var out: Array = []
+	for o in WHEEL_OUTCOMES:
+		out.append({"label": _wheel_short_label(String(o["name"])), "color": Color(o["color"])})
+	return out
+
+
+func _wheel_short_label(n: String) -> String:
+	match n:
+		"jackpot": return "JACKPOT"
+		"big_bundle": return "BUNDLE"
+		"small_rare": return "RARE"
+		"big_frags": return "+100"
+		"frags": return "+25"
+		"credits": return "+$80"
+	return "?"
+
+
+# Spin so segment `index` lands under the top pointer, then highlight it.
+# 4s quintic ease-out for a satisfying slow-down. Segment 0 sits at the top.
+func _spin_wheel_to(index: int) -> void:
+	if _wheel == null:
+		return
+	var n: int = maxi(1, WHEEL_OUTCOMES.size())
+	var seg: float = TAU / float(n)
+	var jitter: float = randf_range(-seg * 0.30, seg * 0.30)
+	var target: float = TAU * 5.0 + _wheel.angle_for(index) + jitter
+	_wheel.set_highlight(-1)
+	_wheel.rotation = 0.0
 	var t: Tween = create_tween()
-	t.tween_property(wheel_dial, "rotation", target_rot, 3.5) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	t.tween_property(_wheel, "rotation", target, 4.0) \
+		.set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	await t.finished
+	_wheel.set_highlight(index)
