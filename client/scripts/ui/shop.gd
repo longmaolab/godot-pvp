@@ -103,7 +103,7 @@ func _populate_bundles() -> void:
 		if res != null:
 			bundles.append(res)
 	dir.list_dir_end()
-	bundles.sort_custom(func(a, b): return a.price_credits < b.price_credits)
+	bundles.sort_custom(func(a, b): return a.discounted_price() < b.discounted_price())
 	for b in bundles:
 		bundles_list.add_child(_make_bundle_card(b))
 
@@ -165,7 +165,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 	var buy_row := HBoxContainer.new()
 	v.add_child(buy_row)
 	var price_lbl := Label.new()
-	price_lbl.text = "总价 $%d (单买 $%d)" % [b.price_credits, b.full_price()]
+	price_lbl.text = "折后 $%d (原价 $%d)" % [b.discounted_price(), b.full_price()]
 	price_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	price_lbl.add_theme_color_override(&"font_color", Color(0.7, 0.85, 0.95))
 	price_lbl.add_theme_font_size_override(&"font_size", 12)
@@ -180,7 +180,7 @@ func _make_bundle_card(b: Resource) -> PanelContainer:
 		buy_btn.text = "全部已拥有"
 		buy_btn.disabled = true
 	else:
-		buy_btn.text = "BUY · $%d" % b.price_credits
+		buy_btn.text = "BUY · $%d" % b.discounted_price()
 		buy_btn.pressed.connect(_on_buy_bundle.bind(b))
 	buy_row.add_child(buy_btn)
 	return pc
@@ -194,8 +194,8 @@ func _on_buy_bundle(b: Resource) -> void:
 		_reveal("[color=#ff8888]Bundles not available online yet — only single-weapon purchases route through the server.[/color]")
 		return
 	var s: Node = get_node(^"/root/Settings")
-	if not s.spend_credits(b.price_credits):
-		_reveal("[color=#ff8888]Not enough credits — need $%d, have $%d.[/color]" % [b.price_credits, s.credits])
+	if not s.spend_credits(b.discounted_price()):
+		_reveal("[color=#ff8888]Not enough credits — need $%d, have $%d.[/color]" % [b.discounted_price(), s.credits])
 		return
 	var unlocked: Array = []
 	for w in b.items:
