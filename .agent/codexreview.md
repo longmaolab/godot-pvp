@@ -23,6 +23,63 @@
 
 ## 待修复
 
+## 2026-06-01 02:04 +08 — Codex
+
+**摘要**
+
+- 本轮复审 `aa678a8..HEAD`（05-31 复审修复、UI design system、shop/wheel polish、spawn clearance fix/test）。
+- 旧的高风险项多数已闭环：bot cleanup、Shop upgrade 服务器路径、match history start time、deploy dirty-source fail-fast、main-menu compression、spawn clearance 相关验证均通过。
+- 没发现新的 P0/P1 线上玩法破坏；但还有 3 个会影响测试门禁或玩家经济/UI 可信度的 P2 问题。
+
+### [P2] `run_boot_test.sh` 的 macOS CA whitelist 仍会让 `run_quick.sh` 失败
+**文件**：`tests/run_boot_test.sh:30`
+
+**问题**：本轮 `HOME=/private/tmp/godot-home bash tests/run_quick.sh` 仍是 9 passed / 1 failed，唯一失败仍是 `boot_test`。当前 filter 只排除了包含 `certificat|get_system_ca` 的行，但 Godot/macOS 输出是两行：第一行 `ERROR: Condition "ret != noErr"...` 没有 certificate 关键字，第二行才是 `get_system_ca_certificates`，所以第 30 行的 grep 仍把第一行当项目错误。
+
+**为什么重要**：这会让轻量门禁继续红灯，后续 reviewer/CI 仍要人工判断“项目坏了还是 macOS 证书噪声”。旧 finding 标成已修，但实际没有闭环。
+
+**建议**：不要逐行 grep 后再丢 certificate 行；改成上下文过滤，例如 `grep -B1 get_system_ca_certificates` 一起豁免前一行，或先只匹配项目级错误（`SCRIPT ERROR|Parse Error|Failed to load script|Node not found`）。保留真正 `ERROR` 覆盖时，需要显式排除这组两行 macOS CA 事件。
+
+### [P2] 线上 wheel 没同步 server cooldown，UI 会反复显示可免费/付费 spin 但服务器只拒绝
+**文件**：`client/scripts/persistence/settings.gd:230`、`client/scripts/persistence/settings.gd:440`、`client/scripts/ui/shop.gd:522`、`client/scripts/ui/shop.gd:526`、`server/scripts/profile_service.gd:386`
+
+**问题**：服务器 profile 已下发 `last_free_spin_ms`，但 `Settings._apply_server_profile()` 只留了注释，没有保存这个字段；`has_free_spin_today()` 仍只看本地 `last_free_spin_iso`。线上 `Shop` 又根据 `has_free_spin_today()` 显示 `FREE SPIN` 或 `$100` paid spin，但 `ProfileService._on_spin_wheel()` 对 24h 内的第二次请求只 `_ack("spin", false, "wait N hours")`，没有任何 paid-spin 扣费路径，`NetProtocol.WHEEL_PAID_COST` 也没有被服务端使用。
+
+**为什么重要**：玩家在线抽完一次后，客户端可能继续显示可抽/付费抽；点击只会服务器拒绝，像是按钮坏了或经济扣费规则不一致。Shop 里 `_show_wheel_reward()` 还会重新 enable 按钮，进一步放大重复点击/重复拒绝。
+
+**建议**：在 Settings 增加 `last_free_spin_ms` 并从 server profile 写入；线上 `has_free_spin_today()` 应按服务器 wall-clock cooldown 判断，或由 profile 直接下发 `can_free_spin_at_ms`。同时二选一：如果要 paid spin，RPC 需要携带 paid/free 意图，服务端在 cooldown 内扣 `NetProtocol.WHEEL_PAID_COST` 后发奖；如果不要 paid spin，移除 `$100` 文案和 `WHEEL_PAID_COST` 暗示，按钮在 cooldown 内禁用并显示剩余时间。
+
+### [P2] 自定义 loadout 默认值仍和运行时默认不一致
+**文件**：`client/scripts/game_controller.gd:21`、`client/scripts/ui/main_menu.gd:1011`、`client/scripts/ui/main_menu.gd:1434`、`client/scripts/ui/main_menu.gd:1468`
+
+**问题**：运行时 `DEFAULT_LOADOUT` 是 `[AK20, SG8, SRX, RAILGUN]`，Loadout picker 文案也写 `AK20 · SG8 · SRX · RAILGUN`；但自定义编辑器打开无保存值时、以及 Reset 时都使用 `["ak20", "sg8", "srx", "grenade"]`。
+
+**为什么重要**：玩家点“默认 / reset”在不同入口拿到不同第 4 槽：实际默认是 railgun，编辑器默认是 grenade。保存后还会把原本的默认覆盖为自定义 grenade 版本，造成菜单文案、持久化设置、实战装备互相打架。
+
+**建议**：把默认 loadout ID 提成一个共享常量（至少在 `main_menu.gd` 内统一数组），并与 `GameController.DEFAULT_LOADOUT` 对齐为 railgun；或者如果产品决定默认第 4 槽就是 grenade，就同时改 `DEFAULT_LOADOUT` 和 picker 文案。
+
+### 验证
+
+- `HOME=/private/tmp/godot-home bash tests/run_quick.sh`
+  - 9 passed / 1 failed in 12s
+  - 唯一失败：`boot_test` 仍误报 macOS `get_system_ca_certificates` 前一行 `ERROR`
+  - `smoke_test` 全量 parse 通过，未见旧 `NetProtocol` 编译错误
+- `HOME=/private/tmp/godot-home bash tests/run_main_menu_compression_test.sh` PASS（LeftCard min 816 < 860）
+- `HOME=/private/tmp/godot-home /Applications/Godot.app/Contents/MacOS/Godot --headless --path /Users/longmao/projects/godot-pvp tests/spawn_clearance_test.tscn` PASS（8 maps）
+- `HOME=/private/tmp/godot-home bash tests/run_database_test.sh` PASS（13/13）
+- `HOME=/private/tmp/godot-home bash tests/run_room_manager_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_room_world_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_replay_player_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_bot_map_engage_test.sh` PASS（4 maps）
+
+### 推荐下一步
+
+1. 先修 boot-test whitelist，让 `run_quick.sh` 恢复可信绿灯。
+2. 明确线上 wheel 规则：支持 paid spin 就补服务器扣费路径；不支持就移除客户端 paid/free 错误文案。
+3. 统一默认 loadout 第 4 槽，避免保存/Reset 把 railgun 默认悄悄改成 grenade。
+
+---
+
 ## 2026-05-31 02:02 +08 — Codex
 
 **摘要**
@@ -154,4 +211,3 @@ real_aim(全过)覆盖。**这是过时测试,不是生产 bug。已按用户决
 > **归档**：2026-05-30 及更早的已闭环 review 已移至
 > `.agent/codexreview-archive/resolved-2026-05.md`（1612 行，全部 [x]/已解决）。
 > 本文件只保留**当前开放**项。
-
