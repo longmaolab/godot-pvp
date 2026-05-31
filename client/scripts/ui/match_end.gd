@@ -9,6 +9,7 @@ class_name MatchEnd
 ## client_start_match with explicit reject feedback (DS path).
 
 const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
+const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 
 @onready var title: Label = $Center/Card/V/Title
 @onready var scoreboard_list: VBoxContainer = $Center/Card/V/ScoreboardList
@@ -55,6 +56,8 @@ const REJECT_REASONS: Dictionary = {
 func _ready() -> void:
 	return_btn.pressed.connect(_on_return)
 	play_again_btn.pressed.connect(_on_play_again)
+	UiStyle.style_button(play_again_btn, "primary")
+	UiStyle.style_button(return_btn, "neutral")
 	_build_status_labels()
 	# Subscribe to the server's rejection feedback. _on_start_match_failed
 	# re-enables the button + shows a reason instead of leaving the user

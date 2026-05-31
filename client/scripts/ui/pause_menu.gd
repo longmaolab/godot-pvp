@@ -8,6 +8,7 @@ class_name PauseMenu
 ## the world just toggles mouse capture.
 
 const MAIN_MENU_PATH := "res://client/scenes/main_menu.tscn"
+const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 
 @onready var resume_btn: Button = $Center/Card/V/ResumeBtn
 @onready var menu_btn: Button = $Center/Card/V/MenuBtn
@@ -29,6 +30,9 @@ func _ready() -> void:
 	# Main Menu" is the web "exit" (leaves the match cleanly). Native keeps Quit.
 	if OS.has_feature("web"):
 		quit_btn.visible = false
+	UiStyle.style_button(resume_btn, "primary")
+	UiStyle.style_button(menu_btn, "neutral")
+	UiStyle.style_button(quit_btn, "danger")
 	# Initialize from current state so the very first tick doesn't see a
 	# spurious CAPTURED→VISIBLE transition during scene load.
 	_last_mouse_mode = Input.mouse_mode

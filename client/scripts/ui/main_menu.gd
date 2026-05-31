@@ -4,6 +4,7 @@ class_name MainMenu
 const GAME_SCENE := preload("res://client/scenes/game.tscn")
 # P1-14: weapon-catalog card rendering extracted here (pure UI, no menu state).
 const _WeaponsDialogBuilder := preload("res://client/scripts/ui/weapons_dialog_builder.gd")
+const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 # Runtime-loaded (not preload) to avoid a circular dependency with shop.tscn,
 # which preloads main_menu.tscn for its back button.
 const SHOP_SCENE_PATH := "res://client/scenes/shop.tscn"
@@ -195,6 +196,19 @@ func _ready() -> void:
 	loadout_edit_btn.pressed.connect(_on_open_loadout_edit)
 	loadout_edit_save.pressed.connect(_on_loadout_edit_save)
 	loadout_edit_reset.pressed.connect(_on_loadout_edit_reset)
+	# Unified button styling (UiStyle). Hero PRACTICE / CREATE ROOM keep their big
+	# custom green; everything else gets the shared variants for a cohesive look.
+	for b in [weapons_btn, shop_btn, loadout_edit_btn, redeem_btn, wheel_btn, login_btn,
+			browse_rooms_btn, join_by_code_btn, host_btn, join_btn, skin_prev_btn, skin_next_btn]:
+		UiStyle.style_button(b, "neutral")
+	UiStyle.style_button(start_btn, "primary")
+	UiStyle.style_button(cancel_btn, "danger")
+	UiStyle.style_button(loadout_edit_save, "primary")
+	UiStyle.style_button(loadout_edit_reset, "neutral")
+	UiStyle.style_button(redeem_submit, "primary")
+	UiStyle.style_button(wheel_spin, "primary")
+	UiStyle.style_button(login_login_btn, "primary")
+	UiStyle.style_button(login_register_btn, "neutral")
 	_setup_leaderboard()
 	# Subscribe to Settings.server_action so we can show success/failure
 	# feedback inside the redeem dialog. Settings emits this for ALL
