@@ -65,6 +65,13 @@ func _run_test() -> void:
 	# 3. Verify respawn restores state cleanly.
 	# Pre-decrement ammo to confirm respawn refills it.
 	p.ammo_in_mag = 5
+	# Coverage: respawn() must EMIT ammo_changed (not just write the vars) so
+	# the HUD ammo readout refreshes to the refilled count. If a future edit
+	# drops the emit, the label would freeze at the pre-death count after
+	# respawn (real ammo refilled, but readout looks empty until the next shot,
+	# which would read as "重生不满弹 / 备弹没效果"). Watch the signal.
+	var respawn_ammo_emit := {"mag": -1, "reserve": -1}
+	p.ammo_changed.connect(func(m, r): respawn_ammo_emit.mag = m; respawn_ammo_emit.reserve = r)
 	p.respawn(Vector3(7, 1, 0))
 	if p.is_dead:
 		_fail("respawn did not clear is_dead")
@@ -77,6 +84,10 @@ func _run_test() -> void:
 		return
 	if p.ammo_in_mag != AK20.magazine:
 		_fail("respawn did not refill AK20 mag (got %d, expected %d)" % [p.ammo_in_mag, AK20.magazine])
+		return
+	if respawn_ammo_emit.mag != AK20.magazine or respawn_ammo_emit.reserve != AK20.reserve:
+		_fail("respawn did not emit ammo_changed with refilled values — HUD freezes at pre-death count (got %d/%d, expected %d/%d)" % [
+			respawn_ammo_emit.mag, respawn_ammo_emit.reserve, AK20.magazine, AK20.reserve])
 		return
 	# Switch to SG-8 — its ammo state should ALSO be refilled by respawn.
 	p.equip_slot(1)
