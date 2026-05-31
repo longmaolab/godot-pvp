@@ -71,6 +71,7 @@ var MODES: Array = []
 @onready var skin_name_label: Label = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinName
 @onready var skin_prev_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinPrev
 @onready var skin_next_btn: Button = $Scroll/Center/Cols/LeftCard/V/SkinRow/SkinNext
+@onready var skin_preview: TextureRect = $Scroll/Center/Cols/LeftCard/V/SkinRow/CharacterPreview
 @onready var summary_map: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMap
 @onready var summary_mode: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummaryMode
 @onready var summary_skin: Label = $Scroll/Center/Cols/RightCard/V/SelectionSummary/H/SummarySkin
@@ -370,6 +371,13 @@ func _refresh_skin_label() -> void:
 	# A..R letter mapping mirrors PlayerController.SKIN_LETTERS.
 	var letter: String = "ABCDEFGHIJKLMNOPQR".substr(s.skin_index, 1)
 	skin_name_label.text = "Character %s (%d / 18)" % [letter, s.skin_index + 1]
+	# Show the actual character (preview PNG keyed by lowercase letter), like
+	# arena-shooter-3d's "PICK YOUR CHARACTER" — so you SEE the 小人, not just text.
+	if skin_preview != null:
+		var lower: String = "abcdefghijklmnopqr".substr(s.skin_index, 1)
+		var ppath: String = "res://assets/models/characters/previews/character-%s.png" % lower
+		if ResourceLoader.exists(ppath):
+			skin_preview.texture = load(ppath)
 	_refresh_summary()
 
 

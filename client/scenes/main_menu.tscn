@@ -353,7 +353,7 @@ theme_override_styles/panel = SubResource("panel_glass")
 theme_override_constants/separation = 4
 
 [node name="LogoImage" type="TextureRect" parent="Scroll/Center/Cols/LeftCard/V"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 34)
 texture = ExtResource("21_logo")
 expand_mode = 1
 stretch_mode = 5
@@ -409,6 +409,11 @@ text = "皮肤"
 custom_minimum_size = Vector2(70, 0)
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.6, 0.8, 0.95, 1)
+
+[node name="CharacterPreview" type="TextureRect" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
+custom_minimum_size = Vector2(56, 56)
+expand_mode = 1
+stretch_mode = 5
 
 [node name="SkinPrev" type="Button" parent="Scroll/Center/Cols/LeftCard/V/SkinRow"]
 custom_minimum_size = Vector2(48, 36)
