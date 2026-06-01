@@ -23,6 +23,61 @@
 
 ## 待修复
 
+## 2026-06-02 02:02 +08 — Codex
+
+**摘要**
+
+- 本轮复审当前 `HEAD` = `5ba4c1b`（上一轮 review report commit）。`git log --since=2026-05-31T18:00:48Z -- . ':(exclude).agent/codexreview.md'` 没有新的项目代码提交，所以重点是复验上一轮开放项和轻量门禁。
+- 未发现新的 P0/P1 gameplay / networking 破坏；RoomManager、RoomWorld、Database、main-menu compression 均通过。
+- 仍有 3 个 P2 开放：`run_quick.sh` 的 boot gate 仍红、线上 wheel cooldown/付费文案仍和服务器规则漂移、自定义 loadout 默认第 4 槽仍与实战默认不一致。
+
+### [P2] `run_boot_test.sh` 仍误报 macOS CA stderr，`run_quick.sh` 红灯
+**文件**：`tests/run_boot_test.sh:30`
+
+**问题**：`run_quick.sh` 本轮仍是 9 passed / 1 failed，唯一失败是 `boot_test`。过滤逻辑只删掉包含 `certificat|get_system_ca` 的行，但 macOS Godot 输出仍是两行：第一行 `ERROR: Condition "ret != noErr" is true. Returning: ""` 不包含 certificate 关键字，第二行才是 `get_system_ca_certificates`，所以第 30 行仍把第一行当项目错误。
+
+**为什么重要**：轻量门禁继续红灯，后续 reviewer/CI 仍要人工判断“项目坏了还是 macOS 证书噪声”。这会降低 `run_quick.sh` 对真实 boot/runtime regressions 的信任度。
+
+**建议**：把 macOS CA 事件按上下文过滤，而不是逐行 keyword 过滤。可用 `awk`/状态机在看到下一行 `get_system_ca_certificates` 时同时丢弃前一条 generic `ERROR:`；或者改成只匹配项目级错误（`SCRIPT ERROR|Parse Error|Failed to load script|Node not found`）并保留 dedicated allowlist 测试。
+
+### [P2] 线上 wheel cooldown 没同步到客户端，UI 仍暗示可付费继续抽
+**文件**：`client/scripts/persistence/settings.gd:230`、`client/scripts/persistence/settings.gd:440`、`client/scripts/ui/shop.gd:522`、`client/scripts/ui/shop.gd:526`、`client/scripts/ui/main_menu.gd:1133`、`client/scripts/ui/main_menu.gd:1168`、`server/scripts/profile_service.gd:386`
+
+**问题**：`ProfileService._build_profile()` 已下发 `last_free_spin_ms`，但 `Settings._apply_server_profile()` 仍没有保存该字段；`has_free_spin_today()` 只看本地 `last_free_spin_iso`。Shop 根据这个本地 ISO 显示 `FREE SPIN` 或 `$100` paid spin，MainMenu 每次打开 wheel dialog 又直接 `wheel_spin.disabled = false`。服务器端 `_on_spin_wheel()` 在 24h cooldown 内只 `_ack("spin", false, "wait N hours")`，没有 paid-spin 扣费路径，`NetProtocol.WHEEL_PAID_COST` 也仍未被服务器使用。
+
+**为什么重要**：在线玩家抽完一次后，客户端可能继续显示可抽或付费抽；点击后服务器只拒绝，表现像按钮坏了或经济扣费规则不一致。Shop 的 `_show_wheel_reward()` 还会在 profile push 后重新 enable 按钮，进一步制造重复点击/重复拒绝。
+
+**建议**：在 `Settings` 增加 `last_free_spin_ms` 或 `can_free_spin_at_ms`，从 server profile 写入并让 Shop/MainMenu 都按服务器 cooldown 渲染。产品上二选一：支持 paid spin 就让 RPC 携带 paid/free 意图并由服务器扣 `NetProtocol.WHEEL_PAID_COST` 后发奖；不支持 paid spin 就移除 `$100` 文案/常量并在 cooldown 内禁用按钮、显示剩余时间。
+
+### [P2] 自定义 loadout 默认值仍和运行时默认不一致
+**文件**：`client/scripts/game_controller.gd:21`、`client/scripts/ui/main_menu.gd:1011`、`client/scripts/ui/main_menu.gd:1434`、`client/scripts/ui/main_menu.gd:1468`
+
+**问题**：实战 `GameController.DEFAULT_LOADOUT` 是 `[AK20, SG8, SRX, RAILGUN]`，Loadout picker 文案也写 `AK20 · SG8 · SRX · RAILGUN`；但自定义编辑器无保存值时和 Reset 时仍使用 `["ak20", "sg8", "srx", "grenade"]`。
+
+**为什么重要**：玩家点默认/Reset 时会在不同入口拿到不同第 4 槽。保存自定义后还会把原本 railgun 默认覆盖成 grenade 版本，导致菜单文案、持久化设置、实战装备互相不一致。
+
+**建议**：提一个共享默认 ID 数组（至少 `main_menu.gd` 内单一常量），并与 `GameController.DEFAULT_LOADOUT` 对齐为 `["ak20", "sg8", "srx", "railgun"]`；或如果产品决定默认第 4 槽是 grenade，就同步改 `DEFAULT_LOADOUT` 和 picker 文案。
+
+### 验证
+
+- `git status --short`：仅有无关 untracked `.claude/scheduled_tasks.lock`，未触碰。
+- `git log --since='2026-05-31T18:00:48Z' -- . ':(exclude).agent/codexreview.md'`：无新的项目代码提交。
+- `HOME=/private/tmp/godot-home bash tests/run_quick.sh`
+  - 9 passed / 1 failed in 13s
+  - 唯一失败：`boot_test` 仍误报 macOS `get_system_ca_certificates` 前一行 generic `ERROR`
+- `HOME=/private/tmp/godot-home bash tests/run_database_test.sh` PASS（13/13）
+- `HOME=/private/tmp/godot-home bash tests/run_room_manager_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_room_world_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_main_menu_compression_test.sh` PASS（LeftCard min 816 < 860）
+
+### 推荐下一步
+
+1. 先修 boot-test CA 上下文过滤，让 `run_quick.sh` 恢复可信绿灯。
+2. 明确 wheel 产品规则并把客户端 cooldown/付费状态改为服务器驱动。
+3. 统一默认 loadout 第 4 槽，避免 Reset/Save 悄悄覆盖实战默认。
+
+---
+
 ## 2026-06-01 02:04 +08 — Codex
 
 **摘要**
