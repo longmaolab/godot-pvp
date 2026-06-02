@@ -57,9 +57,12 @@ func _run() -> void:
 		print("  [ok] ammo_changed → ammo_label = '%s'" % hud.ammo_label.text)
 
 	# 3. hp_changed signal: apply 10 damage, verify hp_label + hp_bar.
-	# (Bypass invincibility — _invincible_until defaults to 0, so this works.)
+	# Clear the spawn-protection window first — players now get 1.5s of
+	# invincibility on their first spawn too (2026-06-02), which would
+	# otherwise swallow this damage.
 	var attacker_dummy: Node = Node.new()
 	add_child(attacker_dummy)
+	p._invincible_until = 0.0
 	p.apply_damage(10.0, attacker_dummy)
 	await get_tree().process_frame
 	if absf(p.hp - 290.0) > 0.01:

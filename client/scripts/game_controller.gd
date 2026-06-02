@@ -1217,12 +1217,54 @@ func _spawn_pos_for(peer_id: int) -> Vector3:
 		return Vector3(0, 1, 0)
 
 	candidates.sort_custom(func(a, b): return a["score"] > b["score"])
-	# Pick randomly from the top half so spawns aren't fully deterministic
-	# (variety > pure optimum when multiple safe points exist).
+	# Spawn reform (2026-06-02): never hand back a point embedded in geometry.
+	# Keep only candidates whose player-sized capsule is physically clear of the
+	# static world (queried in the peer's OWN room world — rooms are isolated
+	# SubViewports). This makes the system robust to bad map authoring instead
+	# of relying on every SpawnPoint being hand-placed perfectly (the blank
+	# LowWallE trap that stuck players inside a wall on respawn).
+	var clear_list: Array = candidates.filter(func(c): return _is_spawn_clear(c["pos"], peer_map))
+	if clear_list.is_empty():
+		# No clear point anywhere (shouldn't happen — spawn_clearance_test guards
+		# authoring). Fall back to the safest candidate rather than failing.
+		push_warning("[spawn] all %d candidates blocked by geometry — using safest anyway" % candidates.size())
+		clear_list = candidates
+	# Pick randomly from the safe top-half so spawns aren't fully deterministic
+	# (variety > pure optimum when multiple clear points exist).
 	@warning_ignore("integer_division")
-	var pick_pool: int = maxi(1, candidates.size() / 2)
+	var pick_pool: int = maxi(1, clear_list.size() / 2)
 	var idx: int = randi() % pick_pool
-	return candidates[idx]["pos"]
+	return clear_list[idx]["pos"]
+
+
+## Spawn reform: true if a player-sized capsule centred at `pos` doesn't overlap
+## solid world geometry (collision layer bit 0). `world_node` supplies the
+## physics space — it must be a node living in the SAME world as the spawn point
+## (the peer's room map), because rooms run in isolated own_world_3d SubViewports.
+## Returns true when there's no physics space (headless unit tests that never
+## build a world) so those deterministic-spawn paths are unaffected.
+const _SPAWN_PROBE_RADIUS := 0.35
+const _SPAWN_PROBE_HEIGHT := 1.8
+const _WORLD_LAYER_MASK := 1   # static world geometry sits on collision layer bit 0
+
+func _is_spawn_clear(pos: Vector3, world_node: Node3D) -> bool:
+	if world_node == null:
+		return true
+	var world: World3D = world_node.get_world_3d()
+	if world == null:
+		return true
+	var space: PhysicsDirectSpaceState3D = world.direct_space_state
+	if space == null:
+		return true
+	var shape := CapsuleShape3D.new()
+	shape.radius = _SPAWN_PROBE_RADIUS
+	shape.height = _SPAWN_PROBE_HEIGHT
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = shape
+	params.transform = Transform3D(Basis(), pos)
+	params.collision_mask = _WORLD_LAYER_MASK
+	params.margin = 0.02
+	return space.intersect_shape(params, 1).is_empty()
 
 
 # ── Server-authoritative fire resolution ──────────────────────────────────

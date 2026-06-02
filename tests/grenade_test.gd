@@ -103,4 +103,7 @@ func _spawn_player(peer_id: int, at: Vector3) -> Node:
 	p.is_local = false
 	root.add_child(p)
 	p.global_position = at
+	# Players get 1.5s spawn protection on _ready now (2026-06-02). This test
+	# is about AoE falloff math, not spawn rules — clear it so the blast lands.
+	p._invincible_until = 0.0
 	return p

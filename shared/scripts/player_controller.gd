@@ -93,7 +93,7 @@ var is_dead: bool = false
 
 # Respawn invincibility — short window where damage is ignored. Visualized by
 # the model alpha-blinking on/off.
-const RESPAWN_INVINCIBILITY_SEC := 2.5
+const RESPAWN_INVINCIBILITY_SEC := 1.5
 const INVINCIBILITY_BLINK_PERIOD := 0.12
 var _invincible_until: float = 0.0
 var _last_blink_toggle: float = 0.0
@@ -317,6 +317,10 @@ func _ready() -> void:
 		_sync_ammo_from_state()
 	hp_changed.emit(hp, max_hp)
 	ammo_changed.emit(ammo_in_mag, ammo_reserve)
+	# Spawn protection on the FIRST spawn too, not just respawns — same 1.5s
+	# window so a player materialising at match start can't be instakilled
+	# before they've drawn a frame. respawn() re-arms this on every death.
+	_invincible_until = Time.get_ticks_msec() / 1000.0 + RESPAWN_INVINCIBILITY_SEC
 	# Show the GLB view-model for the starting weapon (local human only).
 	_apply_view_model()
 

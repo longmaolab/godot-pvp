@@ -43,6 +43,10 @@ func _run_test() -> void:
 	# If it doesn't, this apply_damage → _die → died.emit(killer) chain crashes.
 	var attacker_dummy: Node = Node.new()
 	add_child(attacker_dummy)
+	# Players now get a spawn-protection window on their FIRST spawn too (1.5s,
+	# added 2026-06-02). Clear it so this damage-path test can land the kill —
+	# same bypass the second-death step below uses.
+	p._invincible_until = 0.0
 	p.apply_damage(9999.0, attacker_dummy)
 	await get_tree().process_frame
 	if not p.is_dead:

@@ -121,6 +121,9 @@ func _ready() -> void:
 				var p: Node = pbp[first_id]
 				if p != null and is_instance_valid(p) and p.has_method(&"apply_damage"):
 					print("[server] DS-M5 test: dealing 9999 dmg to peer %d" % first_id)
+					# Bypass the 1.5s spawn-protection i-frame (2026-06-02) — this
+					# is a forced debug kill, same as the match-e2e helper below.
+					p._invincible_until = 0.0
 					p.apply_damage(9999.0, null)
 		)
 
