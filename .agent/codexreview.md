@@ -23,6 +23,71 @@
 
 ## 待修复
 
+## 2026-06-03 02:03 +08 — Codex
+
+**摘要**
+
+- 本轮复审当前 `HEAD` = `4184241`（近期变更包含 spawn 空隙校验、1.5s 出生无敌、dagger/hammer equipped melee）。
+- 新的 melee 单机测试通过，spawn clearance / RoomWorld / DB / main-menu compression 也通过；未发现新的 P0。
+- 发现 1 个新的 P1：equipped melee 在 listen-host/direct `client_fire` 路径没有走 melee 专用判定，会被服务器当成 500m hitscan 子弹处理并扣掉假弹匣。旧的 3 个 P2 仍开放。
+
+### [P1] Equipped melee 的 direct RPC 路径仍走 hitscan，listen-host/恶意 RPC 可远距离刀人且第二刀卡弹匣
+**文件**：`shared/scripts/player_controller.gd:1459`、`shared/scripts/player_controller.gd:1470`、`server/scripts/fire_resolver.gd:95`、`server/scripts/fire_resolver.gd:174`、`server/scripts/fire_resolver.gd:289`、`server/scripts/fire_resolver.gd:355`
+
+**问题**：新 melee 分支只在 `PlayerController.try_fire()` 的 authority / DS input-bit 路径调用 `_melee_strike(weapon_def.damage, weapon_def.melee_range, ...)`。但非服务器客户端按原有逻辑仍会发 `client_fire`，而 `FireResolver.resolve_fire()` 没有 `weapon.is_melee()` 分支：它先检查 `ammo_in_mag <= 0`，再在第 174 行扣 1 发弹药，然后因为 melee weapon 的 `bullet_speed = 0`、`is_hitscan()` 为 true（`_weapon_def.gd:126`），第 289 行给它 500m raycast，最后第 355 行按普通枪械伤害结算。dagger/hammer 的 `magazine = 1`，所以 direct RPC 路径第一次可以远距离命中，随后服务器弹匣变 0，下一次 swing 会触发 reload/拒绝，而不是按 melee cooldown 工作。
+
+**为什么重要**：Dedicated-server 的正常 input-bit 路径大概率没事，但 listen-host / legacy direct-fire 路径和任意能直接发 `client_fire` 的客户端会把 dagger/hammer 变成长距离 hitscan 武器。这既破坏玩法公平，也让第二次近战表现成“武器突然不能挥”，属于实际 combat/networking regression。现有 `tests/melee_weapon_test.gd` 只覆盖单机/offline `try_fire()`，没有覆盖 `FireResolver` 的 direct RPC 分支。
+
+**建议**：在 `FireResolver.resolve_fire()` 解析并验证 weapon/loadout/current weapon 后、ammo gate/commit/hitscan 前，优先处理 `weapon.is_melee()`：只 arm `time_until_next_shot`，调用服务器侧 melee strike（或抽一个共享 resolver，使用 `melee_range` + hitbox mask），不要扣 `ammo_in_mag`，不要进入 hitscan/falloff。另补一个 FireResolver/listen-host 回归测试：target 超过 `melee_range` 必须无伤，range 内命中后第二次只受 cooldown gate 而不是 ammo gate。
+
+### [P2] `run_boot_test.sh` 仍误报 macOS CA stderr，`run_quick.sh` 红灯
+**文件**：`tests/run_boot_test.sh:30`
+
+**问题**：`HOME=/private/tmp/godot-home bash tests/run_quick.sh` 本轮仍是 9 passed / 1 failed，唯一失败是 `boot_test`。过滤逻辑只删掉包含 `certificat|get_system_ca` 的行，但 macOS Godot 输出仍是两行：第一行 `ERROR: Condition "ret != noErr" is true. Returning: ""` 不包含 certificate 关键字，第二行才是 `get_system_ca_certificates`，所以第 30 行仍把第一行当项目错误。
+
+**为什么重要**：轻量门禁继续红灯，真实 boot/runtime regression 会被平台噪声淹没，review/CI 需要重复人工判断。
+
+**建议**：改成上下文过滤这组 macOS CA 事件（丢弃 `get_system_ca_certificates` 及其前一行 generic `ERROR:`），或反过来只把 `SCRIPT ERROR|Parse Error|Failed to load script|Node not found` 等项目级错误作为失败条件。
+
+### [P2] 线上 wheel cooldown 没同步到客户端，UI 仍暗示可付费继续抽
+**文件**：`client/scripts/persistence/settings.gd:230`、`client/scripts/persistence/settings.gd:440`、`client/scripts/ui/shop.gd:522`、`client/scripts/ui/shop.gd:526`、`client/scripts/ui/main_menu.gd:1133`、`client/scripts/ui/main_menu.gd:1168`、`server/scripts/profile_service.gd:386`
+
+**问题**：`ProfileService._build_profile()` 已下发 `last_free_spin_ms`，但 `Settings._apply_server_profile()` 仍没有保存该字段；`has_free_spin_today()` 只看本地 `last_free_spin_iso`。Shop 根据这个本地 ISO 显示 `FREE SPIN` 或 `$100` paid spin，MainMenu 打开 wheel dialog 又直接 `wheel_spin.disabled = false`。服务器端 `_on_spin_wheel()` 在 24h cooldown 内只 `_ack("spin", false, "wait N hours")`，没有 paid-spin 扣费路径。
+
+**为什么重要**：在线玩家抽完一次后，客户端可能继续显示可抽或付费抽；点击后服务器只拒绝，表现像按钮坏了或经济规则不一致。
+
+**建议**：让服务器 profile 下发并由 Settings 保存 `last_free_spin_ms` / `can_free_spin_at_ms`，Shop/MainMenu 都按服务器 cooldown 渲染。产品上二选一：支持 paid spin 就让 RPC 携带 paid/free 意图并由服务器扣费；不支持 paid spin 就移除 `$100` 文案/常量并在 cooldown 内禁用按钮、显示剩余时间。
+
+### [P2] 自定义 loadout 默认值仍和运行时默认不一致
+**文件**：`client/scripts/game_controller.gd:21`、`client/scripts/ui/main_menu.gd:1011`、`client/scripts/ui/main_menu.gd:1434`、`client/scripts/ui/main_menu.gd:1468`
+
+**问题**：实战 `GameController.DEFAULT_LOADOUT` 是 `[AK20, SG8, SRX, RAILGUN]`，Loadout picker 文案也写 `AK20 · SG8 · SRX · RAILGUN`；但自定义编辑器无保存值时和 Reset 时仍使用 `["ak20", "sg8", "srx", "grenade"]`。
+
+**为什么重要**：玩家点默认/Reset 时会在不同入口拿到不同第 4 槽。保存自定义后还会把原本 railgun 默认覆盖成 grenade 版本，导致菜单文案、持久化设置、实战装备互相不一致。
+
+**建议**：提一个共享默认 ID 数组（至少 `main_menu.gd` 内单一常量），并与 `GameController.DEFAULT_LOADOUT` 对齐为 `["ak20", "sg8", "srx", "railgun"]`。
+
+### 验证
+
+- `git diff --stat 9a8e5a8..HEAD`：近期代码变化集中在 spawn reform、invincibility、dagger/hammer melee、HUD ammo display 和新增 melee test。
+- `HOME=/private/tmp/godot-home bash tests/run_quick.sh`
+  - 9 passed / 1 failed in 13s
+  - 唯一失败：`boot_test` 仍误报 macOS `get_system_ca_certificates` 前一行 generic `ERROR`
+- `HOME=/private/tmp/godot-home bash tests/run_melee_weapon_test.sh` PASS（dagger/hammer 单机 equipped melee：伤害、无弹药、cooldown、range gate）
+- `HOME=/private/tmp/godot-home /Applications/Godot.app/Contents/MacOS/Godot --headless --path /Users/longmao/projects/godot-pvp tests/spawn_clearance_test.tscn` PASS（8 maps）
+- `HOME=/private/tmp/godot-home bash tests/run_room_world_test.sh` PASS
+- `HOME=/private/tmp/godot-home bash tests/run_database_test.sh` PASS（13/13）
+- `HOME=/private/tmp/godot-home bash tests/run_main_menu_compression_test.sh` PASS（LeftCard min 816 < 860）
+
+### 推荐下一步
+
+1. 先修 `FireResolver` 的 `weapon.is_melee()` direct RPC 分支，并补 listen-host/direct resolver 回归测试。
+2. 修 boot-test CA 上下文过滤，让 `run_quick.sh` 恢复可信绿灯。
+3. 明确 wheel 产品规则并把 cooldown/付费状态改为服务器驱动。
+4. 统一默认 loadout 第 4 槽，避免 Reset/Save 覆盖实战默认。
+
+---
+
 ## 2026-06-02 02:02 +08 — Codex
 
 **摘要**
