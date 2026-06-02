@@ -86,6 +86,10 @@ func _ready() -> void:
 		# arrive together with the same server_profile push.
 		s.server_action.connect(_on_server_action)
 		s.reward_received.connect(_on_server_reward)
+		# The wheel reward RPC lands BEFORE the profile push that stamps the new
+		# last_free_spin_ms, so re-render the wheel once that push arrives —
+		# otherwise the button stays "FREE SPIN" enabled during the new cooldown.
+		s.profile_synced.connect(_refresh_wheel_hint)
 
 
 # Are we talking to a real server right now? `synced_with_server` flips after
@@ -518,13 +522,41 @@ func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name
 
 # ── Wheel tab ─────────────────────────────────────────────────────────────
 func _refresh_wheel_hint() -> void:
+	# Authoritative for the SPIN button's text AND disabled state — callers just
+	# invoke this after a spin instead of toggling `disabled` themselves (which
+	# used to re-enable the button during an active server cooldown).
 	var s: Node = get_node(^"/root/Settings")
+	if _is_online():
+		# Server has no paid-spin path: during cooldown the button is locked and
+		# shows the remaining time, never a $100 "continue" the server'd reject.
+		var remaining: int = s.free_spin_cooldown_remaining_ms()
+		if remaining <= 0:
+			wheel_spin_btn.text = "FREE SPIN"
+			wheel_spin_btn.disabled = false
+			wheel_hint.text = "每日免费转盘一次！"
+		else:
+			wheel_spin_btn.text = "已抽过"
+			wheel_spin_btn.disabled = true
+			wheel_hint.text = "下次免费转盘还有 %s" % _fmt_cooldown(remaining)
+		return
+	# Offline single-player economy: calendar-day free spin + paid credits fallback.
 	if s.has_free_spin_today():
 		wheel_spin_btn.text = "FREE SPIN"
-		wheel_hint.text = "今日免费一次！明天后续转盘要 100$"
+		wheel_spin_btn.disabled = false
+		wheel_hint.text = "今日免费一次！用完后续转盘要 %d$" % WHEEL_PAID_PRICE
 	else:
 		wheel_spin_btn.text = "[D] SPIN · $%d" % WHEEL_PAID_PRICE
-		wheel_hint.text = "免费转盘已用，需要 100$ 继续抽奖"
+		wheel_spin_btn.disabled = false
+		wheel_hint.text = "免费转盘已用，需要 %d$ 继续抽奖" % WHEEL_PAID_PRICE
+
+
+func _fmt_cooldown(ms: int) -> String:
+	var total_min: int = int(ms / 60000.0)
+	var h: int = total_min / 60
+	var m: int = total_min % 60
+	if h > 0:
+		return "%d 小时 %d 分" % [h, m]
+	return "%d 分" % maxi(m, 1)
 
 
 const WHEEL_OUTCOMES := [
@@ -571,8 +603,7 @@ func _on_spin() -> void:
 	# Real prize wheel: spin so the pointer LANDS on the picked segment.
 	await _spin_wheel_to(WHEEL_OUTCOMES.find(picked))
 	_apply_wheel_outcome(picked, s)
-	_refresh_wheel_hint()
-	wheel_spin_btn.disabled = false
+	_refresh_wheel_hint()   # re-derives button text + disabled from current state
 
 
 func _apply_wheel_outcome(o: Dictionary, s: Node) -> void:
@@ -725,8 +756,12 @@ func _show_wheel_reward(reward: Dictionary) -> void:
 	var label_text: String = "\n".join(bits) if not bits.is_empty() else "(reward)"
 	wheel_result.text = "[center][color=#ffd84a]! %s[/color][/center]" % label_text
 	wheel_result.bbcode_enabled = true
-	_refresh_wheel_hint()
-	wheel_spin_btn.disabled = false
+	# A spin just succeeded → lock immediately. The reward RPC arrives BEFORE the
+	# profile push that stamps the fresh last_free_spin_ms, so don't optimistically
+	# re-render off the stale cooldown here; profile_synced → _refresh_wheel_hint
+	# will paint the real countdown once the push lands.
+	wheel_spin_btn.text = "已抽过"
+	wheel_spin_btn.disabled = true
 
 
 # Online: the server is authoritative for the reward, and its reward categories

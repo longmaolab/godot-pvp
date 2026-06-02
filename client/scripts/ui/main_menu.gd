@@ -9,6 +9,13 @@ const UiStyle = preload("res://client/scripts/ui/ui_style.gd")
 # which preloads main_menu.tscn for its back button.
 const SHOP_SCENE_PATH := "res://client/scenes/shop.tscn"
 
+# Default 4-slot loadout IDs — single source of truth for the custom loadout
+# editor's "no save yet" preselect and Reset. Must mirror
+# GameController.DEFAULT_LOADOUT ([AK20, SG8, SRX, RAILGUN]) and the
+# LoadoutPicker "默认 / DEFAULT" caption so every entry point agrees on slot 4
+# (was "grenade" here, "railgun" everywhere else — they drifted).
+const DEFAULT_LOADOUT_IDS: Array[String] = ["ak20", "sg8", "srx", "railgun"]
+
 # Map metadata moved to shared/data/map_registry.gd so room_lobby can also
 # read it without duplicating the description text. Can't `const = ` an
 # external class_name reference (not constexpr), so use a var initialized
@@ -1128,10 +1135,29 @@ func _on_settings_action(action: String, ok: bool, reason: String) -> void:
 # ── Daily wheel ──────────────────────────────────────────────────────────
 
 func _on_open_wheel() -> void:
-	wheel_result.text = "点上面的按钮开始"
+	# Gate on the server-stamped cooldown so we don't offer a spin the server
+	# will just reject (the wheel is online-only — _on_submit_spin needs a peer).
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	var remaining: int = 0
+	if settings != null and settings.has_method(&"free_spin_cooldown_remaining_ms"):
+		remaining = int(settings.free_spin_cooldown_remaining_ms())
+	if remaining > 0:
+		wheel_result.text = "下次免费转盘还有 %s" % _fmt_wheel_cooldown(remaining)
+		wheel_spin.disabled = true
+	else:
+		wheel_result.text = "点上面的按钮开始"
+		wheel_spin.disabled = false
 	wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
-	wheel_spin.disabled = false
 	wheel_dialog.popup_centered()
+
+
+func _fmt_wheel_cooldown(ms: int) -> String:
+	var total_min: int = int(ms / 60000.0)
+	var h: int = total_min / 60
+	var m: int = total_min % 60
+	if h > 0:
+		return "%d 小时 %d 分" % [h, m]
+	return "%d 分" % maxi(m, 1)
 
 
 func _on_submit_spin() -> void:
@@ -1431,7 +1457,7 @@ func _populate_loadout_edit_pickers() -> void:
 	if settings != null and "loadout_ids" in settings and not Array(settings.loadout_ids).is_empty():
 		current = settings.loadout_ids
 	else:
-		current = ["ak20", "sg8", "srx", "grenade"]
+		current = DEFAULT_LOADOUT_IDS
 	for slot_i in 4:
 		var target_id: String = String(current[slot_i]) if slot_i < current.size() else ""
 		var idx: int = _loadout_edit_weapon_ids.find(target_id)
@@ -1465,7 +1491,7 @@ func _on_loadout_edit_save() -> void:
 
 func _on_loadout_edit_reset() -> void:
 	# Re-populate with default ids selected.
-	var defaults: Array = ["ak20", "sg8", "srx", "grenade"]
+	var defaults: Array = DEFAULT_LOADOUT_IDS
 	var pickers: Array[OptionButton] = [loadout_edit_slot1, loadout_edit_slot2, loadout_edit_slot3, loadout_edit_slot4]
 	for slot_i in 4:
 		var idx: int = _loadout_edit_weapon_ids.find(String(defaults[slot_i]))

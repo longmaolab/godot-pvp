@@ -76,6 +76,44 @@
 2. 明确 wheel 产品规则并把客户端 cooldown/付费状态改为服务器驱动。
 3. 统一默认 loadout 第 4 槽，避免 Reset/Save 悄悄覆盖实战默认。
 
+### [x] 已修复（2026-06-02，Claude / remote agent）—— 3 个 P2 全部处理
+
+> 这 3 项在 06-02 与 06-01 两轮 review 里是同一组重复项，一并闭环。
+> ⚠️ 本次在云端容器里跑，**容器内没有 Godot 二进制**，无法跑 Godot 系测试
+> （run_all / boot / database 等）。boot-test 的 awk 过滤逻辑已用合成日志验证
+> （见下）；GDScript 改动属静态修改，**需在装有 Godot 的开发机上手动跑
+> `bash tests/run_all.sh` + 手动验证 wheel/loadout UI**。
+
+**P2-1 boot_test macOS CA stderr 误报** — 改 `tests/run_boot_test.sh`。根因:macOS CA
+事件是**两行**，关键字 `get_system_ca_certificates` 只落在第二行（`at:` 帧），第一行是
+裸 `ERROR: Condition "ret != noErr"...`；旧的逐行 `grep -v certificat` 删掉第二行却留下
+第一行，门禁继续红。做法:换成 **awk 上下文状态机**——缓冲每条候选 error 行，若紧跟的下
+一行是 CA 帧就整对丢弃，否则才算真错。@onready Node-not-found / SCRIPT ERROR / Parse
+Error 永远不会跟 CA 帧，覆盖不受影响。验证:合成日志 3 个用例全过（CA-only→空；CA+真错→
+只剩真错；连续两条真错→都保留）。
+
+**P2-2 线上 wheel cooldown 没同步、UI 仍暗示可付费抽** — 改了 `shared/scripts/network/
+net_protocol.gd`、`server/scripts/profile_service.gd`、`client/scripts/persistence/
+settings.gd`、`client/scripts/ui/shop.gd`、`client/scripts/ui/main_menu.gd`。根因:服务器
+profile 已下发 `last_free_spin_ms`，但 `Settings._apply_server_profile` 只留注释没保存；
+`has_free_spin_today()` 只看本地 iso；Shop 据此显示 FREE/`$100` paid，MainMenu 每次打开
+都 `disabled=false`；而服务端 `_on_spin_wheel` **没有 paid-spin 扣费路径**，cooldown 内只
+拒绝。**产品取向选「线上无付费抽」**（贴合服务端现状，不新增货币化路径）:① NetProtocol
+新增 `WHEEL_COOLDOWN_MS=86_400_000` 当客户端/服务端唯一来源（profile_service 改为引用
+它），删掉**从未被使用**的 `WHEEL_PAID_COST` 死常量。② Settings 新增 `last_free_spin_ms`
+字段（存盘 + 从 server profile 写入）+ `free_spin_cooldown_remaining_ms()` 助手。③ Shop
+`_refresh_wheel_hint()` 改为**权威**决定按钮文案+disabled:在线 cooldown 内→锁按钮显示剩余
+时间（不再出现 `$100` continue），可抽→FREE SPIN;离线维持「日历免费 + 付费 credits」单机
+逻辑。删掉 `_show_wheel_reward`/`_on_spin` 末尾会覆盖状态的 `disabled=false`。④ 接
+`Settings.profile_synced → _refresh_wheel_hint`（reward RPC 先于 profile push 到达，否则
+按钮会停在 FREE SPIN）。⑤ MainMenu `_on_open_wheel` 按 cooldown gate，不再无脑 enable。
+**需手动验证**:抽一次后按钮立即锁住并显示倒计时；重连后倒计时按服务器时间正确显示。
+
+**P2-3 自定义 loadout 默认第 4 槽不一致** — 改 `client/scripts/ui/main_menu.gd`。根因:
+实战 `DEFAULT_LOADOUT` 与 picker 文案是 railgun，但自定义编辑器「无保存值」(1434) 与
+Reset (1468) 硬写 `grenade`。做法:提共享常量 `DEFAULT_LOADOUT_IDS=["ak20","sg8","srx",
+"railgun"]`，两处改引用它，与 GameController/picker 文案对齐。
+
 ---
 
 ## 2026-06-01 02:04 +08 — Codex
