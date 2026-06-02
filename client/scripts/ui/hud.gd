@@ -8,6 +8,8 @@ const FEED_LIFETIME_SEC := 6.0
 @onready var hp_bar: ProgressBar = $TopLeft/HpV/HpBar
 @onready var weapon_name_label: Label = $BottomRight/AmmoV/WeaponName
 @onready var ammo_label: Label = $BottomRight/AmmoV/AmmoLabel
+# Melee weapons (dagger / hammer) have no ammo — show "∞" instead of a count.
+var _current_is_melee: bool = false
 @onready var feed: VBoxContainer = $BottomLeft/Feed
 @onready var hit_flash: ColorRect = $HitFlash
 @onready var damage_vignette: TextureRect = $DamageVignette
@@ -261,6 +263,9 @@ func _on_weapon_switched(new_weapon: Resource) -> void:
 	if new_weapon == null:
 		return
 	weapon_name_label.text = "%s · %s" % [new_weapon.display_name, new_weapon.type_label]
+	_current_is_melee = new_weapon.has_method(&"is_melee") and new_weapon.is_melee()
+	if _current_is_melee:
+		ammo_label.text = "∞"
 	push_feed("equipped %s" % new_weapon.display_name, Color(0.6, 0.95, 1.0))
 
 
@@ -301,6 +306,9 @@ func _flash_take_damage() -> void:
 
 
 func _on_ammo_changed(in_mag: int, reserve: int) -> void:
+	if _current_is_melee:
+		ammo_label.text = "∞"
+		return
 	ammo_label.text = "%d / %d" % [in_mag, reserve]
 
 

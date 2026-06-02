@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://shared/data/weapons/_weapon_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hammer"
+display_name = "Hammer"
+type_label = "Melee"
+slot = &"melee"
+description = "战锤。近战 —— 慢速重砸 + 高伤 + 较长触及,2~3 下放倒一个。无弹药、不换弹。"
+damage = 120.0
+headshot_multiplier = 1.3
+magazine = 1
+reserve = 0
+fire_interval_ms = 850
+reload_time_ms = 1
+no_reload = true
+auto = false
+pellets = 1
+spread = 0.0
+bullet_speed = 0.0
+melee_range = 2.8
+scary_close = true
+price_credits = 0
+free_starter = true
+bullet_color = Color(0.7, 0.55, 0.4, 1)

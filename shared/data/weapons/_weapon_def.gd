@@ -24,6 +24,13 @@ const SLOT_SUPPORT   := &"support"
 @export var headshot_multiplier: float = 2.0
 @export var instakill_headshot: bool = false   # replaces INSTAKILL_HS_WEAPONS set
 
+@export_group("Melee")
+## When slot == "melee", firing performs a short FORWARD SWING (no bullet,
+## no ammo) reaching this far in metres against player hitboxes. `damage`,
+## `fire_interval_ms` (swing cooldown) and `headshot_multiplier` drive the
+## rest. Ignored for non-melee weapons.
+@export var melee_range: float = 2.4
+
 @export_group("Magazine / Reload")
 @export var magazine: int = 30
 @export var reserve: int = 90
@@ -118,3 +125,7 @@ func shots_per_second() -> float:
 
 func is_hitscan() -> bool:
 	return bullet_speed <= 0.0
+
+
+func is_melee() -> bool:
+	return slot == SLOT_MELEE

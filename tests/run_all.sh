@@ -133,6 +133,7 @@ fi
 #    the suite). All godot×1, no background DS, so they belong in tier 1. ──
 for spec in \
     "grenade::run_grenade_test.sh::throwable AoE math" \
+    "melee_weapon::run_melee_weapon_test.sh::equipped dagger/hammer swing" \
     "lean::run_lean_test.sh::lean/peek server-authoritative" \
     "slide::run_slide_test.sh::slide tech (sprint+crouch lunge)" \
     "prediction::run_prediction_test.sh::DS-client local prediction" \

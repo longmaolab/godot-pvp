@@ -508,6 +508,18 @@ func _apply_view_model() -> void:
 		weapon_visual.remove_child(_vm_instance)
 		_vm_instance.queue_free()
 		_vm_instance = null
+	# Melee weapons (dagger / hammer) have no GLB art — build a simple
+	# procedural blade / hammer so they don't render as a rifle.
+	if weapon_def != null and weapon_def.is_melee():
+		for n in ["GunBody", "GunBarrel", "GunGrip"]:
+			var gbox: Node = weapon_visual.get_node_or_null(n)
+			if gbox is Node3D: (gbox as Node3D).visible = false
+		var mv: Node3D = _build_melee_view_model()
+		mv.name = "_ViewModel"
+		weapon_visual.add_child(mv)
+		mv.position = VIEW_MODEL_OFFSET
+		_vm_instance = mv
+		return
 	var model_name: String = _resolve_view_model(weapon_def)
 	var procedural := ["GunBody", "GunBarrel", "GunGrip"]
 	if model_name == "":
@@ -532,6 +544,42 @@ func _apply_view_model() -> void:
 	inst.rotation = VIEW_MODEL_ROT
 	inst.scale = Vector3(VIEW_MODEL_SCALE, VIEW_MODEL_SCALE, VIEW_MODEL_SCALE)
 	_vm_instance = inst
+
+
+## Procedural first-person model for melee weapons (no GLB art yet): a dark
+## grip plus a bright thin blade (dagger) or a chunky metal head (hammer),
+## built from BoxMesh so it reads as a melee weapon, not a gun.
+func _build_melee_view_model() -> Node3D:
+	var root := Node3D.new()
+	var is_dagger: bool = weapon_def != null and weapon_def.id == &"dagger"
+	# Grip.
+	var grip := MeshInstance3D.new()
+	var grip_mesh := BoxMesh.new()
+	grip_mesh.size = Vector3(0.04, 0.04, 0.14) if is_dagger else Vector3(0.05, 0.05, 0.30)
+	grip.mesh = grip_mesh
+	var grip_mat := StandardMaterial3D.new()
+	grip_mat.albedo_color = Color(0.16, 0.13, 0.10)
+	grip_mat.roughness = 0.9
+	grip.material_override = grip_mat
+	root.add_child(grip)
+	# Business end.
+	var head := MeshInstance3D.new()
+	var head_mesh := BoxMesh.new()
+	var head_mat := StandardMaterial3D.new()
+	head_mat.metallic = 0.85
+	head_mat.roughness = 0.3
+	if is_dagger:
+		head_mesh.size = Vector3(0.025, 0.06, 0.34)   # long thin blade
+		head_mat.albedo_color = Color(0.82, 0.86, 0.95)
+		head.position = Vector3(0.0, 0.0, -0.22)        # forward (-Z)
+	else:
+		head_mesh.size = Vector3(0.16, 0.14, 0.14)     # chunky hammer head
+		head_mat.albedo_color = Color(0.42, 0.44, 0.47)
+		head.position = Vector3(0.0, 0.0, -0.34)
+	head.mesh = head_mesh
+	head.material_override = head_mat
+	root.add_child(head)
+	return root
 
 
 func _sync_ammo_from_state() -> void:
@@ -1274,6 +1322,14 @@ func _step_weapon_visuals_only(delta: float) -> void:
 	# will actually accept (same fire interval).
 	if time_until_next_shot > 0.0:
 		return
+	# Melee weapon (dagger / hammer): swing feel only — no ammo, no tracer.
+	# The server mirror's try_fire (INPUT_FIRE bit) applies the real damage.
+	if weapon_def.is_melee():
+		time_until_next_shot = weapon_def.fire_interval_seconds()
+		_play_3d_pitched(SFX_SHOOT, 0.85 if weapon_def.id == &"dagger" else 0.5)
+		_vm_kick = minf(1.0, _vm_kick + 0.9)
+		fired.emit(weapon_def, {})
+		return
 	# Auto-reload when the mag is empty. The server-side try_fire does the
 	# same (line 712), but without this branch the DS-client local copy is
 	# stuck at 0 forever: visuals stop, R-key feels dead, "can't continue
@@ -1359,13 +1415,23 @@ func try_melee() -> bool:
 	# Only the authority deals damage.
 	if _is_networked() and not multiplayer.is_server():
 		return true
+	_melee_strike(MELEE_DAMAGE, MELEE_RANGE, 1.4)
+	return true
+
+
+## Shared close-range swing resolution — a short forward ray from the camera
+## against player hitboxes, applying `dmg` (× head_mult on a headshot) to the
+## first victim. Authority-only (the caller gates network role). Used by both
+## the universal melee key (try_melee) and equipped melee weapons (dagger /
+## hammer) via try_fire.
+func _melee_strike(dmg: float, reach: float, head_mult: float) -> void:
 	if camera == null:
-		return true
+		return
 	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
 	if space == null:
-		return true
+		return
 	var from: Vector3 = camera.global_position
-	var to: Vector3 = from - camera.global_transform.basis.z * MELEE_RANGE
+	var to: Vector3 = from - camera.global_transform.basis.z * reach
 	var q := PhysicsRayQueryParameters3D.create(from, to)
 	q.collide_with_areas = true
 	q.collide_with_bodies = false
@@ -1373,24 +1439,37 @@ func try_melee() -> bool:
 	q.exclude = [head_hitbox.get_rid(), body_hitbox.get_rid()]
 	var hit: Dictionary = space.intersect_ray(q)
 	if hit.is_empty():
-		return true
+		return
 	var col: Node = hit.get("collider")
 	if col == null or not col.has_meta(&"owner_player"):
-		return true
+		return
 	var victim: Node = col.get_meta(&"owner_player")
 	if victim == null or victim == self or not victim.has_method(&"apply_damage"):
-		return true
+		return
 	if "is_dead" in victim and victim.is_dead:
-		return true
+		return
 	var is_head: bool = col.get_meta(&"is_head", false)
-	victim.apply_damage(MELEE_DAMAGE * (1.4 if is_head else 1.0), self)
-	return true
+	victim.apply_damage(dmg * (head_mult if is_head else 1.0), self)
 
 
 # ── public API (testable + RPC-callable) ──────────────────────────────────
 func try_fire() -> bool:
 	if is_dead or is_reloading or time_until_next_shot > 0.0 or weapon_def == null:
 		return false
+	# Melee weapons (dagger / hammer): a forward swing instead of a shot — no
+	# ammo, no tracer, no muzzle. The authority strikes immediately; on a DS
+	# client the real damage comes from the server mirror's try_fire (driven by
+	# the INPUT_FIRE bit), so the non-authority path is just the swing feel.
+	if weapon_def.is_melee():
+		time_until_next_shot = weapon_def.fire_interval_seconds()
+		if is_local:
+			_play_3d_pitched(SFX_SHOOT, 0.85 if weapon_def.id == &"dagger" else 0.5)
+			if is_human_input:
+				_vm_kick = minf(1.0, _vm_kick + 0.9)
+		fired.emit(weapon_def, {})
+		if not (_is_networked() and not multiplayer.is_server()):
+			_melee_strike(weapon_def.damage, weapon_def.melee_range, weapon_def.headshot_multiplier)
+		return true
 	if ammo_in_mag <= 0:
 		start_reload()
 		return false
