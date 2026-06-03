@@ -17,6 +17,13 @@ var MAPS: Array = MapRegistry.MAPS
 
 const MODES_DIR := "res://shared/data/modes/"
 
+# Single source of truth for the default 4-slot loadout, mirrored from
+# GameController.DEFAULT_LOADOUT ([AK20, SG8, SRX, RAILGUN]) and the
+# LoadoutPicker "默认 / DEFAULT" label. The custom-loadout editor's no-save
+# preselect and Reset button both read this so every "default" entry point
+# agrees on the 4th slot (was drifting to "grenade"). codexreview P2.
+const DEFAULT_LOADOUT_IDS: Array = ["ak20", "sg8", "srx", "railgun"]
+
 # Built at _ready() by scanning MODES_DIR — same data-driven pattern as the
 # weapon registry. Practice (no mode_def) is always first.
 var MODES: Array = []
@@ -1128,9 +1135,22 @@ func _on_settings_action(action: String, ok: bool, reason: String) -> void:
 # ── Daily wheel ──────────────────────────────────────────────────────────
 
 func _on_open_wheel() -> void:
-	wheel_result.text = "点上面的按钮开始"
+	# Respect the server free-spin cooldown so we don't enable the button for a
+	# spin the server would just reject (codexreview P2). has_free_spin_today()
+	# is server-driven once synced; offline it falls back to calendar-day reset.
+	var settings: Node = get_node_or_null(^"/root/Settings")
+	var on_cooldown: bool = settings != null and settings.has_method(&"has_free_spin_today") \
+		and not settings.has_free_spin_today()
+	if on_cooldown:
+		var remaining: String = ""
+		if settings.has_method(&"free_spin_cooldown_label"):
+			remaining = settings.free_spin_cooldown_label()
+		wheel_result.text = "转盘冷却中，%s 后可再免费抽" % remaining if remaining != "" else "转盘冷却中"
+		wheel_spin.disabled = true
+	else:
+		wheel_result.text = "点上面的按钮开始"
+		wheel_spin.disabled = false
 	wheel_result.add_theme_color_override(&"font_color", Color(0.95, 0.85, 0.45))
-	wheel_spin.disabled = false
 	wheel_dialog.popup_centered()
 
 
@@ -1431,7 +1451,7 @@ func _populate_loadout_edit_pickers() -> void:
 	if settings != null and "loadout_ids" in settings and not Array(settings.loadout_ids).is_empty():
 		current = settings.loadout_ids
 	else:
-		current = ["ak20", "sg8", "srx", "grenade"]
+		current = DEFAULT_LOADOUT_IDS
 	for slot_i in 4:
 		var target_id: String = String(current[slot_i]) if slot_i < current.size() else ""
 		var idx: int = _loadout_edit_weapon_ids.find(target_id)
@@ -1465,7 +1485,7 @@ func _on_loadout_edit_save() -> void:
 
 func _on_loadout_edit_reset() -> void:
 	# Re-populate with default ids selected.
-	var defaults: Array = ["ak20", "sg8", "srx", "grenade"]
+	var defaults: Array = DEFAULT_LOADOUT_IDS
 	var pickers: Array[OptionButton] = [loadout_edit_slot1, loadout_edit_slot2, loadout_edit_slot3, loadout_edit_slot4]
 	for slot_i in 4:
 		var idx: int = _loadout_edit_weapon_ids.find(String(defaults[slot_i]))

@@ -58,6 +58,44 @@
 
 **建议**：提一个共享默认 ID 数组（至少 `main_menu.gd` 内单一常量），并与 `GameController.DEFAULT_LOADOUT` 对齐为 `["ak20", "sg8", "srx", "railgun"]`；或如果产品决定默认第 4 槽是 grenade，就同步改 `DEFAULT_LOADOUT` 和 picker 文案。
 
+### [x] 已修复（2026-06-03，Claude）—— 本批 3 个 P2 全部闭环（含 06-01 批次的同名重复项）
+
+**P2-1 boot_test 误报 macOS CA stderr** —— 改了 `tests/run_boot_test.sh`。根因：CA
+事件是**两行**（第一行裸 `ERROR: Condition "ret != noErr"...` 不含关键字，第二行
+`at: get_system_ca_certificates`），原来的逐行 `grep -viE` 只删得掉第二行，第一行漏网
+当成项目错误。做法：用 awk 状态机做**上下文过滤**——凡某行的*下一行*命中
+`get_system_ca|certificat`，就连同那一行（错误头）一起丢弃，再保留原 keyword 兜底。
+保留 `@onready Node-not-found / SCRIPT ERROR / Parse Error` 覆盖。本机模拟两行 CA 日志
+验证：CA 事件双行被吞、真 `SCRIPT ERROR` 仍命中。
+
+**P2-2 线上 wheel cooldown 没服务器驱动** —— 改了 `client/scripts/persistence/settings.gd`、
+`client/scripts/ui/shop.gd`、`client/scripts/ui/main_menu.gd`、
+`shared/scripts/network/net_protocol.gd`、`server/scripts/profile_service.gd`。根因：服务器
+profile 已下发 `last_free_spin_ms`，但 `Settings._apply_server_profile()` 从没保存它，
+`has_free_spin_today()` 只看本地 ISO；线上玩家抽完后 UI 还显示 FREE / `$100` 付费抽，但
+服务端只有 24h 免费冷却、**根本没有付费抽扣费路径**（`WHEEL_PAID_COST` 是死常量），点了
+只会被拒，像按钮坏了。产品取向：**线上只有免费冷却，不做付费抽**（offline 仍保留本地
+`$100` 付费抽，那条是合法的本地经济）。做法：① `Settings` 新增 `last_free_spin_ms`
+字段（持久化 + 从 server profile 写入），`has_free_spin_today()` 在 `_server_authoritative()`
+时改走 24h wall-clock 冷却，新增 `free_spin_cooldown_remaining_ms()` /
+`free_spin_cooldown_label()`；② `NetProtocol` 加 `WHEEL_FREE_COOLDOWN_MS`（client+server
+单一来源），删掉死常量 `WHEEL_PAID_COST`；③ Shop `_refresh_wheel_hint` 线上冷却态改成
+禁用按钮 + 显示倒计时（不再显示 `$100`），`_show_wheel_reward` 线上不再无脑 re-enable，
+并接 `profile_synced` 在 profile 落地后重渲倒计时（解决 reward 先于 profile 到达的竞态）；
+④ MainMenu `_on_open_wheel` 不再无条件 enable，按服务器冷却禁用 + 显示剩余时间。
+**需人工验证**：实机连服务器抽一次后，确认 Shop / MainMenu 两处按钮都进倒计时禁用态、
+24h 后恢复（无 Godot 单测覆盖 wheel UI，逻辑路径已随全套测试 parse/boot 通过）。
+
+**P2-3 自定义 loadout 默认第 4 槽与实战默认不一致** —— 改了
+`client/scripts/ui/main_menu.gd`。根因：实战 `GameController.DEFAULT_LOADOUT` 与 picker
+文案都是 `...RAILGUN`，但自定义编辑器无保存值预选 + Reset 硬编码 `grenade`。做法：在
+`main_menu.gd` 新增单一常量 `DEFAULT_LOADOUT_IDS = ["ak20","sg8","srx","railgun"]`，
+编辑器预选（旧 1434 行）与 Reset（旧 1468 行）都改读它，对齐 railgun。
+
+**回归**：`GODOT_BIN=Godot_v4.6 bash tests/run_all.sh` → **50 passed / 0 failed**（本容器
+无 7777 端口冲突，连 multiplayer_integration 也过）；`run_boot_test.sh` PASS、
+`run_database_test.sh` 13/13 PASS。
+
 ### 验证
 
 - `git status --short`：仅有无关 untracked `.claude/scheduled_tasks.lock`，未触碰。
@@ -112,6 +150,8 @@
 **为什么重要**：玩家点“默认 / reset”在不同入口拿到不同第 4 槽：实际默认是 railgun，编辑器默认是 grenade。保存后还会把原本的默认覆盖为自定义 grenade 版本，造成菜单文案、持久化设置、实战装备互相打架。
 
 **建议**：把默认 loadout ID 提成一个共享常量（至少在 `main_menu.gd` 内统一数组），并与 `GameController.DEFAULT_LOADOUT` 对齐为 railgun；或者如果产品决定默认第 4 槽就是 grenade，就同时改 `DEFAULT_LOADOUT` 和 picker 文案。
+
+### [x] 已修复（2026-06-03，Claude）—— 与 06-02 批次为同名重复项，已一并修复，详见上方 06-02 批次的「已修复」段。
 
 ### 验证
 
