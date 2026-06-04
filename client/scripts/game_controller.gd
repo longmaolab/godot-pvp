@@ -56,6 +56,10 @@ var admin_panel: Node = null
 var local_player: PlayerController
 var hud: HUD
 var dummy: DummyTarget
+# Optimistic hitmarker: when our local hitscan connects we flash immediately;
+# this stamps "already flashed until" so the later server_apply_damage confirm
+# doesn't double-blink the marker (it still shows the authoritative number).
+var _optimistic_hit_until: float = 0.0
 var map_root: Node3D
 var players_by_peer: Dictionary = {}              # peer_id → PlayerController
 var bots: Array[Node] = []
@@ -1335,7 +1339,10 @@ func _on_server_damage_broadcast(target: int, new_hp: float, src: int, _weapon: 
 	if hud != null and src == local_auth and target != local_auth:
 		var dealt: int = int(round(maxf(0.0, prev_hp - new_hp)))
 		if dealt > 0:
-			hud.flash_hit(_headshot)
+			# Skip the marker flash if we already flashed it optimistically on
+			# our local hit (no double-blink); always show the real number.
+			if Time.get_ticks_msec() / 1000.0 >= _optimistic_hit_until:
+				hud.flash_hit(_headshot)
 			var impact_pos: Vector3 = victim.global_position + Vector3(0, 1.0, 0)
 			if _headshot and "head_hitbox" in victim and victim.head_hitbox != null:
 				impact_pos = victim.head_hitbox.global_position
@@ -1477,19 +1484,20 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 	var proc_audio: Node = get_node_or_null(^"/root/ProcAudio")
 	if proc_audio != null and proc_audio.has_method(&"play_fire"):
 		proc_audio.play_fire()
-	# In multiplayer, hit confirmation must come from server_apply_damage. The
-	# local hitscan only sees the client's interpolated view and can claim a hit
-	# that the server correctly rejects, which creates fake `-25` popups.
-	if _is_networked():
-		return
-
 	if hit_info.is_empty():
 		return
 	var collider: Node = hit_info.collider
 	if collider == null or not collider.has_meta(&"owner_player"):
 		return
 	var is_head: bool = collider.get_meta(&"is_head", false)
+	# Optimistic hit feedback — flash the hitmarker + blood the instant our local
+	# hitscan connects, instead of waiting a full server round-trip (snappier
+	# "you hit"). The DAMAGE NUMBER + death stay server-authoritative below /
+	# in server_apply_damage, so we never show a fake `-25`. With lag comp the
+	# server almost always agrees; the rare miss is just a marker with no number.
+	# The 0.3s stamp keeps the server confirm from double-blinking. (2026-06-04)
 	hud.flash_hit(is_head)
+	_optimistic_hit_until = Time.get_ticks_msec() / 1000.0 + 0.3
 	# Blood / hit burst at the impact point on the body — the world-space "you
 	# connected" cue. Spray along the bullet's travel direction.
 	var impact_pos: Vector3 = hit_info.position
@@ -1497,6 +1505,10 @@ func _on_local_fired(weapon: Resource, hit_info: Dictionary) -> void:
 	if local_player != null and local_player.camera != null:
 		bullet_dir = (impact_pos - local_player.camera.global_position)
 	PlayerVisuals.spawn_body_impact(get_tree(), impact_pos, bullet_dir, is_head)
+	# Damage number + kill confirm are PRACTICE-only — in MP the server's
+	# authoritative damage drives the real number via server_apply_damage.
+	if _is_networked():
+		return
 	# Floating damage number in 3D world space.
 	var dmg: float = PlayerController._compute_damage(weapon, is_head) if weapon != null else 0.0
 	if dmg > 0.5:

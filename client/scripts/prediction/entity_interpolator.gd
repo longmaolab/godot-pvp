@@ -1,9 +1,13 @@
 extends Node
-## Smooth-out remote players & bots by rendering them ~100ms behind the latest
+## Smooth-out remote players & bots by rendering them ~60ms behind the latest
 ## snapshot. Two snapshots straddling render_time gives us a clean lerp; missing
 ## snapshots fall back to extrapolation for at most one tick.
-
-const INTERP_DELAY_MS := 100.0
+##
+## 60ms (was 100ms, 2026-06-04): enemies render closer to real-time so tracking
+## / aiming feels snappier. At a 30Hz snapshot rate one frame is ~33ms, so 60ms
+## still keeps ~2 snapshots in the straddle window for a clean lerp; lag
+## compensation rewinds to the shooter's view, so hit-reg is unaffected.
+const INTERP_DELAY_MS := 60.0
 const MAX_EXTRAPOLATE_MS := 50.0
 
 # entity_id → Array[{server_time_ms, pos, yaw, pitch}] kept short (~10 entries).
