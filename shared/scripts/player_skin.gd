@@ -60,6 +60,13 @@ func apply_skin(idx: int, holder: Node3D, visuals_root: Node3D) -> void:
 	if model == null:
 		return
 	model.scale = Vector3.ONE * SKIN_SCALES[idx]
+	# Kenney's character GLBs face +Z, but a Godot node's forward is -Z (the
+	# camera/aim look down -Z, and rotation.y is computed so -Z points at the
+	# target). Without this 180° spin the model's FACE points away from the aim,
+	# so two players aiming at each other each see the other's BACK, and a
+	# moving character looks like it's running backwards. Align the GLB's +Z
+	# face with the node's -Z forward. (2026-06-03)
+	model.rotation.y = PI
 	holder.add_child(model)
 	# Hide the procedural body — GLB replaces it.
 	if visuals_root != null:
