@@ -233,17 +233,6 @@ const _VIEW_MODEL_TABLE := [
 	["lmg", "blaster-n"], ["heavy", "blaster-n"], ["minigun", "blaster-n"],
 ]
 var _vm_instance: Node3D = null   # currently-shown GLB (freed on weapon swap)
-
-# Third-person held weapon — what OTHER players see in this body's hand. Built
-# for visible bodies (remote ghosts + bots) on rendering clients; the local
-# human uses the first-person _ViewModel instead and the headless DS skips it.
-var _world_weapon: Node3D = null
-var _world_weapon_mount: Node3D = null
-# Right-hand-ish offset in the body's own frame (forward = -Z, right = +X, up =
-# +Y) and scale for the third-person weapon. Positions the gun at hand height
-# pointing where the body aims. Tunable.
-const WORLD_WEAPON_OFFSET := Vector3(0.26, 1.15, -0.32)
-const WORLD_WEAPON_SCALE := 0.32
 var _vm_bob_phase: float = 0.0
 var _vm_kick: float = 0.0
 var _vm_prev_yaw: float = 0.0
@@ -334,8 +323,6 @@ func _ready() -> void:
 	_invincible_until = Time.get_ticks_msec() / 1000.0 + RESPAWN_INVINCIBILITY_SEC
 	# Show the GLB view-model for the starting weapon (local human only).
 	_apply_view_model()
-	# Third-person held weapon for visible bodies (remote players + bots).
-	_apply_world_weapon()
 
 	# Tag hitboxes with reference to owner — used by raycast hit lookup.
 	head_hitbox.set_meta(&"owner_player", self)
@@ -492,7 +479,6 @@ func _equip_resource(new_weapon: Resource) -> void:
 	weapon_switched.emit(new_weapon)
 	ammo_changed.emit(ammo_in_mag, ammo_reserve)
 	_apply_view_model()
-	_apply_world_weapon()
 
 
 ## Pick the first-person GLB for a weapon: explicit view_model override wins,
@@ -558,54 +544,6 @@ func _apply_view_model() -> void:
 	inst.rotation = VIEW_MODEL_ROT
 	inst.scale = Vector3(VIEW_MODEL_SCALE, VIEW_MODEL_SCALE, VIEW_MODEL_SCALE)
 	_vm_instance = inst
-
-
-## Third-person held weapon — the gun OTHER players see in this body's hand.
-## Built under Visuals (the body frame, so the muzzle's local -Z points where
-## the body aims) at a right-hand offset. Skips the local first-person human
-## (its body is hidden; it has its own _ViewModel) and the headless DS / tests
-## (no rendering). Kenney characters have no hand bone or grip pose, so this is
-## a gun positioned at the hand pointing forward — the arms keep their locomotion
-## animation. Refresh on _ready + every weapon swap.
-func _apply_world_weapon() -> void:
-	if is_local and is_human_input:
-		return   # local first-person: sees its own view model; body is hidden
-	if DisplayServer.get_name() == "headless":
-		return   # dedicated server / headless tests — nothing renders
-	var visuals: Node3D = get_node_or_null(^"Visuals") as Node3D
-	if visuals == null:
-		return
-	if _world_weapon_mount == null or not is_instance_valid(_world_weapon_mount):
-		_world_weapon_mount = Node3D.new()
-		_world_weapon_mount.name = "_WorldWeaponMount"
-		visuals.add_child(_world_weapon_mount)
-		_world_weapon_mount.position = WORLD_WEAPON_OFFSET
-	if _world_weapon != null and is_instance_valid(_world_weapon):
-		_world_weapon_mount.remove_child(_world_weapon)
-		_world_weapon.queue_free()
-		_world_weapon = null
-	if weapon_def == null:
-		return
-	var inst: Node3D
-	if weapon_def.is_melee():
-		inst = _build_melee_view_model()
-	else:
-		var model_name: String = _resolve_view_model(weapon_def)
-		if model_name == "":
-			return
-		var path: String = _VIEW_MODEL_DIR + model_name + ".glb"
-		if not ResourceLoader.exists(path):
-			return
-		var scene: PackedScene = load(path) as PackedScene
-		if scene == null:
-			return
-		inst = scene.instantiate() as Node3D
-		inst.scale = Vector3.ONE * WORLD_WEAPON_SCALE
-	if inst == null:
-		return
-	inst.name = "_WorldWeapon"
-	_world_weapon_mount.add_child(inst)
-	_world_weapon = inst
 
 
 ## Procedural first-person model for melee weapons (no GLB art yet): a dark
