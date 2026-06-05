@@ -68,7 +68,11 @@ const MAX_UPGRADE_LEVELS_PER_WEAPON := 10
 const CHEST_PRICE_COMMON := 120
 const CHEST_PRICE_RARE := 400
 const FRAGMENT_UNLOCK_COST := 100
-const WHEEL_PAID_COST := 100
+# Daily free-spin cooldown. Single source of truth for client + server so the
+# wheel UI never drifts from the authority. Server authority:
+# ProfileService._on_spin_wheel rejects spins inside this window; the client
+# renders the remaining countdown from the same constant.
+const WHEEL_FREE_COOLDOWN_MS := 86_400_000      # 24h
 
 # ── RPC names (collected so grep finds every caller in one place) ──────────
 # Client → Server

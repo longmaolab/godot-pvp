@@ -56,8 +56,11 @@ const CHEST_REWARDS := {
 	"common": {"credits": [40, 90], "fragments": [3, 10]},
 	"rare":   {"credits": [180, 350], "fragments": [20, 45], "rare_weapon_chance": 0.05},
 }
-# Daily wheel: 24h cooldown, slot picked uniformly
-const WHEEL_COOLDOWN_MS := 86_400_000
+# Daily wheel: 24h cooldown, slot picked uniformly. Kept in lockstep with
+# NetProtocol.WHEEL_FREE_COOLDOWN_MS, which the client reads to render the
+# matching countdown (literal here because an autoload member can't seed a
+# const initializer). If you change one, change both.
+const WHEEL_COOLDOWN_MS := 86_400_000           # == NetProtocol.WHEEL_FREE_COOLDOWN_MS
 const WHEEL_REWARDS := [
 	{"credits": 50},
 	{"credits": 150},

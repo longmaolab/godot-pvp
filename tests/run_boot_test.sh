@@ -25,9 +25,23 @@ fi
 # Any "ERROR" / "SCRIPT ERROR" / "Parse Error" lines = real failure — EXCEPT
 # macOS Godot's TLS/CA-cert stderr (system cert-store access). That's platform
 # noise, never a project bug, and was tripping this gate on some macOS setups
-# (codexreview 05-31). Real project errors don't mention certificates, so the
-# keyword filter keeps @onready "Node not found" / SCRIPT ERROR coverage intact.
-ERRS="$(grep -E "ERROR:|Parse Error|SCRIPT ERROR|Failed to" "$LOG" | grep -viE "certificat|get_system_ca")"
+# (codexreview 05-31 / 06-01 / 06-02).
+#
+# The CA event spans TWO lines, e.g.:
+#     ERROR: Condition "ret != noErr" is true. Returning: ""
+#        at: get_system_ca_certificates (platform/.../tls_context_mbedtls.cpp:NN)
+# The keyword filter only matched the 2nd line, so the bare generic "ERROR:"
+# first line still tripped the gate. Drop the whole event by context: an awk
+# state machine discards any line whose *next* line names the CA call (the
+# error header sitting right above its own "at:" frame), then we still keyword-
+# filter the "at:" line itself. This keeps @onready "Node not found" / SCRIPT
+# ERROR coverage intact while exempting only the macOS CA two-line event.
+CLEAN="$(awk '
+    NR > 1 { if ($0 ~ /get_system_ca|certificat/) { hold = ""; next } if (hold != "") print hold }
+    { hold = $0 }
+    END { if (hold != "") print hold }
+' "$LOG")"
+ERRS="$(printf "%s\n" "$CLEAN" | grep -E "ERROR:|Parse Error|SCRIPT ERROR|Failed to" | grep -viE "certificat|get_system_ca")"
 if [ -n "$ERRS" ]; then
     echo "FAIL — error lines detected:"
     echo "$ERRS" | head -20

@@ -86,6 +86,11 @@ func _ready() -> void:
 		# arrive together with the same server_profile push.
 		s.server_action.connect(_on_server_action)
 		s.reward_received.connect(_on_server_reward)
+		# A profile push may land just after server_reward (server sends reward
+		# then profile). Re-render the wheel hint so the cooldown countdown
+		# reflects the freshly-stamped last_free_spin_ms (codexreview P2).
+		if s.has_signal("profile_synced"):
+			s.profile_synced.connect(_refresh_wheel_hint)
 
 
 # Are we talking to a real server right now? `synced_with_server` flips after
@@ -520,9 +525,20 @@ func _animate_chest_reveal(kind: StringName, frags: int, creds: int, weapon_name
 func _refresh_wheel_hint() -> void:
 	var s: Node = get_node(^"/root/Settings")
 	if s.has_free_spin_today():
+		wheel_spin_btn.disabled = false
 		wheel_spin_btn.text = "FREE SPIN"
-		wheel_hint.text = "今日免费一次！明天后续转盘要 100$"
+		wheel_hint.text = "今日免费一次！" + ("24 小时后可再免费抽" if _is_online() else "明天后续转盘要 100$")
+	elif _is_online():
+		# Online has no paid-spin path — the server only honors the 24h free
+		# cooldown. Disable + show the countdown instead of a $100 prompt the
+		# server would just reject, which looked like a broken button before
+		# (codexreview P2).
+		wheel_spin_btn.disabled = true
+		wheel_spin_btn.text = "COOLDOWN"
+		var remaining: String = s.free_spin_cooldown_label()
+		wheel_hint.text = "免费转盘冷却中，%s 后可再抽" % remaining if remaining != "" else "免费转盘冷却中"
 	else:
+		wheel_spin_btn.disabled = false
 		wheel_spin_btn.text = "[D] SPIN · $%d" % WHEEL_PAID_PRICE
 		wheel_hint.text = "免费转盘已用，需要 100$ 继续抽奖"
 
@@ -725,8 +741,16 @@ func _show_wheel_reward(reward: Dictionary) -> void:
 	var label_text: String = "\n".join(bits) if not bits.is_empty() else "(reward)"
 	wheel_result.text = "[center][color=#ffd84a]! %s[/color][/center]" % label_text
 	wheel_result.bbcode_enabled = true
-	_refresh_wheel_hint()
-	wheel_spin_btn.disabled = false
+	# We just consumed the free spin. Online: stay disabled — the server
+	# cooldown is now active, and _refresh_wheel_hint (also fired by the
+	# trailing profile_synced) renders the countdown. Offline: the iso/paid
+	# model decides via _refresh_wheel_hint.
+	if _is_online():
+		wheel_spin_btn.disabled = true
+		wheel_spin_btn.text = "COOLDOWN"
+	else:
+		_refresh_wheel_hint()
+		wheel_spin_btn.disabled = false
 
 
 # Online: the server is authoritative for the reward, and its reward categories

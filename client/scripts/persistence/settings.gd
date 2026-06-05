@@ -35,7 +35,11 @@ var common_chests: int = 0       # owned but unopened chests
 var rare_chests: int = 0
 # weapon_id → {dmg_lvl, mag_lvl, reload_lvl} — 0..10 per stat (P-M4 raised cap)
 var upgrades: Dictionary = {}
-var last_free_spin_iso: String = ""   # ISO date string
+var last_free_spin_iso: String = ""   # ISO date string (offline-only render)
+# Server-authoritative wheel cooldown stamp (unix ms of last free spin).
+# Mirrored from server_profile; drives the online free-spin availability +
+# countdown so the wheel UI never disagrees with ProfileService (codexreview P2).
+var last_free_spin_ms: int = 0
 
 # ── Server sync state (P-M3+) ────────────────────────────────────────────
 # Stable device identifier — randomly generated on first run, persisted
@@ -112,6 +116,7 @@ func load_from_disk() -> void:
 	rare_chests = cfg.get_value("economy", "rare_chests", rare_chests)
 	upgrades = cfg.get_value("economy", "upgrades", upgrades)
 	last_free_spin_iso = cfg.get_value("economy", "last_free_spin", last_free_spin_iso)
+	last_free_spin_ms = int(cfg.get_value("economy", "last_free_spin_ms", last_free_spin_ms))
 
 
 # Debounce window for save_to_disk(). Rapid mutations (e.g. award_credits
@@ -177,6 +182,7 @@ func _flush_to_disk() -> void:
 	cfg.set_value("economy", "rare_chests", rare_chests)
 	cfg.set_value("economy", "upgrades", upgrades)
 	cfg.set_value("economy", "last_free_spin", last_free_spin_iso)
+	cfg.set_value("economy", "last_free_spin_ms", last_free_spin_ms)
 	cfg.save(FILE)
 	changed.emit()
 
@@ -227,7 +233,8 @@ func _apply_server_profile(profile: Dictionary) -> void:
 	var issued_token: String = String(profile.get("auth_token", ""))
 	if not issued_token.is_empty():
 		auth_token = issued_token
-	# last_free_spin is server-ms now; keep iso fallback for offline-only render
+	# Wheel cooldown is server-driven online; keep iso fallback for offline render.
+	last_free_spin_ms = int(profile.get("last_free_spin_ms", last_free_spin_ms))
 	save_to_disk()
 	synced_with_server = true
 	profile_synced.emit()
@@ -438,8 +445,42 @@ func bump_upgrade(weapon_id: String, stat: StringName) -> bool:
 
 
 func has_free_spin_today() -> bool:
+	# Online: server is authoritative — honor the same 24h wall-clock cooldown
+	# ProfileService enforces, so the wheel UI can't show "free/paid spin" for
+	# a request the server would just reject (codexreview P2). Offline: keep the
+	# original calendar-day reset.
+	if _server_authoritative():
+		return free_spin_cooldown_remaining_ms() <= 0
 	var today: String = Time.get_date_string_from_system(true)
 	return last_free_spin_iso != today
+
+
+## Remaining ms until the next free spin under the server cooldown. 0 when a
+## spin is available (or when we have no server stamp yet).
+func free_spin_cooldown_remaining_ms() -> int:
+	if last_free_spin_ms <= 0:
+		return 0
+	var now: int = int(Time.get_unix_time_from_system() * 1000.0)
+	var elapsed: int = now - last_free_spin_ms
+	if elapsed >= NetProtocol.WHEEL_FREE_COOLDOWN_MS:
+		return 0
+	return NetProtocol.WHEEL_FREE_COOLDOWN_MS - elapsed
+
+
+## Human-readable remaining cooldown for UI hints ("5 小时 12 分" / ""). Empty
+## string means a spin is available.
+func free_spin_cooldown_label() -> String:
+	var ms: int = free_spin_cooldown_remaining_ms()
+	if ms <= 0:
+		return ""
+	var total_min: int = ms / 60000
+	var h: int = total_min / 60
+	var m: int = total_min % 60
+	if h > 0:
+		return "%d 小时 %d 分" % [h, m]
+	if m > 0:
+		return "%d 分" % m
+	return "不到 1 分"
 
 
 func record_free_spin() -> void:
