@@ -68,7 +68,12 @@ const MAX_UPGRADE_LEVELS_PER_WEAPON := 10
 const CHEST_PRICE_COMMON := 120
 const CHEST_PRICE_RARE := 400
 const FRAGMENT_UNLOCK_COST := 100
-const WHEEL_PAID_COST := 100
+# Daily free-wheel cooldown. Single source of truth for the server gate
+# (ProfileService._on_spin_wheel) AND client UI gating (Settings cooldown
+# helper) so the Shop / MainMenu wheel never offers a spin the server would
+# reject. There is NO online paid spin — the server only grants the daily free
+# spin; paid spins remain an offline single-player convenience (Shop.WHEEL_PAID_PRICE).
+const WHEEL_COOLDOWN_MS := 86_400_000           # 24h
 
 # ── RPC names (collected so grep finds every caller in one place) ──────────
 # Client → Server

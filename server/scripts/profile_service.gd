@@ -56,8 +56,8 @@ const CHEST_REWARDS := {
 	"common": {"credits": [40, 90], "fragments": [3, 10]},
 	"rare":   {"credits": [180, 350], "fragments": [20, 45], "rare_weapon_chance": 0.05},
 }
-# Daily wheel: 24h cooldown, slot picked uniformly
-const WHEEL_COOLDOWN_MS := 86_400_000
+# Daily wheel: 24h cooldown (shared with client UI gating), slot picked uniformly
+const WHEEL_COOLDOWN_MS := NetProtocol.WHEEL_COOLDOWN_MS
 const WHEEL_REWARDS := [
 	{"credits": 50},
 	{"credits": 150},

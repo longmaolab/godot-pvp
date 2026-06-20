@@ -35,7 +35,12 @@ var common_chests: int = 0       # owned but unopened chests
 var rare_chests: int = 0
 # weapon_id → {dmg_lvl, mag_lvl, reload_lvl} — 0..10 per stat (P-M4 raised cap)
 var upgrades: Dictionary = {}
-var last_free_spin_iso: String = ""   # ISO date string
+var last_free_spin_iso: String = ""   # ISO date string (offline calendar-day gate)
+# Server wall-clock ms of the last free wheel spin. 0 = never. Authoritative
+# for ONLINE play: the server stamps it and gates the next free spin by
+# NetProtocol.WHEEL_COOLDOWN_MS, so the client must mirror it to render the
+# wheel button correctly instead of always offering a spin the server rejects.
+var last_free_spin_ms: int = 0
 
 # ── Server sync state (P-M3+) ────────────────────────────────────────────
 # Stable device identifier — randomly generated on first run, persisted
@@ -112,6 +117,7 @@ func load_from_disk() -> void:
 	rare_chests = cfg.get_value("economy", "rare_chests", rare_chests)
 	upgrades = cfg.get_value("economy", "upgrades", upgrades)
 	last_free_spin_iso = cfg.get_value("economy", "last_free_spin", last_free_spin_iso)
+	last_free_spin_ms = int(cfg.get_value("economy", "last_free_spin_ms", last_free_spin_ms))
 
 
 # Debounce window for save_to_disk(). Rapid mutations (e.g. award_credits
@@ -177,6 +183,7 @@ func _flush_to_disk() -> void:
 	cfg.set_value("economy", "rare_chests", rare_chests)
 	cfg.set_value("economy", "upgrades", upgrades)
 	cfg.set_value("economy", "last_free_spin", last_free_spin_iso)
+	cfg.set_value("economy", "last_free_spin_ms", last_free_spin_ms)
 	cfg.save(FILE)
 	changed.emit()
 
@@ -227,7 +234,10 @@ func _apply_server_profile(profile: Dictionary) -> void:
 	var issued_token: String = String(profile.get("auth_token", ""))
 	if not issued_token.is_empty():
 		auth_token = issued_token
-	# last_free_spin is server-ms now; keep iso fallback for offline-only render
+	# Server is canonical for the wheel cooldown too — mirror its wall-clock
+	# stamp so the Shop / MainMenu wheel renders FREE/locked exactly as the
+	# server would accept/reject (iso field stays for the offline calendar gate).
+	last_free_spin_ms = int(profile.get("last_free_spin_ms", last_free_spin_ms))
 	save_to_disk()
 	synced_with_server = true
 	profile_synced.emit()
@@ -440,6 +450,20 @@ func bump_upgrade(weapon_id: String, stat: StringName) -> bool:
 func has_free_spin_today() -> bool:
 	var today: String = Time.get_date_string_from_system(true)
 	return last_free_spin_iso != today
+
+
+## ONLINE wheel gate. Returns ms until the next free spin (0 = available now),
+## computed from the server-stamped last_free_spin_ms + the shared cooldown so
+## the UI matches the server's accept/reject. The server has no paid-spin path,
+## so online the button is simply locked (no $100 continue) during cooldown.
+func free_spin_cooldown_remaining_ms() -> int:
+	if last_free_spin_ms <= 0:
+		return 0
+	var now: int = int(Time.get_unix_time_from_system() * 1000.0)
+	var elapsed: int = now - last_free_spin_ms
+	if elapsed >= NetProtocol.WHEEL_COOLDOWN_MS:
+		return 0
+	return NetProtocol.WHEEL_COOLDOWN_MS - elapsed
 
 
 func record_free_spin() -> void:
